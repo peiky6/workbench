@@ -284,7 +284,7 @@
     </div>
     <div class="sect">
       <h3>💾 本地备份</h3>
-      <p class="hint">不想用云端？可直接导出 / 导入 JSON 文件做备份。</p>
+      <p class="hint">不想用云端？可直接导出 / 导入 JSON 文件做备份。<b>换手机或换网址前，务必先点「导出 JSON」存一份到手机里</b>，随时可导入恢复，告别数据丢失。</p>
       <div class="mini-row">
         <button class="mini line" id="btnExport">导出 JSON</button>
         <button class="mini line" id="btnImport">导入 JSON</button>
@@ -1313,7 +1313,7 @@ async function pullData(silent){
       const content=data.files['workbench.json'] && data.files['workbench.json'].content;
       if(!content) throw new Error('Gist 里没有 workbench.json');
       const remote=await decodeState(content,pass);
-      mergeState(remote); save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
+      mergeState(remote); _pulledThisSession=true; save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
     }catch(e){ _pullFail(e,silent); }
   } else {
     if(!s.supaUrl||!s.supaKey){ if(!silent) toast('请先填写 Supabase URL 和 anon key'); return; }
@@ -1324,7 +1324,7 @@ async function pullData(silent){
       const rows=await res.json();
       if(!rows.length) throw new Error('云端还没有数据，请先上传');
       const remote=await decodeState(rows[0].data,pass);
-      mergeState(remote); save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
+      mergeState(remote); _pulledThisSession=true; save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
     }catch(e){ _pullFail(e,silent); }
   }
 }
@@ -1387,6 +1387,7 @@ function setSyncStatus(t){ const el=document.getElementById('syncStatus'); if(el
 /* 自动同步：保存后防抖上传；打开时拉取合并（不与手动按钮冲突） */
 let _syncing=false;
 let _pushTimer=null;
+let _pulledThisSession=false;   // 本会话是否已从云端拉取过：未拉取前绝不先上传，防「空本地覆盖云端」
 function _cfgOK(){
   const s=state.settings; const m=s.syncMethod||'gist';
   return (m==='gist'&&s.gistToken&&s.gistId)||(m==='supabase'&&s.supaUrl&&s.supaKey);
@@ -1399,7 +1400,11 @@ function scheduleAutoPush(){
 async function doAutoPush(){
   if(_syncing||!_cfgOK()) return;
   _syncing=true;
-  try{ await pushData(true); } finally { _syncing=false; }
+  try{
+    // 防呆：本会话还没拉过云端数据时，先 pull 再 push，绝不让「空/未同步的本地」覆盖云端
+    if(!_pulledThisSession){ try{ await pullData(true); }catch(e){} }
+    await pushData(true);
+  } finally { _syncing=false; }
 }
 // 从粘贴的整条 URL 或带空格的内容里提取 Gist ID（链接末尾的 20+ 位十六进制串）
 function cleanGistId(v){
@@ -1418,7 +1423,9 @@ function exportJSON(){
 function importJSON(file){
   const reader=new FileReader();
   reader.onload=()=>{ try{
-    const s=JSON.parse(reader.result); mergeState(s); save(); render(); closeSettings(); toast('导入成功 📥');
+    const s=JSON.parse(reader.result); mergeState(s); _pulledThisSession=true; save(); render();
+    const p=document.getElementById('settingsPanel'); if(p) p.classList.remove('show');
+    toast('导入成功 📥（已合并到当前数据）');
   }catch(e){ toast('文件格式不对'); } };
   reader.readAsText(file);
 }
