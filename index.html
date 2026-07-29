@@ -193,6 +193,15 @@
   .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:rgba(30,45,60,.9);color:#fff;padding:11px 18px;border-radius:14px;font-size:13px;z-index:99;opacity:0;transition:opacity .3s;pointer-events:none;max-width:80%;text-align:center;}
   .toast.show{opacity:1;}
 
+  .lc-wrap{display:flex;flex-direction:column;gap:7px;margin:8px 0;}
+  .subs{display:flex;flex-direction:column;gap:7px;margin:9px 0;background:#f7fbfe;border:1px solid var(--line);border-radius:12px;padding:9px 11px;}
+  .sub{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.45;color:#33414f;cursor:pointer;}
+  .sub input{margin-top:2px;width:16px;height:16px;accent-color:var(--good);flex-shrink:0;}
+  .note{width:100%;min-height:52px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;margin:8px 0 2px;box-sizing:border-box;}
+  .note:focus{outline:none;border-color:var(--accent);}
+  .datelist{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px;}
+  .dchip{font-size:11px;background:#eef6fd;color:var(--accent);border:1px solid #d7e8f7;border-radius:20px;padding:3px 10px;}
+
   @media(min-width:640px){
     .sidebar{width:118px;flex-basis:118px;}
     .main{padding:22px 30px 30px;max-width:820px;}
@@ -651,6 +660,11 @@ function historyByDateHtml(){
   return `<div class="secttitle">📅 历史回顾（按日期折叠）</div>${body}`;
 }
 
+function recentCheckinsHtml(key){
+  const dates=Object.keys(rec(key)).filter(d=>rec(key)[d]&&rec(key)[d].done).sort((a,b)=>b.localeCompare(a)).slice(0,16);
+  if(!dates.length) return '<div class="secttitle">📅 打卡日期</div><p class="hint">还没有打卡记录，今天完成一次就会显示在这里～</p>';
+  return `<div class="secttitle">📅 打卡日期（最近 ${dates.length} 天）</div><div class="datelist">${dates.map(d=>`<span class="dchip">${d.slice(5)}</span>`).join('')}</div>`;
+}
 function renderModule(key){
   const m=MODULES.find(x=>x.key===key);
   if(key==='mana'){ renderMana(); return; }
@@ -674,57 +688,59 @@ function renderModule(key){
         <div class="stat"><b>${done?'✓':'—'}</b><span>今日</span></div>
       </div>
       <div class="dots">${dots}</div>
-      <button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('${key}')">${done?'✏️ 标记未完成':'✅ 标记今日完成'}</button>
+      ${key==='ielts'?'':`<button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('${key}')">${done?'✏️ 标记未完成':'✅ 标记今日完成'}</button>`}
     </div>
-    ${learn}`;
+    ${learn}
+    ${recentCheckinsHtml(key)}`;
 }
 
-/* ---- 雅思 ---- */
+/* ---- 雅思：分模块打卡 ---- */
+const IELTS_PARTS=[
+  {key:'reading',emoji:'📖',name:'阅读',
+   desc:'完成「爱听写」的 1 套阅读题目，并把不会的单词记录到「不背单词」APP。',
+   links:[{label:'▶ 去爱听写练阅读',url:'https://www.idictation.cn/'}],
+   subs:null,noteLabel:'不会的单词 / 笔记'},
+  {key:'listening',emoji:'🎧',name:'听力',
+   desc:'完成「爱听写」的 1 套听力题目，并把不会的单词记录到「不背单词」APP。',
+   links:[{label:'▶ 去爱听写练听力',url:'https://www.idictation.cn/'}],
+   subs:null,noteLabel:'不会的单词 / 笔记'},
+  {key:'speaking',emoji:'💬',name:'口语',
+   desc:'完成 B站 杨帅口语课程 1 节并记录笔记；熟读杨帅99句至少 3 句；周末完成 1 个 Part1 + 1 个 Part2 话题。',
+   links:[{label:'▶ 杨帅口语课程（B站）',bili:'ysSpeak'},{label:'▶ 杨帅99句（B站）',bili:'ys99'}],
+   subs:[{key:'lec',label:'完成杨帅口语课程 1 节 + 记笔记'},{key:'recite',label:'熟读杨帅99句至少 3 句'},{key:'weekend',label:'周末：完成 1 个 Part1 + 1 个 Part2 话题'}],
+   noteLabel:'口语笔记'},
+  {key:'writing',emoji:'✍️',name:'写作',
+   desc:'完成 B站 Simon 写作课程 / Vince 9120 1 节并记录笔记；周末完成 1 篇小作文 + 1 篇大作文。',
+   links:[{label:'▶ Simon 写作课程（B站）',bili:'simon'},{label:'▶ Vince 9120（B站）',url:'https://space.bilibili.com/9120'}],
+   subs:[{key:'lec',label:'完成 Simon / Vince 写作课 1 节 + 记笔记'},{key:'weekend',label:'周末：完成 1 篇小作文 + 1 篇大作文'}],
+   noteLabel:'写作笔记'}
+];
+function getIeltsPart(date,key){ const r=rec('ielts')[date]; if(!r||!r.parts||!r.parts[key]) return {done:false,note:'',sub:{}}; return r.parts[key]; }
+function ieltsPartMut(date,key){ const m=rec('ielts'); m[date]=m[date]||{}; m[date].parts=m[date].parts||{}; m[date].parts[key]=m[date].parts[key]||{done:false,note:'',sub:{}}; return m[date].parts[key]; }
+function syncIeltsDone(date){ const r=rec('ielts')[date]||{}; r.done=['reading','listening','speaking','writing'].some(k=>r.parts&&r.parts[k]&&r.parts[k].done); }
+function toggleIeltsPart(key){ const date=today(); const p=ieltsPartMut(date,key); p.done=!p.done; syncIeltsDone(date); const nm=(IELTS_PARTS.find(x=>x.key===key)||{}).name||key; save(); renderModule('ielts'); toast(p.done?nm+' 已标记完成 ✅':nm+' 已取消'); }
+function toggleIeltsSub(key,sub){ const date=today(); const p=ieltsPartMut(date,key); p.sub=p.sub||{}; p.sub[sub]=!p.sub[sub]; save(); renderModule('ielts'); }
+function setIeltsNote(key,val){ const date=today(); const p=ieltsPartMut(date,key); p.note=val; save(); }
 function ieltsLearn(){
-  const b=state.bili;
-  const listen=IELTS_LISTENING[dayOfYear()%IELTS_LISTENING.length];
-  const read=IELTS_READPASS[dayOfYear()%IELTS_READPASS.length];
-  const p1=IELTS_P1[dayOfYear()%IELTS_P1.length];
-  const p2=IELTS_P2[(dayOfYear()+4)%IELTS_P2.length];
-  const writing=IELTS_WRITING[(dayOfYear()+1)%IELTS_WRITING.length];
-  const reading=IELTS_READING[(dayOfYear()+2)%IELTS_READING.length];
-  const listened=state.ieltsListened.includes(listen.tag);
+  const date=today();
+  const cards=IELTS_PARTS.map(p=>{
+    const rec0=getIeltsPart(date,p.key);
+    const done=rec0.done, note=rec0.note||'';
+    const subsHtml=p.subs?`<div class="subs">${p.subs.map(s=>{ const on=rec0.sub&&rec0.sub[s.key]; return `<label class="sub"><input type="checkbox" ${on?'checked':''} onchange="toggleIeltsSub('${p.key}','${s.key}')"><span>${s.label}</span></label>`; }).join('')}</div>`:'';
+    const linksHtml=p.links.filter(l=>{ const u=l.bili?state.bili[l.bili]:l.url; return u; }).map(l=>{ const u=l.bili?state.bili[l.bili]:l.url; return `<a class="lcard" href="${escapeAttr(u)}" target="_blank" rel="noopener"><div class="lc-main">${l.label}</div></a>`; }).join('');
+    return `<div class="term ${done?'mastered':''}">
+      <div class="term-h">${p.emoji} ${p.name} ${done?'<span class="mbadge">✓ 今日完成</span>':''}</div>
+      <div class="term-b"><b>今日打卡内容</b> ${p.desc}</div>
+      ${linksHtml?`<div class="lc-wrap">${linksHtml}</div>`:''}
+      ${subsHtml}
+      <textarea class="note" placeholder="${p.noteLabel}" oninput="setIeltsNote('${p.key}',this.value)">${escapeHtml(note)}</textarea>
+      <button class="mtoggle" onclick="toggleIeltsPart('${p.key}')">${done?'↺ 取消完成':'✅ 标记今日完成'}</button>
+    </div>`;
+  }).join('');
   return `<div class="learn">
-    <div class="ltitle">🎬 B站课程（点开即跳）</div>
-    <a class="lcard" href="${escapeAttr(b.ysSpeak)}" target="_blank" rel="noopener"><div class="lc-main">▶ 杨帅口语课程</div><div class="lc-sub">口语提分 · B站</div></a>
-    <a class="lcard" href="${escapeAttr(b.ys99)}" target="_blank" rel="noopener"><div class="lc-main">▶ 杨帅99句</div><div class="lc-sub">高频地道表达 · B站</div></a>
-    <a class="lcard" href="${escapeAttr(b.simon)}" target="_blank" rel="noopener"><div class="lc-main">▶ Simon 写作课程</div><div class="lc-sub">前雅思考官写作 · B站</div></a>
-    <div class="ltitle">💬 今日口语题库（每日轮换）</div>
-    <div class="term"><div class="term-h">Part 1 · ${p1.topic}</div>${p1.q.map(q=>`<div class="term-b">· ${q}</div>`).join('')}</div>
-    <div class="term"><div class="term-h">Part 2 · 话题卡</div>
-      <div class="term-b"><b>Describe:</b> ${p2.card}</div>
-      <div class="term-b" style="color:var(--sub)">📝 ${p2.hint}</div></div>
-    <div class="ltitle">✍️ 今日真题练习（每日轮换）</div>
-    <div class="term"><div class="term-h">Writing Task 2</div>
-      <div class="term-b"><b>题目</b> ${writing.q}</div>
-      <div class="term-b"><b>💡 思路提纲</b> ${writing.idea}</div>
-      <div class="term-b"><b>📝 参考范文（示范段）</b> ${writing.sample}</div></div>
-    <div class="term"><div class="term-h">Reading 精练</div><div class="term-b">${reading}</div></div>
-    <div class="ltitle">🎧 今日听力真题（每日轮换）</div>
-    <div class="progress"><div class="pbar"><div class="pfill" style="width:${state.ieltsListened.length/IELTS_LISTENING.length*100}%"></div></div><span class="ptext">听力真题进度 ${state.ieltsListened.length}/${IELTS_LISTENING.length}</span></div>
-    <div class="term ${listened?'term-done':''}"><div class="term-h">${listen.tag} · ${listen.scene} ${listened?'<span class="badge">✓ 已练过</span>':''}</div>
-      <div class="term-b"><b>题型</b> ${listen.type}</div>
-      <div class="term-b"><b>训练要点</b> ${listen.tip}</div>
-      <div class="term-b"><b>📝 参考答案（答题要点）</b> ${listen.ans}</div>
-      <div class="term-b" style="color:var(--sub)">💡 ${listen.explain}</div>
-      <a class="lcard" href="${escapeAttr(listen.url)}" target="_blank" rel="noopener"><div class="lc-main">▶ 去爱听写练这套真题听力</div><div class="lc-sub">剑桥雅思真实考题音频 · 点开即练</div></a>
-      <button class="mini line" onclick="toggleListened('${listen.tag}')">${listened?'↺ 取消标记':'✓ 标记练过'}</button></div>
-    <div class="ltitle">📖 今日阅读真题（每日轮换）</div>
-    <div class="term"><div class="term-h">${read.tag} · ${read.title}</div>
-      <div class="term-b"><b>题型</b> ${read.type}</div>
-      <div class="term-b"><b>内容</b> ${read.gist}</div>
-      <div class="term-b"><b>📝 参考答案（答题思路）</b> ${read.ans}</div>
-      <div class="term-b" style="color:var(--sub)">💡 ${read.explain}</div>
-      <a class="lcard" href="${escapeAttr(read.url)}" target="_blank" rel="noopener"><div class="lc-main">▶ 去爱听写练这篇真题阅读</div><div class="lc-sub">剑桥雅思真实文章 · 点开即练</div></a></div>
-    <div class="notice">ℹ️ 听/说/读/写四块均为剑桥雅思真实考题（场景/题型/文章标题为公开信息，不复制原文）。每块都内置了<b>参考答案/答题思路</b>供自查；想练原题音频与文本，点卡片里的「去爱听写」即可。如需"每日自动抓具体题目文本"，需单独搭后端，可后续再加。</div>
-    <button class="mini line" onclick="tryFetchIdictation()">🔄 在爱听写找更多真题</button>
-    <div id="idictResult"></div>
-    <p class="hint">📅 学完点上方「标记今日完成」。</p>
+    <div class="ltitle">🎯 雅思 · 分模块打卡（每日）</div>
+    <p class="hint">点开链接去对应平台练习，完成后勾选子任务并「标记今日完成」。不会的单词 / 笔记填在框里，按日期自动保存。</p>
+    ${cards}
   </div>`;
 }
 async function tryFetchIdictation(){
@@ -801,9 +817,9 @@ function markTerm(term){ state.aiMastered=state.aiMastered||[]; const i=state.ai
 function aiLearn(){
   const lib=AI_TERMS, start=dayOfYear()%lib.length;
   let picks=[]; for(let i=0;i<5;i++){ const idx=(start+i)%lib.length; picks.push({t:lib[idx], idx}); }
-  const mc=picks.filter(p=>isMastered(p.t.term)).length;
-  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">已掌握 ${mc}/5</span></div>`+
-    picks.map(p=>{ const t=p.t, m=isMastered(t.term);
+  const mc=picks.filter(p=>isMastered(p.idx)).length; const totalMastered=(state.aiMastered||[]).length;
+  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}</span></div>`+
+    picks.map(p=>{ const t=p.t, m=isMastered(p.idx);
       return `<div class="term ${m?'mastered':''}">
         <div class="term-h">${t.term} ${m?'<span class="mbadge">✓ 已掌握</span>':''}</div>
         <div class="term-b"><b>含义</b> ${t.mean}</div>
@@ -1415,10 +1431,17 @@ function cleanGistId(v){
 }
 
 /* ===================== 导入导出 ===================== */
-function exportJSON(){
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+async function exportJSON(){
+  const data=JSON.stringify(state,null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  const file=new File([blob],'qi-workbench-backup.json',{type:'application/json'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'自律工作台备份'}); toast('已通过分享保存备份 📤'); return; }
+    catch(e){ if(e && e.name==='AbortError') return; }
+  }
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='qi-workbench-backup.json'; a.click();
-  toast('已导出备份文件');
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  toast('已导出：qi-workbench-backup.json（在「下载」文件夹）');
 }
 function importJSON(file){
   const reader=new FileReader();
