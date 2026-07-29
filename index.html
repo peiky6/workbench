@@ -65,7 +65,7 @@
   .pill.todo{background:#eaf5fd;color:var(--accent);}
   .pill.done{background:#e6f7ee;color:var(--good);}
   .i-ielts{background:#eaf5fd;} .i-mana{background:#eaf7f1;} .i-news{background:#f3eefc;}
-  .i-ainews{background:#e8f4fb;} .i-ai{background:#fdf3e8;} .i-reading{background:#fdeef2;}
+  .i-ai{background:#fdf3e8;} .i-reading{background:#fdeef2;}
   .books{display:flex;gap:10px;margin:10px 0;}
   .bcard{flex:1;text-decoration:none;color:var(--ink);text-align:center;display:block;}
   .bcard:active{transform:scale(.97);}
@@ -316,7 +316,6 @@ const MODULES = [
   {key:'ielts', name:'雅思英语', emoji:'📚', iconCls:'i-ielts', desc:'听说读写每日精进'},
   {key:'mana',  name:'体重管理', emoji:'⚖️', iconCls:'i-mana',  desc:'运动·饮食·体重'},
   {key:'news',  name:'新闻阅读', emoji:'📰', iconCls:'i-news', desc:'虎嗅早报+资讯'},
-  {key:'ainews',name:'AI行业新闻',emoji:'🤖',iconCls:'i-ainews',desc:'大模型与就业'},
   {key:'ai',    name:'AI知识',   emoji:'🧠', iconCls:'i-ai',   desc:'每日5张术语卡'},
   {key:'reading',name:'每日阅读', emoji:'📖', iconCls:'i-reading',desc:'书籍·微信读书'}
 ];
@@ -383,6 +382,14 @@ function today(){ return fmt(new Date()); }
 function addDays(dateStr,n){ const [y,m,d]=dateStr.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return fmt(dt); }
 function dayOfYear(){ const n=new Date(); const s=new Date(n.getFullYear(),0,0); return Math.floor((n-s)/86400000); }
 function startOfWeek(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+// 按「日期种子」做确定性洗牌：同一天结果固定，隔天不同（用于每日内容轮换）
+function seededShuffle(arr, seed){
+  let s = (Number(seed)||0) >>> 0;
+  const rand = ()=>{ s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); const tmp=a[i]; a[i]=a[j]; a[j]=tmp; }
+  return a;
+}
 
 /* ===================== 统计 ===================== */
 function rec(m){ if(!state.modules[m]) state.modules[m]={records:{}}; return state.modules[m].records; }
@@ -674,7 +681,6 @@ function renderModule(key){
   let learn='';
   if(key==='ielts') learn=ieltsLearn();
   else if(key==='news') learn=newsLearn();
-  else if(key==='ainews') learn=ainewsLearn();
   else if(key==='ai') learn=aiLearn();
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -784,39 +790,14 @@ async function tryFetchHuxiu(){
   }catch(e){ box.innerHTML='<p class="hint">自动抓取失败（代理/跨域受限），直接点开上方链接即可。</p>'; }
 }
 
-/* ---- AI 行业新闻 ---- */
-function ainewsLearn(){
-  const cards=AI_NEWS.map(n=>`<div class="term"><div class="term-h">${escapeHtml(n.t)}</div>
-    <div class="term-b"><b>分类</b> ${escapeHtml(n.q)}</div>
-    <div class="term-b">${escapeHtml(n.note)}</div>
-    <div class="term-src">${escapeHtml(n.src)}</div></div>`).join('');
-  return `<div class="learn">
-    <div class="ltitle">🤖 今日 AI 行业速览（精选）</div>
-    ${cards}
-    <div class="notice">ℹ️ 以上为精选整理，已标注信息来源。点下方可尝试抓取最新 AI 资讯（RSS 经 CORS 代理）。</div>
-    <button class="mini line" onclick="tryFetchAiNews()">🔄 尝试抓取最新 AI 资讯</button>
-    <div id="ainewsResult"></div>
-    <p class="hint">📅 看完点上方「标记今日完成」。</p>
-  </div>`;
-}
-async function tryFetchAiNews(){
-  const box=document.getElementById('ainewsResult'); if(!box) return;
-  box.innerHTML='<p class="hint">抓取中…</p>';
-  const feeds=['https://www.36kr.com/feed','https://sspai.com/feed'];
-  let found=[];
-  for(const f of feeds){
-    try{ const xml=await fetchViaProxy(f); const items=parseRss(xml); if(items.length){ found=items; break; } }catch(e){}
-  }
-  if(found.length){ box.innerHTML='<div class="ltitle">🔎 最新资讯</div>'+found.slice(0,10).map(t=>`<div class="hitem"><span class="hn">${escapeHtml(t)}</span></div>`).join('')+'<p class="hint">via RSS + CORS代理。</p>'; }
-  else box.innerHTML='<p class="hint">自动抓取未成功，已为你展示上方精选内容。</p>';
-}
-
 /* ---- AI 知识卡 ---- */
 function isMastered(term){ return (state.aiMastered||[]).includes(term); }
 function markTerm(term){ state.aiMastered=state.aiMastered||[]; const i=state.aiMastered.indexOf(term); if(i>=0) state.aiMastered.splice(i,1); else state.aiMastered.push(term); save(); render(); toast(isMastered(term)?'已记为掌握 👍':'已取消掌握'); }
 function aiLearn(){
-  const lib=AI_TERMS, start=dayOfYear()%lib.length;
-  let picks=[]; for(let i=0;i<5;i++){ const idx=(start+i)%lib.length; picks.push({t:lib[idx], idx}); }
+  const lib=AI_TERMS;
+  const seed=Number(today().replace(/-/g,'')); // YYYYMMDD 作为种子
+  const order=seededShuffle(lib.map((t,i)=>i), seed);
+  const picks=order.slice(0,5).map(idx=>({t:lib[idx], idx}));
   const mc=picks.filter(p=>isMastered(p.idx)).length; const totalMastered=(state.aiMastered||[]).length;
   return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}</span></div>`+
     picks.map(p=>{ const t=p.t, m=isMastered(p.idx);
