@@ -363,6 +363,7 @@ function load(){
     const d = defaultState();
     s.user = s.user || d.user;
     s.aiMastered = s.aiMastered || [];
+    if((s.aiLibVersion||0)!==2){ s.aiMastered = []; s.aiLibVersion = 2; } // 术语库 v2（69 词/AI PM）整体替换，旧序号已失效，重置掌握进度
     s.ieltsListened = Array.isArray(s.ieltsListened) ? s.ieltsListened : [];
     s.profile = Object.assign(d.profile, s.profile||{});
     s.bili = Object.assign(d.bili, s.bili||{});
@@ -490,33 +491,77 @@ const EXERCISES = [
 ];
 
 // AI 知识术语卡（来源取自大厂知识库）
+// 术语库 v2（2026-07-29）：面向 AI 项目经理，4 大技术层级共 69 词
 const AI_TERMS = [
-  {term:'大模型 LLM',mean:'用海量文本训练、能理解和生成人类语言的超大规模神经网络模型。',scene:'写文案、翻译、写代码、问答、客服等通用任务。',fun:'像一个读过整座图书馆、且过目不忘的"超级通才"。',src:'来源：Google Cloud · AI 术语表 / OpenAI 官方文档'},
-  {term:'预训练 Pre-training',mean:'模型在大规模无标注数据上"自学"语言规律的第一阶段。',scene:'所有大模型的底座。',fun:'像婴儿大量听人说话，先搞懂"语言怎么运作"。',src:'来源：Google AI Education'},
-  {term:'微调 Fine-tuning',mean:'在预训练模型上用特定任务数据继续训练，让它更专精。',scene:'医疗、法律等垂直领域定制模型。',fun:'通才毕业后去念了某个专业的硕士。',src:'来源：Hugging Face Course / AWS ML 词汇表'},
-  {term:'提示工程 Prompt',mean:'通过设计输入指令，引导模型给出更好回答的技巧。',scene:'让AI写报告、扮演角色、按格式输出。',fun:'会问问题的人更省力——会"使唤"AI才是真本事。',src:'来源：OpenAI Prompt Engineering Guide'},
-  {term:'RAG 检索增强',mean:'让模型先查资料再回答，减少瞎编。',scene:'企业知识库问答、带参考文献的助手。',fun:'考试前先翻书再写答案，而不是凭记忆硬编。',src:'来源：AWS · 什么是 RAG / NVIDIA 技术博客'},
-  {term:'向量数据库',mean:'把文字转成向量存储，支持"语义搜索"的数据库。',scene:'RAG检索、推荐、相似度匹配。',fun:'不是按字面找，而是按"意思相近"找。',src:'来源：Microsoft AI 学习中心'},
-  {term:'Embedding 词向量',mean:'把词/句变成一串数字，让电脑"懂"语义距离。',scene:'搜索、聚类、RAG。',fun:'给每个词发一张"含义坐标卡"。',src:'来源：Google ML Glossary'},
-  {term:'Transformer',mean:'现代大模型的底层架构，靠注意力机制并行处理序列。',scene:'几乎所有主流大模型。',fun:'一群人同时看全文、互相提醒重点。',src:'来源：Google Research · Attention Is All You Need'},
-  {term:'注意力机制 Attention',mean:'模型处理每个词时，自动关注最相关的其他词。',scene:'翻译、理解长句。',fun:'读一句话时，眼睛会自动瞟向最关键的词。',src:'来源：Google Research'},
-  {term:'RLHF 人类反馈强化学习',mean:'用人类反馈奖励模型，让它回答更符合人类偏好。',scene:'让AI更礼貌、有用、安全。',fun:'训狗——做对了给零食，慢慢它就懂你想要啥。',src:'来源：OpenAI / Anthropic 研究报告'},
-  {term:'Token',mean:'模型处理文本的最小单位（词或字片段）。',scene:'计费、长度限制。',fun:'AI不是按"字"算账，而是按"token"算。',src:'来源：OpenAI 文档 / Anthropic 文档'},
-  {term:'扩散模型 Diffusion',mean:'通过逐步去噪生成图像/音频的模型。',scene:'Midjourney、Stable Diffusion 画图。',fun:'从一团马赛克里慢慢"擦"出清晰照片。',src:'来源：NVIDIA 深度学习术语'},
-  {term:'多模态 Multimodal',mean:'能同时处理文字、图片、声音等多种信息。',scene:'看图说话、语音助手、视频理解。',fun:'既能读字又能看图听话的"全感官"助手。',src:'来源：Microsoft AI / OpenAI'},
-  {term:'Agent 智能体',mean:'能自主规划、调用工具、完成多步任务的AI。',scene:'自动订票、跑数据分析、干活的小秘书。',fun:'不只是答题机器，而是会自己列待办、动手干的"实习生"。',src:'来源：Google AI Agents / OpenAI Assistants'},
-  {term:'知识蒸馏',mean:'用大模型教小模型，让小模型又快又聪明。',scene:'手机端小模型。',fun:'名师带徒，把毕生绝学压缩传给学生。',src:'来源：Hugging Face'},
-  {term:'量化 Quantization',mean:'降低模型数值精度以省内存、提速。',scene:'在手机/端侧跑模型。',fun:'把高清图压成能发微信的大小。',src:'来源：NVIDIA TensorRT 文档'},
-  {term:'LoRA',mean:'只训练少量参数就能微调大模型，省资源。',scene:'个人微调、风格定制。',fun:'不改整台机器，只换一个便宜插件就换新功能。',src:'来源：Hugging Face PEFT'},
-  {term:'上下文窗口',mean:'模型一次能"看到"的最大文本量。',scene:'长文档处理。',fun:'它的"短期记忆"容量。',src:'来源：Anthropic 文档'},
-  {term:'幻觉 Hallucination',mean:'模型编造看似合理但错误的内容。',scene:'需警惕的事实类回答。',fun:'嘴快的同事，编得有鼻子有眼但你别全信。',src:'来源：OpenAI / AWS 安全指南'},
-  {term:'思维链 CoT',mean:'让模型把推理步骤写出来，提升复杂题准确率。',scene:'数学、逻辑题。',fun:'让它"出声思考"，一步步算更靠谱。',src:'来源：Google PaLM / Chain-of-Thought 论文'},
-  {term:'零/少样本学习',mean:'不给例子(零)或给几个例子(少)就能完成任务。',scene:'快速适配新任务。',fun:'零样本=没看例题直接考；少样本=给例题再考。',src:'来源：OpenAI Few-shot 说明'},
-  {term:'生成式AI',mean:'能创造新内容（文/图/音/码）的AI。',scene:'写作、绘画、编程。',fun:'不是检索旧答案，而是现编新东西的"创作者"。',src:'来源：Microsoft AI 学习中心'},
-  {term:'对齐 Alignment',mean:'让AI目标与人类价值观一致、安全可控。',scene:'防误导、防有害输出。',fun:'给超人装上"善良方向盘"。',src:'来源：Anthropic · Core Views on AI Safety'},
-  {term:'梯度下降',mean:'通过不断微调参数、最小化误差来训练模型。',scene:'所有模型训练的核心。',fun:'闭眼摸黑下山，脚往最陡的下坡方向迈一步。',src:'来源：Google ML Glossary'},
-  {term:'MoE 混合专家',mean:'模型含多个专家子网络，按需激活少数。',scene:'省算力的大模型。',fun:'遇事才叫对应专家，不用来所有人天天上班。',src:'来源：Mistral / NVIDIA 技术博客'},
-  {term:'推理 Inference',mean:'模型训练好后，用它对真实输入产生输出的过程。',scene:'部署上线后每次问答。',fun:'运动员训练完，上场正式比赛的那一刻。',src:'来源：NVIDIA 推理术语'}
+  {"term":"人工智能（Artificial Intelligence, AI）","mean":"让计算机系统模拟人类认知能力（推理、学习、决策）的技术总称，是所有分支的顶层概念","scene":"项目立项时界定范围，例如“本项目是 AI 智能客服系统，区别于传统规则类客服工具”","layer":"基础概念层"},
+  {"term":"机器学习（Machine Learning, ML）","mean":"AI 的核心分支，计算机无需人工编写固定规则，通过数据学习规律完成任务","scene":"评估需求可行性，例如“用户行为预测功能需基于 ML 模型，需准备 6 个月用户行为日志”","layer":"基础概念层"},
+  {"term":"深度学习（Deep Learning, DL）","mean":"ML 的子集，基于多层神经网络模拟人脑工作，擅长处理图像、语音、文本等复杂数据","scene":"技术选型判断成本，例如“图像质检需用 DL 模型，需 GPU 算力，成本比传统 ML 高 30%”","layer":"基础概念层"},
+  {"term":"大语言模型（Large Language Model, LLM）","mean":"参数量亿级/万亿级的 DL 语言模型，能理解和生成人类语言（如 GPT、Llama）","scene":"方案设计确定核心技术，例如“采用开源 LLM 搭建企业知识库问答系统，降低 API 调用成本”","layer":"基础概念层"},
+  {"term":"生成式 AI（Generative AI）","mean":"能自主生成文本、图像、音频等新内容的 AI 技术，LLM 是其核心代表","scene":"界定交付物类型，例如“项目核心产出是生成式 AI 文案工具，支持电商、教育行业创作”","layer":"基础概念层"},
+  {"term":"基础模型（Foundation Model）","mean":"泛化能力强的通用 AI 模型，可通过微调适配多个下游任务（如 GPT-4、Claude）","scene":"技术选型评估复用性，例如“基于开源基础模型微调金融、教育子模型，降低研发成本”","layer":"基础概念层"},
+  {"term":"多模态（Multimodal）","mean":"能同时处理文本、图像、语音、视频等多种数据的 AI 技术，实现跨模态理解与生成","scene":"拓展需求功能边界，例如“搭建多模态客服，支持用户上传图片+文字提问，模型自动解答”","layer":"基础概念层"},
+  {"term":"具身智能（Embodied Intelligence）","mean":"AI 系统通过“身体”（机器人、传感器）与物理世界交互，实现感知、决策、执行","scene":"界定项目复杂度，例如“本项目是具身智能机器人研发，需整合传感器与运动模块，比纯软件项目复杂”","layer":"基础概念层"},
+  {"term":"通用人工智能（AGI）","mean":"具备与人类同等综合智能的 AI，能自主学习、理解、适应各类未知任务，目前处于理论阶段","scene":"技术规划与预期管理，例如“本项目聚焦特定场景落地，暂不涉及 AGI 研发”","layer":"基础概念层"},
+  {"term":"狭义人工智能（ANI）","mean":"仅能完成特定单一领域任务的 AI，是目前产业落地的主流类型","scene":"项目范围界定，例如“本项目的智能质检系统属于 ANI，专注产品缺陷识别”","layer":"基础概念层"},
+  {"term":"超人工智能（ASI）","mean":"智能水平远超人类的 AI，仅存在于理论假设中","scene":"技术路线规划，例如“当前项目基于 ANI 落地，ASI 暂不纳入研发计划”","layer":"基础概念层"},
+  {"term":"人工智能生成内容（AIGC）","mean":"生成式 AI 的具体应用，指 AI 自动生成的文本、图像、音频等内容","scene":"界定项目交付物，例如“本项目核心是 AIGC 文案工具，支持电商内容创作”","layer":"基础概念层"},
+  {"term":"符号主义（Symbolic AI）","mean":"基于规则和符号的 AI 技术，用明确规则进行逻辑推理（如专家系统）","scene":"技术背景认知，例如“早期财务规则引擎属于符号主义 AI，与深度学习模型差异较大”","layer":"基础概念层"},
+  {"term":"可解释的人工智能（XAI）","mean":"专注于创建透明模型，为 AI 决策提供清晰解释的 AI 子领域","scene":"合规与信任建设，例如“金融风控模型需采用 XAI 技术，解释决策依据”","layer":"基础概念层"},
+  {"term":"奇点（Singularity）","mean":"假设的未来时间点，技术增长失控导致人类文明发生不可预见的变化（AI 背景下）","scene":"技术趋势认知，例如“项目规划聚焦短期落地，暂不考虑奇点相关假设”","layer":"基础概念层"},
+  {"term":"系统 1 / 系统 2（System1/System2）","mean":"快省力的感性思考系统（System1）与慢费力的理性思考系统（System2）","scene":"需求设计参考，例如“客服模型需兼顾 System1 的快速响应与 System2 的精准推理”","layer":"基础概念层"},
+  {"term":"图灵测试（Turing test）","mean":"测试机器是否表现出与人类相当智力水平的思想实验","scene":"技术认知补充，例如“本项目的智能对话工具暂不追求通过图灵测试，聚焦效率提升”","layer":"基础概念层"},
+  {"term":"监督学习（Supervised Learning）","mean":"用带明确标签的数据训练模型，学习“输入-标签”的对应关系","scene":"明确数据标注需求，例如“需标注 1 万条客服对话的意图标签用于监督学习”","layer":"训练技术层"},
+  {"term":"无监督学习（Unsupervised Learning）","mean":"用无标签数据训练模型，自主发现数据的规律、聚类或关联","scene":"处理数据挖掘需求，例如“用无监督学习聚类用户评论，挖掘潜在痛点”","layer":"训练技术层"},
+  {"term":"强化学习（Reinforcement Learning, RL）","mean":"模型通过“尝试-反馈-优化”循环，以“最大化奖励”调整策略","scene":"设计决策类功能，例如“用强化学习优化推荐系统，根据点击反馈调整内容”","layer":"训练技术层"},
+  {"term":"微调（Fine-tuning）","mean":"在通用大模型基础上，用少量行业数据继续训练，适配特定场景","scene":"通用模型行业适配，例如“用金融合同数据微调 LLM，提升条款提取准确率”","layer":"训练技术层"},
+  {"term":"人类反馈强化学习（RLHF）","mean":"分三步优化大模型：生成输出→人类标注优劣→训练奖励模型","scene":"提升模型输出质量，例如“通过 RLHF 优化客服话术，贴合企业服务规范”","layer":"训练技术层"},
+  {"term":"小样本学习（Few-Shot Learning）","mean":"仅用少量样本快速学习新任务，降低标注成本","scene":"减少数据标注工作量，例如“用小样本学习训练医疗影像模型，仅需 50 例标注数据”","layer":"训练技术层"},
+  {"term":"零样本学习（Zero-Shot Learning）","mean":"无目标任务样本，通过迁移学习完成新任务","scene":"应对长尾需求，例如“用零样本学习让客服模型识别罕见投诉类型”","layer":"训练技术层"},
+  {"term":"数据标注（Data Annotation）","mean":"对原始数据添加标签，转化为模型可学习的结构化数据","scene":"把控数据质量，例如“图像标注准确率需≥98%，否则会导致模型识别效果差”","layer":"训练技术层"},
+  {"term":"过拟合（Overfitting）","mean":"模型“死记硬背”训练数据，在新数据上表现差","scene":"制定验收指标，例如“模型测试集准确率需≥85%，避免过拟合导致上线后效果下降”","layer":"训练技术层"},
+  {"term":"知识图谱（Knowledge Graph）","mean":"以图谱形式描述实体、概念及关系，为模型提供结构化知识支撑","scene":"提升模型回答精准性，例如“构建产品知识图谱，确保客服模型回答匹配产品参数”","layer":"训练技术层"},
+  {"term":"联邦学习（Federated Learning）","mean":"多节点不共享原始数据，仅共享模型参数协同训练","scene":"解决数据合规问题，例如“银行间用联邦学习训练反欺诈模型，数据本地留存”","layer":"训练技术层"},
+  {"term":"迁移学习（Transfer Learning）","mean":"将预训练模型的知识迁移到新任务，减少新任务的训练成本","scene":"降低研发成本，例如“将通用文本模型迁移学习适配金融文本分类任务，减少 70% 标注数据”","layer":"训练技术层"},
+  {"term":"自监督学习（Self-Supervised Learning）","mean":"无需人工标注，让模型从数据本身生成标签实现自主学习","scene":"处理无标注数据场景，例如“用自监督学习对海量无标签用户评论预处理”","layer":"训练技术层"},
+  {"term":"指令微调（Instruction Tuning）","mean":"让模型根据特定指令进行微调，提升指令理解能力","scene":"优化模型交互性，例如“通过指令微调让 LLM 更精准理解客服场景的用户指令”","layer":"训练技术层"},
+  {"term":"监督微调（SFT）","mean":"针对特定任务，用标注数据对预训练模型进行调整","scene":"任务精准适配，例如“用 SFT 优化 LLM 的合同风险识别能力”","layer":"训练技术层"},
+  {"term":"预训练（Pre-training）","mean":"模型训练的初始阶段，从海量数据中学习通用特征，无需特定任务","scene":"技术成本评估，例如“采用开源预训练模型，减少项目前期训练成本”","layer":"训练技术层"},
+  {"term":"数据增强（Data Augmentation）","mean":"通过修改现有数据生成副本，增加训练数据的数量与多样性","scene":"提升模型泛化能力，例如“对产品缺陷图像做旋转/裁剪增强，提升质检模型鲁棒性”","layer":"训练技术层"},
+  {"term":"知识蒸馏（Knowledge Distillation）","mean":"将大模型的知识转移到小模型，实现模型轻量化","scene":"降低部署成本，例如“通过知识蒸馏将大模型压缩为边缘设备可用的小模型”","layer":"训练技术层"},
+  {"term":"思维链提示（CoT）","mean":"引导 LLM 生成中间推理步骤，提升复杂问题的解决能力","scene":"提升模型推理能力，例如“用 CoT 提示词让财税模型分步完成‘发票识别→成本核算’”","layer":"训练技术层"},
+  {"term":"注意力机制（Attention）","mean":"让模型在生成输出时，专注于输入的相关部分","scene":"技术架构认知，例如“本项目的文本生成模型基于注意力机制，能捕捉长文本关联”","layer":"训练技术层"},
+  {"term":"反向传播（Backpropagation）","mean":"训练神经网络的方法，通过计算损失函数梯度调整权重","scene":"技术流程认知，例如“算法团队采用反向传播优化模型参数，提升识别准确率”","layer":"训练技术层"},
+  {"term":"梯度下降（Gradient Descent）","mean":"机器学习优化方法，通过调整模型参数最小化预测误差","scene":"技术流程认知，例如“用梯度下降优化推荐模型，降低用户兴趣预测偏差”","layer":"训练技术层"},
+  {"term":"正则化（Regularization）","mean":"通过给损失函数加惩罚项，防止模型过度拟合","scene":"模型优化策略，例如“用正则化技术提升质检模型在新批次产品上的适应性”","layer":"训练技术层"},
+  {"term":"超参数调优（Hyperparameter Tuning）","mean":"为模型选择合适的超参数（非数据学习的参数）","scene":"提升模型效果，例如“通过超参数调优，将客服模型的意图识别准确率提升 5%”","layer":"训练技术层"},
+  {"term":"欠拟合（Underfitting）","mean":"模型过于简单，无法捕捉数据的基本结构，在训练/新数据上表现都差","scene":"模型优化调整，例如“若质检模型出现欠拟合，需增加模型复杂度或补充训练数据”","layer":"训练技术层"},
+  {"term":"验证集（Validation Data）","mean":"独立于训练/测试集的数据集，用于调整模型超参数","scene":"模型训练流程管控，例如“要求算法团队将数据按 7:2:1 拆分训练/验证/测试集”","layer":"训练技术层"},
+  {"term":"训练数据（Training Data）","mean":"用于训练机器学习模型的数据集","scene":"数据资源规划，例如“本项目需准备 10 万条标注训练数据，支撑模型训练”","layer":"训练技术层"},
+  {"term":"规模定律（Scaling Law）","mean":"描述模型性能与参数数量、数据量之间关系的规律","scene":"技术成本评估，例如“根据规模定律，模型参数量增加 10 倍，性能提升约 20%”","layer":"训练技术层"},
+  {"term":"词元（Token）","mean":"语言模型处理的基本单位（通常是单词或字词）","scene":"需求边界认知，例如“GPT-4 的上下文窗口为 128k Token，可支撑长文档问答需求”","layer":"训练技术层"},
+  {"term":"模型权重（Weight）","mean":"神经网络中连接神经元的参数，用于调整模型行为","scene":"技术流程认知，例如“模型训练的核心是优化权重参数，需监控权重更新的稳定性”","layer":"训练技术层"},
+  {"term":"模型推理（Model Inference）","mean":"用训练好的模型进行预测的过程，是模型落地核心环节","scene":"优化性能指标，例如“要求模型推理延迟≤500ms，需采用 GPU 加速”","layer":"部署技术层"},
+  {"term":"模型轻量化（Model Lightweighting）","mean":"通过压缩、量化、剪枝等技术，减少模型参数量与内存占用","scene":"适配低算力设备，例如“对移动端图像识别模型轻量化，内存占用降至 200MB 以内”","layer":"部署技术层"},
+  {"term":"模型量化（Model Quantization）","mean":"将模型参数从高精度转低精度，降低硬件门槛","scene":"降低部署成本，例如“对 LLM 做 8 位量化，使其能在普通 CPU 服务器运行”","layer":"部署技术层"},
+  {"term":"模型剪枝（Model Pruning）","mean":"移除模型冗余神经元/权重，压缩模型体积","scene":"边缘设备部署，例如“对门禁识别模型剪枝，参数量减少 40%，适配嵌入式设备”","layer":"部署技术层"},
+  {"term":"边缘计算（Edge Computing）","mean":"模型部署在靠近数据源头的边缘设备，而非云端","scene":"提升隐私与速度，例如“人脸识别模型部署在门禁边缘，识别延迟＜100ms”","layer":"部署技术层"},
+  {"term":"云端推理（Cloud Inference）","mean":"模型部署在云端服务器，通过 API 提供推理服务","scene":"支撑海量用户访问，例如“通用 LLM 部署云端，为百万用户提供问答服务”","layer":"部署技术层"},
+  {"term":"容器化部署（Containerized Deployment）","mean":"用 Docker/K8s 将模型与运行环境打包，实现跨平台快速部署","scene":"简化运维管理，例如“采用容器化部署，支持模型版本快速切换”","layer":"部署技术层"},
+  {"term":"算力（Computing Power）","mean":"支撑模型训练/推理的计算能力，核心载体为 GPU/TPU","scene":"资源规划与成本管控，例如“大模型微调需 8 张 NVIDIA A100 GPU，租赁 15 天成本 5 万元”","layer":"部署技术层"},
+  {"term":"加速器（Accelerator）","mean":"加速人工智能应用的微处理器","scene":"算力资源优化，例如“采用 AI 加速器提升模型推理速度，降低云端算力成本”","layer":"部署技术层"},
+  {"term":"张量处理单元（TPU）","mean":"谷歌开发的微处理器，专门加速机器学习工作负载","scene":"算力资源选型，例如“大模型训练采用 TPU 集群，训练速度比 GPU 提升 30%”","layer":"部署技术层"},
+  {"term":"向量数据库（Vector Database）","mean":"存储数据特征向量的数据库，支持智能检索与分析","scene":"技术方案设计，例如“用向量数据库存储企业文档的 Embedding 向量，支撑智能问答检索”","layer":"部署技术层"},
+  {"term":"TensorFlow","mean":"谷歌开发的开源机器学习平台，用于构建和训练模型","scene":"技术栈认知，例如“算法团队采用 TensorFlow 开发模型，需准备对应的部署环境”","layer":"部署技术层"},
+  {"term":"Transformer","mean":"2017 年提出的深度学习网络结构，基于自注意力机制，是现代 LLM 和多模态模型的核心架构","scene":"技术架构选型，例如“采用 Transformer 架构搭建定制化语言模型，兼容主流开源生态”","layer":"应用技术层"},
+  {"term":"提示词（Prompt）","mean":"输入给 AI 模型的指令/问题，引导模型输出符合需求的结果","scene":"提升模型应用效率，例如“设计客服 Prompt 模板：‘你是 XX 品牌客服，基于知识库回答’”","layer":"应用技术层"},
+  {"term":"提示词工程（Prompt Engineering）","mean":"研究高效提示词设计的学科，通过优化指令最大化模型效能","scene":"降低技术成本，例如“招聘提示词工程师，通过优化 Prompt 提升 LLM 行业表现”","layer":"应用技术层"},
+  {"term":"检索增强生成（RAG）","mean":"先检索外部知识库信息，再让模型基于检索结果生成回答，解决幻觉问题","scene":"规避模型幻觉风险，例如“用 RAG 搭建企业文档问答系统，确保回答 100% 来自公司知识库”","layer":"应用技术层"},
+  {"term":"模型幻觉（Model Hallucination）","mean":"模型生成不存在、错误的信息，却表现出高度自信","scene":"制定风险管控方案，例如“AI 生成的合同条款必须人工核对，避免幻觉导致法律风险”","layer":"应用技术层"},
+  {"term":"准确率 / 召回率（Accuracy/Recall）","mean":"模型效果核心指标：准确率=预测正确样本数/总样本数；召回率=预测正确正样本数/实际正样本数","scene":"制定验收标准，例如“智能质检系统召回率≥99%（避免漏检），准确率≥95%（减少复核成本）”","layer":"应用技术层"},
+  {"term":"数字孪生（Digital Twin）","mean":"基于物理实体数据，在虚拟空间构建 1:1 数字化模型，结合 AI 实现模拟与预测","scene":"工业项目设计，例如“搭建工厂数字孪生系统，结合 AI 预测设备故障，降低停机率”","layer":"应用技术层"},
+  {"term":"生成式 AI 合规（Generative AI Compliance）","mean":"遵循法规，确保 AI 训练数据与生成内容合规","scene":"风险管控，例如“训练数据需取得用户授权，生成内容需经过合规审核”","layer":"应用技术层"},
+  {"term":"智能体（Agents）","mean":"内置目标/任务、可自主运行的大型语言模型，具备复杂工作流程","scene":"高阶功能设计，例如“搭建 AI 智能体，实现‘自动调研行业数据→生成分析报告’自动化”","layer":"应用技术层"},
+  {"term":"对齐（Alignment）","mean":"引导 AI 系统行为，使其符合设计者的利益和预期目标","scene":"风险管控，例如“在模型训练中加入对齐环节，确保客服模型的回答符合企业价值观”","layer":"应用技术层"}
 ];
 
 // 雅思口语题库 / 真题（每日按日期轮换）
@@ -788,17 +833,19 @@ function aiLearn(){
   const order=seededShuffle(lib.map((t,i)=>i), seed);
   const picks=order.slice(0,5).map(idx=>({t:lib[idx], idx}));
   const mc=picks.filter(p=>isMastered(p.idx)).length; const totalMastered=(state.aiMastered||[]).length;
-  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}</span></div>`+
-    picks.map(p=>{ const t=p.t, m=isMastered(p.idx);
+  const layerColor={'基础概念层':'#e8f0ff,#3b6fe0','训练技术层':'#eafaf0,#27a567','部署技术层':'#fff3e0,#e0861e','应用技术层':'#fdeef5,#d64b8b'};
+  const total=lib.length;
+  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}/${total}</span></div>`+
+    `<div class="layer-legend">共 ${total} 词 · 4 大层级：<span class="lc" style="background:#e8f0ff;color:#3b6fe0">基础概念</span><span class="lc" style="background:#eafaf0;color:#27a567">训练技术</span><span class="lc" style="background:#fff3e0;color:#e0861e">部署技术</span><span class="lc" style="background:#fdeef5;color:#d64b8b">应用技术</span></div>`+
+    picks.map(p=>{ const t=p.t, m=isMastered(p.idx); const lc=layerColor[t.layer]||'#eee,#666'; const cs=lc.split(',');
       return `<div class="term ${m?'mastered':''}">
         <div class="term-h">${t.term} ${m?'<span class="mbadge">✓ 已掌握</span>':''}</div>
+        <span class="layer-chip" style="background:${cs[0]};color:${cs[1]}">${t.layer}</span>
         <div class="term-b"><b>含义</b> ${t.mean}</div>
-        <div class="term-b"><b>应用场景</b> ${t.scene}</div>
-        <div class="term-b"><b>生动解释</b> ${t.fun}</div>
-        <div class="term-src">${t.src}</div>
+        <div class="term-b"><b>项目应用场景</b> ${t.scene}</div>
         <button class="mtoggle" onclick="markTerm(${p.idx})">${m?'↺ 取消掌握':'✅ 标记已掌握'}</button>
       </div>`; }).join('')+
-    `<p class="hint">📅 每天 5 张，循序渐进；点「标记已掌握」可记录进度（累计于「已掌握」总数）。来源取自 Google / OpenAI / Anthropic / 微软 / AWS / NVIDIA 等官方知识库。</p></div>`;
+    `<p class="hint">📅 每天 5 张（按日期轮换），覆盖「基础概念→训练→部署→应用」4 大层级，循序渐进；点「标记已掌握」记录进度。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>`;
 }
 
 /* ---- 每日阅读 ---- */
