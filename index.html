@@ -65,7 +65,7 @@
   .pill.todo{background:#eaf5fd;color:var(--accent);}
   .pill.done{background:#e6f7ee;color:var(--good);}
   .i-ielts{background:#eaf5fd;} .i-mana{background:#eaf7f1;} .i-news{background:#f3eefc;}
-  .i-ai{background:#fdf3e8;} .i-reading{background:#fdeef2;}
+  .i-ai{background:#fdf3e8;} .i-reading{background:#fdeef2;} .i-plan{background:#e8f0fb;}
   .books{display:flex;gap:10px;margin:10px 0;}
   .bcard{flex:1;text-decoration:none;color:var(--ink);text-align:center;display:block;}
   .bcard:active{transform:scale(.97);}
@@ -202,6 +202,29 @@
   .datelist{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px;}
   .dchip{font-size:11px;background:#eef6fd;color:var(--accent);border:1px solid #d7e8f7;border-radius:20px;padding:3px 10px;}
 
+  /* ---- 学习计划（8月 AI 转型）---- */
+  .plan-week{margin-top:14px;}
+  .plan-whead{display:flex;align-items:center;gap:8px;margin:12px 2px 9px;font-weight:800;}
+  .plan-wlabel{background:linear-gradient(135deg,var(--accent),var(--accent3));color:#fff;border-radius:20px;padding:3px 11px;font-size:12px;white-space:nowrap;}
+  .plan-wtitle{font-size:12.5px;color:var(--sub);font-weight:700;flex:1;line-height:1.4;}
+  .plan-wprog{font-size:12px;color:var(--good);font-weight:800;white-space:nowrap;}
+  .plan-day{background:var(--card);border-radius:16px;padding:13px 14px;margin-bottom:10px;box-shadow:var(--shadow);border:1.5px solid transparent;}
+  .plan-day.done{border-color:var(--good);background:#f1faf5;}
+  .plan-day.today{box-shadow:0 0 0 2px var(--accent2),var(--shadow);}
+  .pday-head{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+  .pday-date{font-size:18px;font-weight:800;color:var(--accent);}
+  .pday-wd{font-size:12px;color:var(--sub);}
+  .pday-spacer{flex:1;}
+  .pday-weekend{font-size:11px;background:#fff0f6;color:#e84393;border-radius:20px;padding:1px 9px;font-weight:700;}
+  .pday-check{font-size:13px;color:var(--good);font-weight:800;}
+  .pday-today{font-size:11px;background:var(--accent);color:#fff;border-radius:20px;padding:1px 9px;font-weight:700;}
+  .pday-title{font-weight:800;font-size:14px;margin-bottom:7px;color:#2b3a45;}
+  .pday-list{margin:0 0 8px;padding-left:18px;}
+  .pday-list li{font-size:13px;line-height:1.65;color:#33414d;margin-bottom:2px;}
+  .pday-out{background:#eaf5fd;border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.55;margin-bottom:7px;}
+  .pday-out b{color:var(--accent);}
+  .pday-tip{font-size:12px;color:var(--sub);line-height:1.55;margin-bottom:10px;}
+
   @media(min-width:640px){
     .sidebar{width:118px;flex-basis:118px;}
     .main{padding:22px 30px 30px;max-width:820px;}
@@ -317,6 +340,7 @@ const MODULES = [
   {key:'mana',  name:'体重管理', emoji:'⚖️', iconCls:'i-mana',  desc:'运动·饮食·体重'},
   {key:'news',  name:'新闻阅读', emoji:'📰', iconCls:'i-news', desc:'虎嗅早报+资讯'},
   {key:'ai',    name:'AI知识',   emoji:'🧠', iconCls:'i-ai',   desc:'每日5张术语卡'},
+  {key:'plan',  name:'学习计划', emoji:'🗓️', iconCls:'i-plan',  desc:'8月AI转型·每日打卡'},
   {key:'reading',name:'每日阅读', emoji:'📖', iconCls:'i-reading',desc:'书籍·微信读书'}
 ];
 function wereadUrl(name){ return 'https://weread.qq.com/web/search/books?keyword='+encodeURIComponent(name); }
@@ -399,6 +423,12 @@ function total(m){ return Object.values(rec(m)).filter(r=>r.done).length; }
 function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(cur.getDate()-1); while(isDone(m,fmt(cur))){ c++; cur.setDate(cur.getDate()-1);} return c; }
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
+/* ===================== 学习计划（2026年8月 · AI 转型）数据 ===================== */
+const PLAN_WEEKS = [{"n":1,"label":"第一周","title":"AI 通识扫盲 + 术语体系搭建","range":"8.1–8.3"},{"n":2,"label":"第二周","title":"AI 项目研发流程 + 关键环节把控","range":"8.4–8.10"},{"n":3,"label":"第三周","title":"AI 行业应用 + 解决方案设计基础","range":"8.11–8.17"},{"n":4,"label":"第四周","title":"项目管理适配 + 实战演练 + 证书准备","range":"8.18–8.24"}];
+const STUDY_PLAN = [{"mmdd":"0801","w":1,"weekend":false,"title":"AI/ML/DL/大模型层级 + 训练范式","content":["AI / ML / DL / 大模型 / 生成式 AI 的层级关系","监督 / 无监督 / 强化学习的区别（项目中常见的训练范式）"],"output":"整理 AI 核心术语清单（含定义 + 项目应用场景，如“微调”对应“通用大模型适配行业数据”）","tip":"Coursera《AI For Everyone》第1-2章 + 文章《项目经理必懂的 10 个 AI 术语》"},{"mmdd":"0802","w":1,"weekend":false,"title":"大模型核心流程 + 能力边界","content":["大模型核心流程：预训练 → SFT（监督微调）→ RLHF（人类反馈强化学习）","生成式 AI 的能力边界（能做什么 / 不能做什么，避免客户不切实际需求）"],"output":"输出“大模型项目里程碑拆解模板”（对应训练流程，标注各阶段交付物 + 风险点）","tip":"《AI 极简入门》第3-4章 + B站李宏毅《大模型训练全流程拆解》"},{"mmdd":"0803","w":1,"weekend":true,"title":"软件项目 vs AI 项目 + 工具体验","content":["梳理过往软件项目与 AI 项目的差异（需求模糊度 / 迭代速度 / 资源成本）","体验 AI 工具：ChatGPT（提示词）、Midjourney（生成式设计）、LangChain（RAG 快速搭建）"],"output":"撰写 1 页纸对比分析：传统软件 PM 方法在 AI 项目中的适配与调整建议","tip":"社区文章《AI 项目 vs 传统软件项目的 5 大区别》+ 工具实操"},{"mmdd":"0804","w":2,"weekend":false,"title":"数据层 + 算力资源","content":["数据层：数据标注 / 清洗 / 质检的流程与成本（重点关注数据合规风险）","算力资源：GPU/TPU 选型逻辑，云平台（AWS/Azure）AI 服务成本估算"],"output":"制作“数据与算力风险管控清单”（含数据隐私合规要点 + 算力成本预估公式）","tip":"Hugging Face《数据标注实战指南》+ 视频《AI 项目算力成本控制技巧》"},{"mmdd":"0805","w":2,"weekend":false,"title":"数据层 + 算力资源（第 2 天）","content":["继续：数据合规风险点梳理（隐私 / 偏见）与应对","继续：算力成本预估公式实战演练（按业务量估算 GPU 时长）"],"output":"完成“数据与算力风险管控清单”定稿","tip":"结合自己公司项目估算一次真实算力成本"},{"mmdd":"0806","w":2,"weekend":false,"title":"模型层 + 验收标准","content":["模型层：微调 vs 预训练的成本差异；模型效果评估指标（准确率 / 召回率 / ROUGE，懂含义即可）","项目经理如何与算法团队对齐模型验收标准"],"output":"输出“AI 模型验收标准模板”（业务指标 + 技术指标，如智能客服回复准确率≥85%）","tip":"周志华《机器学习》第1章（只看评估指标）+ 案例《某企业大模型微调项目验收标准》"},{"mmdd":"0807","w":2,"weekend":false,"title":"模型层 + 验收标准（第 2 天）","content":["继续：用真实业务指标拆解验收标准（如“幻觉率<5%”“首响<800ms”）","继续：练习与算法团队对齐一次验收标准的沟通话术"],"output":"验收标准模板补充到个人模板库","tip":"找 1 个公司现有模型功能，试着写验收点"},{"mmdd":"0808","w":2,"weekend":false,"title":"部署层 + 线上运维","content":["部署层：模型轻量化 / 容器化（Docker/K8s）基本概念，推理延迟的影响因素","线上运维：模型监控（性能 / 幻觉率）与迭代机制"],"output":"整理“AI 项目部署风险应急预案”（推理延迟过高、模型幻觉处理流程）","tip":"AWS SageMaker 官方文档（入门篇）+ 文章《AI 模型部署的 3 种常见方案》"},{"mmdd":"0809","w":2,"weekend":false,"title":"部署层 + 线上运维（第 2 天）","content":["继续：对比 3 种部署方案（云端 API / 容器化 / 端侧）的取舍","继续：梳理线上监控指标与迭代触发条件"],"output":"部署风险应急预案定稿","tip":"画出一张“故障→处理动作”对照表"},{"mmdd":"0810","w":2,"weekend":true,"title":"模拟拆解 AI 需求","content":["模拟拆解 AI 需求：“为电商企业搭建智能商品文案生成系统”","划分需求对应的研发阶段，标注每阶段的负责人 / 周期 / 资源需求"],"output":"产出“AI 需求拆解示例”（含 WBS 任务分解 + 甘特图雏形）","tip":"用 Jira / 飞书等多维表格实际拆解，参考行业案例"},{"mmdd":"0811","w":3,"weekend":false,"title":"行业应用场景 + 解决方案模块","content":["聚焦 2 个熟悉行业（金融 / 制造 / 教育），学习 AI 典型应用场景","解决方案核心模块：需求诊断 → 技术选型 → ROI 分析 → POC 验证"],"output":"制作“行业 AI 应用场景清单”（场景描述 + 技术方案 + 项目价值）","tip":"机器之心《2026 年 AI 行业应用报告》+ 案例《制造业 AI 质检解决方案白皮书》"},{"mmdd":"0812","w":3,"weekend":false,"title":"行业应用场景 + 解决方案模块（第 2 天）","content":["继续：为选定的 2 个行业各补充 2-3 个场景","继续：练习写“需求诊断→ROI”的短文"],"output":"行业 AI 应用场景清单定稿","tip":"挑一个自己公司能用的场景深入想一遍"},{"mmdd":"0813","w":3,"weekend":false,"title":"提示词工程 + RAG","content":["提示词工程基础：指导业务团队提需求（明确输入输出格式、限定业务规则）","RAG 技术的核心价值（解决大模型幻觉）及项目应用场景"],"output":"输出“提示词需求模板”（给客户 / 业务团队用，确保需求描述精准）","tip":"《提示词工程入门》（Coursera 免费版）+ 文章《RAG 系统搭建全流程》"},{"mmdd":"0814","w":3,"weekend":false,"title":"提示词工程 + RAG（第 2 天）","content":["继续：用模板改写 1 段模糊的业务需求为精准提示词","继续：理解 RAG 在“企业知识库问答”中的落地价值"],"output":"提示词需求模板定稿并附示例","tip":"实际用 LangChain 搭一个最小 RAG 试试"},{"mmdd":"0815","w":3,"weekend":false,"title":"AI 伦理与合规","content":["AI 伦理与合规：数据隐私（GDPR / 中国生成式 AI 管理办法）、模型偏见风险点","项目经理如何在项目中嵌入合规检查节点"],"output":"制定“AI 项目合规检查清单”（数据采集合规、模型输出合规等检查项）","tip":"中国信通院《生成式 AI 合规指南》+ 视频《AI 项目合规风险防控要点》"},{"mmdd":"0816","w":3,"weekend":false,"title":"AI 伦理与合规（第 2 天）","content":["继续：把合规检查点嵌入到第二周的需求拆解模板","继续：识别 1 个真实项目的合规风险"],"output":"AI 项目合规检查清单定稿","tip":"与法务/合规同事聊一次更稳妥"},{"mmdd":"0817","w":3,"weekend":true,"title":"撰写 AI 解决方案框架","content":["撰写简化版 AI 解决方案：“企业智能文档问答系统”","包含需求背景、技术方案、实施计划、风险评估 4 部分"],"output":"产出 1 页纸 AI 解决方案框架（可直接用于客户初步沟通）","tip":"参考行业方案模板，周末集中 2 小时产出"},{"mmdd":"0818","w":4,"weekend":false,"title":"AI 项目敏捷管理 + 跨团队沟通","content":["AI 项目敏捷管理：短迭代（2 周 / 个）、频繁验证、需求渐进明细","跨团队沟通技巧：与算法 / 数据 / 开发团队的沟通话术（避免技术黑话）"],"output":"整理“AI 项目跨团队沟通话术手册”（需求对接、进度同步、风险上报）","tip":"《AI 项目管理实战》+ 课程《敏捷在 AI 项目中的应用》"},{"mmdd":"0819","w":4,"weekend":false,"title":"AI 项目敏捷管理 + 跨团队沟通（第 2 天）","content":["继续：设计适合 AI 项目的 2 周迭代节奏与验收门禁","继续：写 3 段跨团队沟通话术并自检"],"output":"沟通话术手册定稿","tip":"把话术套进当前手头项目试一遍"},{"mmdd":"0820","w":4,"weekend":false,"title":"模拟启动会 + 面试演练","content":["模拟主持一场 AI 项目启动会：明确目标、分工、风险点","练习面试高频：“你如何管理 AI 项目的不确定性？”"],"output":"产出“AI 项目启动会议程模板”+“面试回答模板”","tip":"找同行模拟演练 + 面试题《AI 项目经理高频面试 100 题》"},{"mmdd":"0821","w":4,"weekend":false,"title":"模拟启动会 + 面试演练（第 2 天）","content":["继续：完善启动会议程（含里程碑与风险登记册）","继续：补充 3 个高频面试题的回答骨架"],"output":"启动会 + 面试模板定稿","tip":"录音演练一遍，回听改进表达"},{"mmdd":"0822","w":4,"weekend":false,"title":"证书备考启动","content":["证书备考启动：PMI-ACP（敏捷）或 AWS AI 认证考试大纲梳理","制定后续 1 个月的证书学习计划"],"output":"输出“证书备考计划”（每日学习任务 + 刷题安排）","tip":"PMI 官网 ACP 考试指南 + AWS AI 认证学习路径"},{"mmdd":"0823","w":4,"weekend":false,"title":"证书备考启动（第 2 天）","content":["继续：把大纲拆成每日可执行的微小任务","继续：锁定学习资料与每周刷题量"],"output":"证书备考计划定稿","tip":"先定考试日期，倒推每日进度"},{"mmdd":"0824","w":4,"weekend":true,"title":"全月复盘 + 下一步实践","content":["全月学习复盘：整理核心知识点、工具模板、未解决疑问","规划下一步实践：在现有工作中找 1 个 AI 小场景落地（如智能会议纪要生成）"],"output":"撰写“1 个月学习总结报告”+“AI 小项目实践计划”","tip":"个人学习笔记整理，周末集中复盘"}];
+function planRealDate(mmdd){ const mm=mmdd.slice(0,2), dd=mmdd.slice(2); return '2026-'+mm+'-'+dd; }
+function planWeekday(mmdd){ return ['周日','周一','周二','周三','周四','周五','周六'][new Date(2026, Number(mmdd.slice(0,2))-1, Number(mmdd.slice(2))).getDay()]; }
+function planDone(mmdd){ return isDone('plan', planRealDate(mmdd)); }
 /* ===================== 内容库 ===================== */
 // 雅思：用户提供的 B站 链接直接跳转（存于 state.bili）
 // 雅思真题听力库（按日期轮换，均为剑桥雅思真实考题场景；练习场为爱听写真题音频）
@@ -710,6 +740,7 @@ function renderModule(key){
   const m=MODULES.find(x=>x.key===key);
   if(key==='mana'){ renderMana(); return; }
   if(key==='reading'){ renderReading(); return; }
+  if(key==='plan'){ renderPlan(); return; }
   const done=isDone(key,today());
   const dots=last7(key).map(d=>`<div class="d ${d.on?'on':''} ${d.today?'today':''}"></div>`).join('');
   let learn='';
@@ -732,6 +763,58 @@ function renderModule(key){
     </div>
     ${learn}
     ${recentCheckinsHtml(key)}`;
+}
+
+/* ---- 学习计划（2026年8月 · AI 转型）---- */
+function togglePlanDay(mmdd){
+  const ds=planRealDate(mmdd);
+  const r=rec('plan')[ds]||{}; r.done=!r.done; rec('plan')[ds]=r;
+  save(); render();
+  const md=mmdd.slice(0,2)+'.'+mmdd.slice(2);
+  toast(r.done?('✅ '+md+' 已打卡'):('已取消 '+md+' 打卡'));
+}
+function renderPlan(){
+  const done=total('plan');
+  const totalN=STUDY_PLAN.length;
+  const pct=Math.round(done/totalN*100);
+  const realToday=fmt(new Date());
+  let h='';
+  h+=`<div class="mhead"><button class="back" onclick="setView('home')">‹ 总览</button><h2>🗓️ 学习计划</h2></div>`;
+  h+=`<div class="dcard"><div class="progress" style="margin:0 0 10px">
+      <div class="row"><span class="ttl">2026年8月 · AI 转型 24 天计划</span><span class="num">${done}/${totalN}（${pct}%）</span></div>
+      <div class="bar"><i style="width:${pct}%"></i></div></div>
+    <p class="hint">核心目标：快速掌握 AI 项目管理必备技术常识（每天 1.5–2 小时，周末集中实践）。点每张卡片下方「标记完成」即可打卡，进度自动同步云端。</p></div>`;
+  PLAN_WEEKS.forEach(wk=>{
+    const days=STUDY_PLAN.filter(d=>d.w===wk.n);
+    const wdone=days.filter(d=>planDone(d.mmdd)).length;
+    h+=`<div class="plan-week"><div class="plan-whead">
+        <span class="plan-wlabel">${wk.label}</span>
+        <span class="plan-wtitle">${wk.title}</span>
+        <span class="plan-wprog">${wdone}/${days.length}</span></div>`;
+    days.forEach(d=>{
+      const on=planDone(d.mmdd);
+      const isToday=(realToday===planRealDate(d.mmdd));
+      const md=Number(d.mmdd.slice(0,2))+'.'+Number(d.mmdd.slice(2));
+      h+=`<div class="plan-day ${on?'done':''} ${isToday?'today':''}">
+        <div class="pday-head">
+          <span class="pday-date">${md}</span>
+          <span class="pday-wd">${planWeekday(d.mmdd)}</span>
+          <span class="pday-spacer"></span>
+          ${d.weekend?'<span class="pday-weekend">周末</span>':''}
+          ${on?'<span class="pday-check">✓</span>':''}
+          ${isToday?'<span class="pday-today">今天</span>':''}
+        </div>
+        <div class="pday-title">${d.title}</div>
+        <ul class="pday-list">${d.content.map(c=>`<li>${c}</li>`).join('')}</ul>
+        <div class="pday-out"><b>📤 输出成果</b> ${d.output}</div>
+        <div class="pday-tip">💡 ${d.tip}</div>
+        <button class="mtoggle" onclick="togglePlanDay('${d.mmdd}')">${on?'↺ 取消完成':'✅ 标记完成'}</button>
+      </div>`;
+    });
+    h+=`</div>`;
+  });
+  h+=`<div class="notice">🧭 项目经理专属小贴士：① 不用深学代码/数学，重点看“技术能做什么、要什么资源、有何风险”；② 用 XMind 整理术语与流程，用项目管理工具拆解模拟任务；③ 加入 AI PM 社群，每周和同行交流 1 次。</div>`;
+  document.getElementById('main').innerHTML=h;
 }
 
 /* ---- 雅思：分模块打卡 ---- */
