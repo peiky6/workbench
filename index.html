@@ -588,17 +588,6 @@ const IELTS_READING = [
   '读一篇科普文，写一篇摘要（≤60 词），练习信息压缩。',
   '挑一篇雅思阅读，计时完成后复盘错题：是定位错还是单词不认识？'
 ];
-// AI 行业新闻（精选 + 来源标注；可尝试抓取最新）
-const AI_NEWS = [  {t:'OpenAI 持续迭代 GPT 系列与 Agent 工具', q:'模型发展', src:'来源：OpenAI 官方博客', note:'关注 o 系列推理模型与 ChatGPT 内置 Agent 能力，企业自动化在加速。'},
-  {t:'Anthropic Claude 强调"可解释性"与安全工作', q:'模型发展', src:'来源：Anthropic 研究', note:'提出宪法式 AI 与机制可解释性，推动大模型更可控。'},
-  {t:'Google DeepMind 在视频生成与科学发现发力', q:'头部公司', src:'来源：Google DeepMind', note:'Gemini 多模态 + AlphaFold 续作，AI 进入科研主战场。'},
-  {t:'李飞飞：空间智能是下一个 AI 浪潮', q:'KOL金句', src:'来源：李飞飞公开演讲', note:'"让 AI 理解并在 3D 世界里行动，比只会聊天重要得多。"'},
-  {t:'吴恩达：AI 落地关键在于"小数据+好流程"', q:'KOL金句', src:'来源：Andrew Ng', note:'"别总追大模型，先把一个业务流程用 AI 跑通。"'},
-  {t:'Karpathy：软件正在被"自然语言"重写', q:'KOL金句', src:'来源：Andrej Karpathy', note:'"未来的程序员，更多是在描述和审阅，而非逐行敲代码。"'},
-  {t:'AI 应用工程师成为高薪新岗位', q:'就业方向', src:'来源：各大招聘平台趋势', note:'相比算法研究员，能把模型接进业务的人更缺，薪资水涨船高。'},
-  {t:'提示词工程师 → AI 工作流架构师 演化', q:'就业方向', src:'来源：行业观察', note:'岗位从写 Prompt 升级为设计多 Agent 协作流程。'},
-  {t:'端侧大模型（手机/PC 本地跑）成趋势', q:'模型发展', src:'来源：Qualcomm / Apple 智能', note:'隐私更好、响应更快，倒逼模型量化与蒸馏技术。'}
-];
 
 /* ===================== 渲染 ===================== */
 function render(){ renderSidebar(); currentView==='home' ? renderHome() : renderModule(currentView); }
