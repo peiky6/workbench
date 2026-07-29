@@ -119,6 +119,8 @@
   .wstats b{display:block;font-size:18px;font-weight:800;color:var(--accent);}
   .wstats span{font-size:10px;color:var(--sub);}
   .chart{background:var(--card);border-radius:16px;padding:12px;box-shadow:var(--shadow);margin:10px 0;}
+  .clabel{font-size:12px;color:#7d93a6;margin-bottom:6px;font-weight:700;}
+  .ailink{margin:12px 0;}
   .chart svg{width:100%;height:auto;display:block;}
   .motivate{background:linear-gradient(135deg,#eaf7f1,#eaf5fd);border-radius:16px;padding:13px 14px;margin:10px 0;font-size:13px;line-height:1.6;font-weight:600;color:#2b6a4f;}
 
@@ -932,8 +934,9 @@ function renderHome(){
   const cards = MODULES.map(m=>{
     if(m.key==='plan'){
       const cur=planCurrentSeq(); const tot=STUDY_PLAN.length; const all=cur===0;
+      const stk=planStreak();
       const label=all?('✓ 已学完'):('第'+cur+'/'+tot);
-      const sub=all?'24 天计划全部完成':('今天 · 第'+cur+'项 · 约30分钟');
+      const sub=all?'24 天计划全部完成':('今天 · 第'+cur+'项 · 约30分钟'+(stk>0?' · 🔥连续'+stk+'天':''));
       return `<div class="mcard" onclick="setView('plan')">
         <div class="mi ${m.iconCls}">${m.emoji}</div>
         <div class="mm"><div class="mn">${m.name}</div><div class="ms">${sub}</div></div>
@@ -1023,6 +1026,11 @@ function togglePlanSeq(n){
   save(); render();
   toast((r&&r.done)?('↺ 第 '+n+' 项已取消'):('✅ 第 '+n+' 项已打卡'));
 }
+function planStreak(){
+  let s=0;
+  for(let i=1;i<=STUDY_PLAN.length;i++){ if(planSeqDone(i)) s++; else break; }
+  return s;
+}
 function renderPlan(){
   const cur=planCurrentSeq();
   const totalN=STUDY_PLAN.length;
@@ -1034,6 +1042,12 @@ function renderPlan(){
   h+=`<div class="dcard"><div class="progress" style="margin:0 0 10px">
       <div class="row"><span class="ttl">2026年8月 · AI 转型 24 天计划（每天约30分钟）</span><span class="num">${done}/${totalN}（${pct}%）</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div></div>`;
+  h+=`<div class="stats" style="margin-bottom:10px">
+      <div class="stat"><b>${planStreak()}</b><span>🔥 连续打卡(天)</span></div>
+      <div class="stat"><b>${cur===0?'✓':('第'+cur)}</b><span>当前进度</span></div>
+      <div class="stat"><b>${done}</b><span>累计完成</span></div>
+    </div>`;
+  h+=`<button class="btn ghost w100" onclick="setView('ai')" style="margin-bottom:12px">🧠 配套学习：AI 术语卡（69 词库）</button>`;
   if(cur===0){ h+=`<div class="notice good">🎉 全部 24 天已完成！可参考 8.24 的小项目实践计划进入下一步。</div>`; }
   else { h+=`<p class="hint">顺序解锁：完成一项才开启下一项。当前进度 <b>第 ${cur} 项</b>。超过原定日期未打卡会显示「延期 / 逾期（超 7 天上限标红）」。打卡自动同步云端。</p>`; }
   h+=`</div>`;
@@ -1193,6 +1207,7 @@ function aiLearn(){
         <div class="term-b"><b>项目应用场景</b> ${t.scene}</div>
         <button class="mtoggle" onclick="markTerm(${p.idx})">${m?'↺ 取消掌握':'✅ 标记已掌握'}</button>
       </div>`; }).join('')+
+    `<div class="ailink"><button class="btn ghost w100" onclick="setView('plan')">🗓️ 配套：8月 AI 转型学习计划（每日打卡）</button></div>`+
     `<p class="hint">📅 每天 5 张（按日期轮换），覆盖「基础概念→训练→部署→应用」4 大层级，循序渐进；点「标记已掌握」记录进度。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>`;
 }
 
@@ -1338,6 +1353,8 @@ function renderMana(){
   // 柱状图
   const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
   const chart = items.length<1 ? '<p class="hint">记录体重后，这里会显示柱状趋势图～</p>' : barChart(items);
+  const bfItems=Object.keys(rec('mana')).filter(d=>rec('mana')[d].bodyFat!=null).map(d=>({d,bf:Number(rec('mana')[d].bodyFat)})).sort((a,b)=>a.d.localeCompare(b.d));
+  const bfChart = bfItems.length<2 ? '' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
 
   // 运动
   const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)} · ${e.min}分钟 · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
@@ -1384,6 +1401,7 @@ function renderMana(){
         <button class="mini line" onclick="openAntafuImport()">📥 导入蚂蚁阿福</button>
       </div>
       <div class="chart">${chart}</div>
+      ${bfChart}
     </div>
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里）</div>
@@ -1421,6 +1439,17 @@ function barChart(items){
   const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.w).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.w)).toFixed(1)}" rx="4" fill="#5cb3e6"/>`).join('');
   const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
   const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
+}
+function bodyFatChart(items){
+  const W=320,H=180,pad=24; const ws=items.map(p=>p.bf); let min=Math.min(...ws),max=Math.max(...ws);
+  if(min===max){min-=1;max+=1;}
+  const n=items.length; const bw=Math.min(26,(W-2*pad)/n*0.7);
+  const X=i=> pad + i*((W-2*pad)/Math.max(n-1,1)) + ((W-2*pad)/Math.max(n-1,1)-bw)/2;
+  const Y=v=> H-pad - (v-min)/(max-min)*(H-2*pad);
+  const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.bf).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.bf)).toFixed(1)}" rx="4" fill="#e0861e"/>`).join('');
+  const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
+  const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}%</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}%</text>`;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
 }
 function manaHistoryHtml(){
@@ -1468,8 +1497,8 @@ function liveBody(){
 function openAntafuImport(){
   document.getElementById('sheet').innerHTML = `
     <h3>📥 导入蚂蚁阿福体重数据</h3>
-    <p class="desc">把蚂蚁阿福导出的数据粘贴进来即可（支持 CSV / 文本，每行含「日期 + 体重」即可自动识别）。<br>
-    能识别的格式示例：<br><code>2024-05-01,68.5</code> · <code>2024/5/1 68.5 kg</code> · <code>2024年5月1日 体重 68.5</code></p>
+    <p class="desc">把蚂蚁阿福导出的数据粘贴进来即可（支持 CSV / 文本）。每行识别「日期 + 体重」；<b>带「体脂 / 脂肪」字样的数值会一并导入体脂率</b>。<br>
+    能识别的格式示例：<br><code>2024-05-01,68.5</code> · <code>2024/5/1 体重68.5 体脂24.5</code> · <code>2024年5月1日 体重 68.5 脂肪 24.5%</code></p>
     <textarea id="antafuText" rows="9" placeholder="在此粘贴导出的数据，每行一条…"></textarea>
     <div class="row">
       <button class="btn ghost" onclick="closeSheet()">取消</button>
@@ -1483,23 +1512,41 @@ function doAntafuImport(){
 }
 function importAntafu(text){
   const lines=(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const wmap={};
+  const map={}; // ds -> {weight, bodyFat, bmi}
   for(const line of lines){
     const dm=line.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/); if(!dm) continue;
     const y=dm[1], mo=String(+dm[2]).padStart(2,'0'), da=String(+dm[3]).padStart(2,'0');
     const ds=`${y}-${mo}-${da}`;
-    const nums=(line.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
-    const w=nums.find(n=> n>20 && n<350 && n!==+y && n!==+dm[2] && n!==+dm[3]);
-    if(w==null) continue;
-    wmap[ds]=w;
+    let weight=null, bodyFat=null, bmi=null;
+    const wm=line.match(/(?:体重|weight|kg|重)[^\d]*?(\d+(?:\.\d+)?)/i);
+    if(wm) weight=Number(wm[1]);
+    const bm=line.match(/(?:体脂|脂肪|body[\s_-]?fat|bf|fat|脂)[^\d]*?(\d+(?:\.\d+)?)/i);
+    if(bm) bodyFat=Number(bm[1]);
+    const im=line.match(/(?:bmi)[^\d]*?(\d+(?:\.\d+)?)/i);
+    if(im) bmi=Number(im[1]);
+    if(weight==null && bodyFat==null){
+      const nums=(line.match(/\d+(?:\.\d+)?/g)||[]).map(Number).filter(n=> n!==+y && n!==+dm[2] && n!==+dm[3]);
+      const w=nums.find(n=> n>20 && n<350);
+      if(w!=null) weight=w;
+    }
+    if(weight==null && bodyFat==null) continue;
+    map[ds]=map[ds]||{};
+    if(weight!=null) map[ds].weight=weight;
+    if(bodyFat!=null) map[ds].bodyFat=bodyFat;
+    if(bmi!=null) map[ds].bmi=bmi;
   }
-  if(!Object.keys(wmap).length){ toast('没有识别到体重数据，检查下格式'); return; }
+  if(!Object.keys(map).length){ toast('没有识别到数据，检查下格式'); return; }
   let added=0;
-  Object.keys(wmap).forEach(ds=>{
-    const t=rec('mana')[ds]||{done:false,weight:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
-    t.weight=wmap[ds]; t.done=true; rec('mana')[ds]=t; added++;
+  Object.keys(map).forEach(ds=>{
+    const o=map[ds];
+    const t=rec('mana')[ds]||{done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    if(o.weight!=null) t.weight=o.weight;
+    if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
+    if(o.bmi!=null) t.bmi=o.bmi;
+    if(t.weight!=null||t.bodyFat!=null) t.done=true;
+    rec('mana')[ds]=t; added++;
   });
-  save(); renderMana(); toast(`已导入 ${added} 条体重记录 ⚖️`);
+  save(); renderMana(); toast(`已导入 ${added} 条记录（含体脂率） ⚖️`);
 }
 function matchExercise(text){
   text=(text||'').trim(); if(!text) return null;
