@@ -1390,7 +1390,7 @@ function aiLearn(){
     </div>
     <p class="hint">↑ 来自「学习计划」今日关联术语；下方为每日轮换的 5 张术语卡。</p>`;
   }
-  return aiQuizRender()+`<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}/${total}</span></div>`+
+  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}/${total}</span></div>`+
     `<div class="layer-legend">共 ${total} 词 · 4 大层级：<span class="lc" style="background:#e8f0ff;color:#3b6fe0">基础概念</span><span class="lc" style="background:#eafaf0;color:#27a567">训练技术</span><span class="lc" style="background:#fff3e0;color:#e0861e">部署技术</span><span class="lc" style="background:#fdeef5;color:#d64b8b">应用技术</span></div>`+
     focusHtml+
     picks.map(p=>{ const t=p.t, m=isMastered(p.idx); const lc=layerColor[t.layer]||'#eee,#666'; const cs=lc.split(',');
@@ -1402,7 +1402,7 @@ function aiLearn(){
         <button class="mtoggle" onclick="markTerm(${p.idx})">${m?'↺ 取消掌握':'✅ 标记已掌握'}</button>
       </div>`; }).join('')+
     `<div class="ailink"><button class="btn ghost w100" onclick="setView('plan')">🗓️ 配套：8月 AI 转型学习计划（每日打卡）</button></div>`+
-    `<p class="hint">📅 每天 5 张（按日期轮换），覆盖「基础概念→训练→部署→应用」4 大层级，循序渐进；点「标记已掌握」记录进度。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>`;
+    `<p class="hint">📅 每天 5 张（按日期轮换），覆盖「基础概念→训练→部署→应用」4 大层级，循序渐进；点「标记已掌握」记录进度。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>` + aiQuizRender();
 }
 
 /* ---- 每日阅读 ---- */
