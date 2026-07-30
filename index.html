@@ -282,6 +282,9 @@
   .plan-ref{background:#f3f9ff;border:1px solid #d6ebfb;border-radius:12px;padding:10px 12px;margin:8px 0 4px;}
   .pr-h{font-size:13px;font-weight:700;color:#1b6ca8;margin-bottom:7px;}
   .pr-sub{font-size:11.5px;color:#1b6ca8;margin-bottom:9px;opacity:.92;}
+  .pr-timerow{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px;color:#1b6ca8;margin:2px 0 9px;background:#eaf4ff;border-radius:9px;padding:6px 9px;}
+  .pr-timerow input.tinput{width:74px;border:1px solid #cfe3f7;background:#fff;border-radius:7px;padding:3px 4px;font-size:12px;color:var(--ink);font-family:inherit;}
+  .pr-timerow .thint{margin-left:auto;font-size:10.5px;color:#7aa7c7;}
   .trow{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line);}
   .trow .tk{color:var(--sub);display:flex;align-items:center;gap:6px;}
   .trow .tk .mini{padding:1px 9px;}
@@ -1556,13 +1559,17 @@ function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return t
 function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
-  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
+  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div></div>`; }
   const rows=tp.items.map(it=>`<div class="trow"><span>${escapeHtml(it.n)} · ${it.min}分钟</span><span class="tk">约${trainKcal(it.met,it.min)}kcal <button class="mini" onclick="addTrainItem('${escapeAttr(it.n)}',${it.met},${it.min})">+</button></span></div>`).join('');
   const totalK=tp.items.reduce((s,it)=>s+trainKcal(it.met,it.min),0);
-  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 暂定均为下班后训练，建议 19:00–20:30 完成</div>${rows}
+  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 暂定均为下班后训练</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
     <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
     <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button></div>`;
 }
+function trainTime(){ return (state.settings&&state.settings.trainTime)||{start:'19:00',end:'20:30'}; }
+function trainTimeStart(){ return trainTime().start; }
+function trainTimeEnd(){ return trainTime().end; }
+function setTrainTime(start,end){ state.settings=state.settings||{}; state.settings.trainTime=trainTime(); if(start!=null) state.settings.trainTime.start=String(start); if(end!=null) state.settings.trainTime.end=String(end); save(); renderModule('mana'); toast('训练时段已更新 ⏰'); }
 function renderMana(){
   const t=manaToday();
   const losses=[
