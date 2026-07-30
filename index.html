@@ -768,7 +768,7 @@ function planDayExtra(mmdd){
   const terms=planTerms(mmdd), vurl=planVideoUrl(mmdd);
   let h='<div class="pday-extra"><div class="pday-extra-h">📚 今日关联术语 · 🎬 课程视频</div>';
   if(terms.length){
-    h+='<div class="pday-terms">'+terms.map(o=>`<span class="term-chip" onclick="openTerm(${o.idx})">${escapeHtml(o.term.split('（')[0])}</span>`).join('')+'</div>';
+    h+='<div class="pday-terms">'+terms.map(o=>`<span class="term-chip" onclick="openTerm(${o.idx})">${escapeHtml(o.term.term.split('（')[0])}</span>`).join('')+'</div>';
   } else {
     h+='<p class="pday-noterm">本日偏项目管理方法，无强关联术语，可直接看下方视频。</p>';
   }
