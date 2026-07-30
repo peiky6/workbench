@@ -46,6 +46,13 @@
   .back{border:none;background:#f3f9fe;color:var(--sub);border-radius:10px;padding:6px 12px;
     font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;}
   .secttitle{font-size:13px;font-weight:800;color:var(--sub);margin:6px 2px 10px;}
+  .reminder{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:16px;margin-bottom:11px;cursor:pointer;box-shadow:var(--shadow);transition:transform .12s;}
+  .reminder:active{transform:scale(.99);}
+  .reminder.warn{background:linear-gradient(135deg,#fff4e6,#ffe6c7);border:1px solid #ffd8a8;}
+  .reminder.done{background:linear-gradient(135deg,#e9fbf2,#d6f7e6);border:1px solid #b2f0cf;}
+  .reminder .ri{font-size:24px;line-height:1;}
+  .reminder .rt{font-weight:700;font-size:14.5px;color:#1f2d3d;}
+  .reminder .rs{font-size:12px;color:#6b7785;margin-top:2px;}
 
   .progress{background:var(--card);border-radius:20px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:14px;}
   .progress .row{display:flex;align-items:center;justify-content:space-between;}
@@ -1071,6 +1078,7 @@ function renderHome(){
       <div class="row"><span class="ttl">今日打卡进度</span><span class="num">${done} / ${MODULES.length}</span></div>
       <div class="bar"><i style="width:${done/MODULES.length*100}%"></i></div>
     </div>
+    ${quizReminderHtml()}
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
@@ -1344,6 +1352,22 @@ function aiQuizState(){ const key=aiQuizKey(); state.aiQuiz=state.aiQuiz||{}; if
 function aiQuizAnswer(qi,oi){ const st=aiQuizState(); st.sel[qi]=oi; save(); renderModule('ai'); }
 function aiQuizScore(qs){ const st=aiQuizState(); return qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).length; }
 function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).map(q=>q.correct); state.aiMastered=state.aiMastered||[]; let n=0; right.forEach(i=>{ if(!state.aiMastered.includes(i)){ state.aiMastered.push(i); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
+function aiQuizDoneThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); return qs.length>0 && qs.every((q,qi)=>st.sel[qi]!==undefined); }
+function quizReminderHtml(){
+  const wd=new Date().getDay();
+  if(wd!==6 && wd!==0) return '';
+  const done=aiQuizDoneThisWeek();
+  if(done){
+    return `<div class="reminder done" onclick="setView('ai')">
+      <span class="ri">✅</span>
+      <div class="rm"><div class="rt">本周术语测试已完成</div><div class="rs">做得好，点此回顾 →</div></div>
+    </div>`;
+  }
+  return `<div class="reminder warn" onclick="setView('ai')">
+    <span class="ri">📝</span>
+    <div class="rm"><div class="rt">周末提醒：做本周 AI 术语测试</div><div class="rs">点此进入 AI 知识板块，完成每周测试 →</div></div>
+  </div>`;
+}
 function aiQuizRender(){
   const qs=aiQuizQuestions(); const st=aiQuizState(); const isSat=new Date().getDay()===6;
   const answered=qs.filter((q,qi)=>st.sel[qi]!=null).length;
