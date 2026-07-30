@@ -251,6 +251,8 @@
   .quiz-result{background:#eafaf0;border-radius:10px;padding:8px 10px;font-size:14px;margin:4px 0 10px;}
   .quiz-q{margin-bottom:12px;}
   .qq-def{background:#f7faff;border-radius:10px;padding:9px 11px;font-size:13.5px;line-height:1.6;color:var(--ink);margin-bottom:8px;}
+  .qq-prompt{background:#f7faff;border-radius:10px;padding:9px 11px;font-size:14px;line-height:1.7;color:var(--ink);margin-bottom:8px;}
+  .qtag{display:inline-block;font-size:11px;background:#ffe0ec;color:#d6336c;border-radius:999px;padding:1px 9px;margin-right:7px;font-weight:700;vertical-align:middle;}
   .quiz-opts{display:flex;flex-direction:column;gap:7px;}
   .quiz-opt{display:block;width:100%;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13.5px;color:var(--ink);cursor:pointer;}
   .quiz-opt.ok{background:#e6fcf2;border-color:#63e6be;color:#0c8599;font-weight:700;}
@@ -279,6 +281,7 @@
   /* 训练/饮食计划套用 */
   .plan-ref{background:#f3f9ff;border:1px solid #d6ebfb;border-radius:12px;padding:10px 12px;margin:8px 0 4px;}
   .pr-h{font-size:13px;font-weight:700;color:#1b6ca8;margin-bottom:7px;}
+  .pr-sub{font-size:11.5px;color:#1b6ca8;margin-bottom:9px;opacity:.92;}
   .trow{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line);}
   .trow .tk{color:var(--sub);display:flex;align-items:center;gap:6px;}
   .trow .tk .mini{padding:1px 9px;}
@@ -1320,16 +1323,24 @@ function aiQuizQuestions(){
   const key=aiQuizKey(); const seed=parseInt(key.replace(/\D/g,''),10)||1;
   const order=seededShuffle(AI_TERMS.map((t,i)=>i), seed);
   const picks=order.slice(0,5);
-  return picks.map(correctIdx=>{
-    const others=seededShuffle(AI_TERMS.map((t,i)=>i).filter(i=>i!==correctIdx), seed+correctIdx+1).slice(0,3);
-    const opts=seededShuffle([correctIdx,...others], seed+correctIdx*7+3);
-    return {correct:correctIdx, opts, def:AI_TERMS[correctIdx].mean};
+  return picks.map((correctIdx,qi)=>{
+    const t=AI_TERMS[correctIdx];
+    const isDefType=((seed+qi*7)%2)===1; // 每周交替出现两种题型
+    if(!isDefType){
+      const others=seededShuffle(AI_TERMS.map((x,i)=>i).filter(i=>i!==correctIdx), seed+correctIdx+1).slice(0,3);
+      const optsIdx=seededShuffle([correctIdx,...others], seed+correctIdx*7+3);
+      return {type:'term', correct:correctIdx, prompt:t.mean, opts:optsIdx, correctOpt:optsIdx.indexOf(correctIdx), ansTerm:t.term};
+    } else {
+      const others=seededShuffle(AI_TERMS.filter((x,i)=>i!==correctIdx), seed+correctIdx+5).slice(0,3);
+      const defs=seededShuffle([t.mean, ...others.map(x=>x.mean)], seed+correctIdx*3+9);
+      return {type:'def', correct:correctIdx, prompt:t.term.split('（')[0], opts:defs, correctOpt:defs.indexOf(t.mean), ansTerm:t.term};
+    }
   });
 }
 function aiQuizState(){ const key=aiQuizKey(); state.aiQuiz=state.aiQuiz||{}; if(!state.aiQuiz[key]) state.aiQuiz[key]={sel:{}}; return state.aiQuiz[key]; }
 function aiQuizAnswer(qi,oi){ const st=aiQuizState(); st.sel[qi]=oi; save(); renderModule('ai'); }
-function aiQuizScore(qs){ const st=aiQuizState(); return qs.filter((q,qi)=>st.sel[qi]===q.correct).length; }
-function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correct).map(q=>q.correct); state.aiMastered=state.aiMastered||[]; let n=0; right.forEach(i=>{ if(!state.aiMastered.includes(i)){ state.aiMastered.push(i); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
+function aiQuizScore(qs){ const st=aiQuizState(); return qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).length; }
+function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).map(q=>q.correct); state.aiMastered=state.aiMastered||[]; let n=0; right.forEach(i=>{ if(!state.aiMastered.includes(i)){ state.aiMastered.push(i); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
 function aiQuizRender(){
   const qs=aiQuizQuestions(); const st=aiQuizState(); const isSat=new Date().getDay()===6;
   const answered=qs.filter((q,qi)=>st.sel[qi]!=null).length;
@@ -1339,17 +1350,17 @@ function aiQuizRender(){
     h+='<div class="quiz-result">🎯 本周得分 <b>'+score+'/'+qs.length+'</b> '+(score===qs.length?'🏆 全部正确，掌握扎实！':(score>=3?'👍 不错，继续巩固':'💡 还需加强，回头看看术语卡'))+'</div>';
     h+='<button class="mini accent" onclick="aiQuizMasterThisWeek()">✅ 把答对的标记已掌握</button>';
   }
-  h+='<p class="hint">根据定义选出对应术语（共 '+qs.length+' 题，每周六正式测试）。</p>';
+  h+='<p class="hint">两种题型：① 看定义选术语 ② 看术语选定义（共 '+qs.length+' 题，每周六正式测试）。</p>';
   qs.forEach((q,qi)=>{
-    const chosen=st.sel[qi];
-    h+='<div class="quiz-q"><div class="qq-def">'+escapeHtml(q.def)+'</div><div class="quiz-opts">';
-    q.opts.forEach(o=>{
-      let cls='quiz-opt'; const txt=escapeHtml(AI_TERMS[o].term.split('（')[0]);
-      if(chosen!=null){ if(o===q.correct) cls+=' ok'; else if(o===chosen) cls+=' bad'; }
-      h+='<button class="'+cls+'" '+(chosen!=null?'disabled':'')+' onclick="aiQuizAnswer('+qi+','+o+')">'+txt+'</button>';
+    const chosen=st.sel[qi]; const isTerm=q.type==='term';
+    h+='<div class="quiz-q"><div class="qq-prompt"><span class="qtag">'+(q.type==='term'?'定义→术语':'术语→定义')+'</span>'+escapeHtml(q.prompt)+'</div><div class="quiz-opts">';
+    q.opts.forEach((o,oi)=>{
+      let cls='quiz-opt'; const txt=isTerm?escapeHtml(AI_TERMS[o].term.split('（')[0]):escapeHtml(o);
+      if(chosen!=null){ if(oi===q.correctOpt) cls+=' ok'; else if(oi===chosen) cls+=' bad'; }
+      h+='<button class="'+cls+'" '+(chosen!=null?'disabled':'')+' onclick="aiQuizAnswer('+qi+','+oi+')">'+txt+'</button>';
     });
     h+='</div>';
-    if(chosen!=null){ h+='<div class="qq-exp '+(chosen===q.correct?'ok':'bad')+'">'+(chosen===q.correct?'✅ 正确！':'❌ 正确术语：'+escapeHtml(AI_TERMS[q.correct].term.split('（')[0]))+'</div>'; }
+    if(chosen!=null){ h+='<div class="qq-exp '+(chosen===q.correctOpt?'ok':'bad')+'">'+(chosen===q.correctOpt?'✅ 正确！':'❌ 正确答案：'+escapeHtml(isTerm?AI_TERMS[q.correct].term.split('（')[0]:AI_TERMS[q.correct].mean))+'</div>'; }
     h+='</div>';
   });
   h+='</div>';
@@ -1545,10 +1556,10 @@ function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return t
 function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
-  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">😌 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
+  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
   const rows=tp.items.map(it=>`<div class="trow"><span>${escapeHtml(it.n)} · ${it.min}分钟</span><span class="tk">约${trainKcal(it.met,it.min)}kcal <button class="mini" onclick="addTrainItem('${escapeAttr(it.n)}',${it.met},${it.min})">+</button></span></div>`).join('');
   const totalK=tp.items.reduce((s,it)=>s+trainKcal(it.met,it.min),0);
-  return `<div class="plan-ref"><div class="pr-h">📋 今日训练计划（${escapeHtml(tp.title)}）</div>${rows}
+  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 暂定均为下班后训练，建议 19:00–20:30 完成</div>${rows}
     <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
     <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button></div>`;
 }
@@ -1612,13 +1623,16 @@ function renderMana(){
       ${bfChart}
     </div>
     <div class="dcard">
+      <div class="ltitle">🏋️ 训练计划（下班后）</div>
+      ${trainPlanHtml()}
+    </div>
+    <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里）</div>
       <div class="inline">
         <input id="exText" type="text" placeholder="如：跑步 30分钟 / 跳绳 20" oninput="previewEx()" />
         <button class="mini accent" onclick="addExTyped()">添加</button>
       </div>
       <div id="exPrev" class="prev"></div>
-      ${trainPlanHtml()}
       ${exHtml}
       <div class="mrow" style="font-weight:800"><span>运动消耗合计</span><span>${exTotal} kcal</span></div>
     </div>
