@@ -151,6 +151,8 @@
   .prev.warn{color:var(--warn);}
   .inline input{border:1.5px solid var(--line);border-radius:12px;padding:10px;font-size:14px;outline:none;flex:1;min-width:0;}
   .inline input:focus{border-color:var(--accent);}
+  .foodpick{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px;font-size:14px;outline:none;background:#fff;margin-bottom:8px;color:var(--ink);}
+  .foodpick:focus{border-color:var(--accent);}
   .mini{font-size:13px;font-weight:700;border:none;border-radius:12px;padding:10px 14px;cursor:pointer;white-space:nowrap;}
   .mini.accent{background:linear-gradient(135deg,var(--accent),var(--accent3));color:#fff;}
   .mini.line{background:#f3f9fe;color:var(--sub);}
@@ -333,6 +335,12 @@
       <div class="field"><label>体重(kg，可选，留空则用最新记录)</label><input id="setWeight" type="number" placeholder="如 65" /></div>
     </div>
     <div class="sect">
+      <h3>🎯 目标设定</h3>
+      <p class="hint">设定目标后，体重图会显示目标线、首页清单与复盘会追踪进度。先留空也可随时回来填。</p>
+      <div class="field"><label>目标体重(kg)</label><input id="setGoalWeight" type="number" step="0.1" placeholder="如 60" /></div>
+      <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
+    </div>
+    <div class="sect">
       <h3>📚 雅思 B站 链接</h3>
       <p class="hint">直接填入你想要的 B站 视频/合集链接，栏目里点开即跳。</p>
       <div class="field"><label>杨帅口语课程</label><input id="biliYs" placeholder="https://b23.tv/..." /></div>
@@ -448,7 +456,7 @@ function defaultState(){
     modules: Object.fromEntries(MODULES.map(m=>[m.key,{records:{}}])),
     aiMastered:[],
     ieltsListened:[],
-    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'' }
+    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'', goal:{weight:null, ielts:null} }
   };
 }
 let state = load();
@@ -1081,11 +1089,73 @@ function renderHome(){
       <div class="bar"><i style="width:${done/MODULES.length*100}%"></i></div>
     </div>
     ${quizReminderHtml()}
+    ${todayChecklistHtml()}
+    ${weeklyReviewHtml()}
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
 }
 
+function dayDone(key,ds){
+  if(key==='ielts'){ const r=rec('ielts')[ds]; return !!(r&&r.parts&&IELTS_PARTS.some(p=>r.parts[p.key]&&r.parts[p.key].done)); }
+  return isDone(key,ds);
+}
+function todayChecklistHtml(){
+  const td=today();
+  const cur=planCurrentSeq(); const planAll=cur===0;
+  let planDone, planText;
+  if(planAll){ planDone=true; planText='8月 AI 转型计划已全部完成 🎉'; }
+  else { const d=STUDY_PLAN[cur-1]; planDone=planSeqDone(cur); planText='完成学习计划第 '+cur+' 项：'+d.title+'（约30分钟）'; }
+  const m=rec('mana')[td]; const weightDone=!!(m&&m.weight!=null);
+  const ieltsDone=dayDone('ielts',td);
+  const readDone=isDone('reading',td);
+  const tp=trainPlanToday(); const trainDone=!!(m&&m.exercises&&m.exercises.length);
+  const items=[
+    {view:'plan', done:planDone, text:planText},
+    {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
+    {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（听说读写）':'雅思练习（听说读写打卡）'},
+    {view:'reading', done:readDone, text: readDone?'已阅读打卡':'每日阅读打卡'},
+    {view:'mana', done:trainDone, text: trainDone?'已完成今日训练记录':(tp.items.length?('下班后训练：'+tp.title):'今日休息日，轻松一下')}
+  ];
+  const done=items.filter(i=>i.done).length;
+  const rows=items.map(i=>`<div class="hitem" onclick="setView('${i.view}')" style="cursor:pointer">
+      <span class="hd" style="flex:0 0 22px">${i.done?'✅':'⬜'}</span>
+      <span class="hn">${escapeHtml(i.text)}</span>
+    </div>`).join('');
+  return `<div class="dcard">
+    <div class="ltitle">📋 今日待办清单 <span style="margin-left:auto;font-size:12px;color:${done<items.length?'var(--warn)':'var(--good)'}">${done}/${items.length} 完成</span></div>
+    ${rows}
+    <p class="hint">点击任意一项直接进入对应板块完成 ✨</p>
+  </div>`;
+}
+function weeklyReviewHtml(){
+  const td=today();
+  const mods=MODULES.filter(m=>m.key!=='plan');
+  const modRows=mods.map(mk=>{ let c=0; for(let i=6;i>=0;i--){ if(dayDone(mk.key,addDays(td,-i))) c++; } return {name:mk.name, c}; });
+  const totalChecks=modRows.reduce((s,r)=>s+r.c,0); const maxChecks=mods.length*7;
+  const rate=Math.round(totalChecks/maxChecks*100);
+  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b));
+  let wt='—';
+  if(items.length>=2){ const ws=startOfWeek(new Date()); const inWeek=items.filter(i=>new Date(i.d)>=ws); const a=inWeek.length>=2?inWeek:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
+  const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
+  const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
+  const goalW=state.settings.goal&&state.settings.goal.weight;
+  let goalLine='';
+  if(goalW!=null){ const lw=latestWeight(); if(lw!=null){ const diff=+(lw-goalW).toFixed(1); goalLine=' · 距目标体重还剩 '+(diff>0?diff+'kg 要减':(diff<0?(-diff)+'kg 余量':'已达成'))+' 🎯'; } }
+  const summary= rate>=80?'本周节奏很稳，继续保持 💪' : (rate>=50?'本周完成过半，再加把劲 🔥':'本周有点松懈，明天从小事捡起就好 🍃');
+  const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
+  return `<div class="dcard">
+    <div class="ltitle">📊 本周复盘（近 7 天）</div>
+    <div class="stats">
+      <div class="stat"><b>${rate}%</b><span>整体打卡率</span></div>
+      <div class="stat"><b>${wt}</b><span>体重变化</span></div>
+      <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
+      <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
+    </div>
+    <div class="ichips" style="margin-top:6px">${chips}</div>
+    <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
+  </div>`;
+}
 function historyByDate(){
   const map={};
   MODULES.forEach(m=>{ Object.keys(rec(m)).forEach(d=>{ if(rec(m)[d].done){ (map[d]=map[d]||[]).push(m.name); } }); });
@@ -1142,7 +1212,7 @@ function togglePlanSeq(n){
   const k=String(n);
   const r=rec('plan')[k];
   if(r && r.done){ delete rec('plan')[k]; }
-  else { rec('plan')[k]={done:true, date:today()}; }
+  else { rec('plan')[k]={done:true, date:today(), ts:Date.now()}; }
   save(); render();
   toast((r&&r.done)?('↺ 第 '+n+' 项已取消'):('✅ 第 '+n+' 项已打卡'));
 }
@@ -1240,7 +1310,7 @@ const IELTS_PARTS=[
 ];
 function getIeltsPart(date,key){ const r=rec('ielts')[date]; if(!r||!r.parts||!r.parts[key]) return {done:false,note:'',sub:{}}; return r.parts[key]; }
 function ieltsPartMut(date,key){ const m=rec('ielts'); m[date]=m[date]||{}; m[date].parts=m[date].parts||{}; m[date].parts[key]=m[date].parts[key]||{done:false,note:'',sub:{}}; return m[date].parts[key]; }
-function syncIeltsDone(date){ const r=rec('ielts')[date]||{}; r.done=['reading','listening','speaking','writing'].some(k=>r.parts&&r.parts[k]&&r.parts[k].done); }
+function syncIeltsDone(date){ const r=rec('ielts')[date]||{}; r.done=['reading','listening','speaking','writing'].some(k=>r.parts&&r.parts[k]&&r.parts[k].done); r.ts=Date.now(); }
 function toggleIeltsPart(key){ const date=today(); const p=ieltsPartMut(date,key); p.done=!p.done; syncIeltsDone(date); const nm=(IELTS_PARTS.find(x=>x.key===key)||{}).name||key; save(); renderModule('ielts'); toast(p.done?nm+' 已标记完成 ✅':nm+' 已取消'); }
 function toggleIeltsSub(key,sub){ const date=today(); const p=ieltsPartMut(date,key); p.sub=p.sub||{}; p.sub[sub]=!p.sub[sub]; save(); renderModule('ielts'); }
 function setIeltsNote(key,val){ const date=today(); const p=ieltsPartMut(date,key); p.note=val; save(); }
@@ -1395,6 +1465,26 @@ function aiQuizRender(){
   h+='</div>';
   return h;
 }
+function aiLayerProgressHtml(){
+  const layers=['基础概念层','训练技术层','部署技术层','应用技术层'];
+  const colors={'基础概念层':['#e8f0ff','#3b6fe0'],'训练技术层':['#eafaf0','#27a567'],'部署技术层':['#fff3e0','#e0861e'],'应用技术层':['#fdeef5','#d64b8b']};
+  const mastered=new Set(state.aiMastered||[]);
+  const total=AI_TERMS.length; const totalDone=mastered.size;
+  const rows=layers.map(L=>{
+    const idxs=AI_TERMS.map((t,i)=>i).filter(i=>AI_TERMS[i].layer===L);
+    const tot=idxs.length; const done=idxs.filter(i=>mastered.has(i)).length; const pct=tot?Math.round(done/tot*100):0;
+    const c=colors[L];
+    return `<div style="margin:8px 0">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:700;color:${c[1]}">${L}</span><span style="color:var(--sub)">${done}/${tot}（${pct}%）</span></div>
+      <div class="pbar"><i class="pfill" style="width:${pct}%;background:linear-gradient(90deg,${c[0]},${c[1]})"></i></div>
+    </div>`;
+  }).join('');
+  const totPct=total?Math.round(totalDone/total*100):0;
+  return `<div class="dcard">
+    <div class="ltitle">📈 AI 术语掌握率 <span style="margin-left:auto;font-size:12px;color:var(--good)">累计 ${totalDone}/${total}（${totPct}%）</span></div>
+    ${rows}
+  </div>`;
+}
 function aiLearn(){
   const lib=AI_TERMS;
   const seed=Number(today().replace(/-/g,'')); // YYYYMMDD 作为种子
@@ -1416,7 +1506,7 @@ function aiLearn(){
     </div>
     <p class="hint">↑ 来自「学习计划」今日关联术语；下方为每日轮换的 5 张术语卡。</p>`;
   }
-  return `<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}/${total}</span></div>`+
+  return `${aiLayerProgressHtml()}<div class="learn"><div class="ltitle" style="display:flex;align-items:center">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 累计 ${totalMastered}/${total}</span></div>`+
     `<div class="layer-legend">共 ${total} 词 · 4 大层级：<span class="lc" style="background:#e8f0ff;color:#3b6fe0">基础概念</span><span class="lc" style="background:#eafaf0;color:#27a567">训练技术</span><span class="lc" style="background:#fff3e0;color:#e0861e">部署技术</span><span class="lc" style="background:#fdeef5;color:#d64b8b">应用技术</span></div>`+
     focusHtml+
     picks.map(p=>{ const t=p.t, m=isMastered(p.idx); const lc=layerColor[t.layer]||'#eee,#666'; const cs=lc.split(',');
@@ -1495,7 +1585,7 @@ function readingHistoryHtml(){
 function saveReading(){
   const v=document.getElementById('readingMin').value.trim();
   const t=rec('reading')[today()]||{done:false,note:''};
-  t.extra=v?Number(v):0; t.done=true; save(); renderReading(); toast('已记录阅读时长 📖');
+  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now(); save(); renderReading(); toast('已记录阅读时长 📖');
 }
 function openBookEditor(){
   const books=state.readingBooks;
@@ -1607,6 +1697,7 @@ function renderMana(){
   const chart = items.length<1 ? '<p class="hint">记录体重后，这里会显示柱状趋势图～</p>' : barChart(items);
   const bfItems=Object.keys(rec('mana')).filter(d=>rec('mana')[d].bodyFat!=null).map(d=>({d,bf:Number(rec('mana')[d].bodyFat)})).sort((a,b)=>a.d.localeCompare(b.d));
   const bfChart = bfItems.length<2 ? '' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
+  const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight; const lw=latestWeight(); if(gw!=null&&lw!=null){ const diff=+(lw-gw).toFixed(1); return `<p class="hint" style="margin-top:6px">🎯 目标体重 ${gw}kg，当前 ${lw}kg，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。</p>`; } return ''; })();
 
   // 运动
   const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)} · ${e.min}分钟 · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
@@ -1618,6 +1709,7 @@ function renderMana(){
     const arr=t.meals[meal];
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
+      <select class="foodpick" onchange="pickFood('${meal}',this.value);this.value=''"><option value="">⚡ 快速选择食物…</option>${FOODS.map(f=>`<option value="${escapeAttr(f.n)}">${escapeHtml(f.n)} · ${f.k}kcal</option>`).join('')}</select>
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个" oninput="previewFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
       <div id="foodPrev_${meal}" class="prev"></div></div>`;
@@ -1654,6 +1746,7 @@ function renderMana(){
       </div>
       <div class="chart">${chart}</div>
       ${bfChart}
+      ${goalTip}
     </div>
     <div class="dcard">
       <div class="ltitle">🏋️ 训练计划（下班后）</div>
@@ -1687,7 +1780,10 @@ function renderMana(){
     ${hist}`;
 }
 function barChart(items){
-  const W=320,H=180,pad=24; const ws=items.map(p=>p.w); let min=Math.min(...ws),max=Math.max(...ws);
+  const W=320,H=180,pad=24; const ws=items.map(p=>p.w);
+  const goalW=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
+  let min=Math.min(...ws),max=Math.max(...ws);
+  if(goalW!=null){ min=Math.min(min,goalW); max=Math.max(max,goalW); }
   if(min===max){min-=1;max+=1;}
   const n=items.length; const bw=Math.min(26,(W-2*pad)/n*0.7);
   const X=i=> pad + i*((W-2*pad)/Math.max(n-1,1)) + ((W-2*pad)/Math.max(n-1,1)-bw)/2;
@@ -1695,7 +1791,8 @@ function barChart(items){
   const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.w).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.w)).toFixed(1)}" rx="4" fill="#5cb3e6"/>`).join('');
   const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
   const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
+  const goalLine = goalW!=null ? `<line x1="${pad}" y1="${Y(goalW).toFixed(1)}" x2="${W-pad}" y2="${Y(goalW).toFixed(1)}" stroke="#e8590c" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W-pad}" y="${(Y(goalW)-4).toFixed(1)}" font-size="9" fill="#e8590c" text-anchor="end">目标 ${goalW}kg</text>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${goalLine}${labs}</svg>`;
 }
 function bodyFatChart(items){
   const W=320,H=180,pad=24; const ws=items.map(p=>p.bf); let min=Math.min(...ws),max=Math.max(...ws);
@@ -1742,6 +1839,7 @@ function saveBody(){
   t.bmi    = bmi? Number(bmi): computeBMI();
   t.bmr    = bmrV?Number(bmrV):Math.round(bmr());
   if(t.weight!=null||t.bodyFat!=null) t.done=true;
+  t.ts=Date.now();
   save(); renderMana(); toast('已记录身体指标 ⚖️');
 }
 function liveBody(){
@@ -1800,6 +1898,7 @@ function importAntafu(text){
     if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
     if(o.bmi!=null) t.bmi=o.bmi;
     if(t.weight!=null||t.bodyFat!=null) t.done=true;
+    t.ts=Date.now();
     rec('mana')[ds]=t; added++;
   });
   save(); renderMana(); toast(`已导入 ${added} 条记录（含体脂率） ⚖️`);
@@ -1830,7 +1929,7 @@ function addExTyped(){
   const mt=matchExercise(v); const t=manaToday();
   if(mt && mt.ex){ t.exercises.push({n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}); }
   else { if(!v.trim()) return toast('请输入运动内容'); t.exercises.push({n:v.trim(),min:0,kcal:0}); }
-  t.done=true; inp.value=''; save(); renderMana(); toast('已添加运动 🏃');
+  t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已添加运动 🏃');
 }
 function matchFood(text){
   text=(text||'').trim(); if(!text) return null;
@@ -1855,15 +1954,21 @@ function addFoodTyped(meal){
   const mt=matchFood(v); const t=manaToday();
   if(mt){ t.meals[meal].push({n:mt.custom?('自定义'+mt.kcal+'kcal'):mt.food.n, k:mt.kcal}); }
   else { if(!v.trim()) return toast('请输入食物'); t.meals[meal].push({n:v.trim(),k:0}); }
-  t.done=true; inp.value=''; save(); renderMana(); toast('已记录 '+(mealNameCn(meal))+' 🍽️');
+  t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已记录 '+(mealNameCn(meal))+' 🍽️');
 }
 function mealNameCn(m){ return {breakfast:'早餐',lunch:'午餐',dinner:'晚餐'}[m]||m; }
 function delEx(i){ manaToday().exercises.splice(i,1); save(); renderMana(); }
 function addFood(meal,name,k){ manaToday().meals[meal].push({n:name,k}); manaToday().done=true; save(); renderMana(); }
 function delFood(meal,i){ manaToday().meals[meal].splice(i,1); save(); renderMana(); }
+function pickFood(meal,val){
+  if(!val) return;
+  const f=FOODS.find(x=>x.n===val);
+  if(!f) return;
+  const t=manaToday(); t.meals[meal].push({n:f.n,k:f.k}); t.done=true; t.ts=Date.now(); save(); renderMana(); toast('已添加 '+f.n+' 🍽️');
+}
 
 /* ---- 标记完成 ---- */
-function toggleDone(key){ const r=rec(key)[today()]||{}; r.done=!r.done; rec(key)[today()]=r; save(); render(); toast(r.done?'已标记完成 ✅':'已取消'); }
+function toggleDone(key){ const r=rec(key)[today()]||{}; r.done=!r.done; r.ts=Date.now(); rec(key)[today()]=r; save(); render(); toast(r.done?'已标记完成 ✅':'已取消'); }
 
 /* ===================== CORS 代理抓取 ===================== */
 async function fetchViaProxy(url){
@@ -1901,6 +2006,8 @@ function openSettings(){
   document.getElementById('setAge').value=p.age||'';
   document.getElementById('setHeight').value=p.height||'';
   document.getElementById('setWeight').value=p.weight||'';
+  document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
+  document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
   document.getElementById('biliYs').value=state.bili.ysSpeak||'';
   document.getElementById('bili99').value=state.bili.ys99||'';
   document.getElementById('biliSimon').value=state.bili.simon||'';
@@ -1953,6 +2060,7 @@ function closeSettings(){
   s.syncMethod=document.getElementById('setSyncMethod').value;
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
   s.encPass=document.getElementById('setEncPass').value;
+  s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
   save(); render(); document.getElementById('settingsPanel').classList.remove('show');
 }
 
@@ -2068,7 +2176,11 @@ function mergeState(remote){
     const localRec=(state.modules[key]&&state.modules[key].records)||{};
     const remoteRec=(remote.modules&&remote.modules[key]&&remote.modules[key].records)||{};
     const rec=Object.assign({},localRec);
-    Object.keys(remoteRec).forEach(ds=>{ rec[ds]=remoteRec[ds]; });
+    Object.keys(remoteRec).forEach(ds=>{
+      const rr=remoteRec[ds], lr=rec[ds];
+      if(!lr){ rec[ds]=rr; }
+      else if((rr.ts||0) >= (lr.ts||0)){ rec[ds]=rr; } // last-write-wins：远端更新则采用，否则保留本地（避免双端各自修改相互静默覆盖）
+    });
     merged[key]={records:rec};
   });
   state.modules=merged;
