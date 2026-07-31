@@ -121,6 +121,12 @@
   .hint{color:var(--sub);font-size:12px;line-height:1.6;margin:6px 2px;}
   .notice{background:#fff8ec;border:1px solid #f6e2bf;color:#9a6b1e;font-size:12px;border-radius:12px;padding:9px 12px;margin:8px 0;line-height:1.5;}
 
+  .ielts-goal{background:linear-gradient(135deg,#eef6ff,#f3f0ff);border:1px solid #dbe6ff;}
+  .goal-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:6px 0 2px;}
+  .goal-main{font-size:16px;font-weight:800;color:var(--accent);}
+  .goal-main b{font-size:20px;}
+  .goal-sub{font-size:11px;color:var(--sub);line-height:1.5;}
+
   .wstats{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;}
   .wstats div{flex:1;min-width:70px;background:#f3f9fe;border-radius:14px;padding:10px;text-align:center;}
   .wstats b{display:block;font-size:18px;font-weight:800;color:var(--accent);}
@@ -1357,6 +1363,19 @@ function ieltsStatsHtml(){
   return `<div class="dcard ielts-stats"><div class="ltitle">📊 雅思打卡统计（按模块）</div>${rows}
     <p class="hint">每个模块可单独打卡；子任务勾选后即部分完成，全部完成 + 标记才算「今日完成」。</p></div>`;
 }
+function ieltsGoalHtml(){
+  const g=(state.settings.goal&&state.settings.goal.ielts!=null)?Number(state.settings.goal.ielts):null;
+  const date=today();
+  const doneToday=['reading','listening','speaking','writing'].filter(k=>{ const r=rec('ielts')[date]; return r&&r.parts&&r.parts[k]&&r.parts[k].done; }).length;
+  if(g==null){
+    return `<div class="dcard ielts-goal"><div class="ltitle">🎯 雅思目标</div><p class="hint">还没设定雅思目标总分。去 ⚙️ 设置 → 目标设定，填写「目标雅思总分」，这里会显示你的冲刺目标与进度。</p></div>`;
+  }
+  return `<div class="dcard ielts-goal">
+    <div class="ltitle">🎯 雅思目标</div>
+    <div class="goal-row"><div class="goal-main">目标总分 <b>${g}</b> 分</div><div class="goal-sub">建议每科尽量 ≥ ${g} 分（总分 = 四科平均分，四舍五入至 0.5）</div></div>
+    <p class="hint">今天已完成 <b>${doneToday}/4</b> 个模块打卡。每天坚持 4 项，离 ${g} 分目标更近一步 💪</p>
+  </div>`;
+}
 function ieltsLearn(){
   const date=today();
   const cards=IELTS_PARTS.map(p=>{
@@ -1376,6 +1395,7 @@ function ieltsLearn(){
   return `<div class="learn">
     <div class="ltitle">🎯 雅思 · 分模块打卡（每日）</div>
     <p class="hint">点开链接去对应平台练习，完成后勾选子任务并「标记今日完成」。不会的单词 / 笔记填在框里，按日期自动保存。</p>
+    ${ieltsGoalHtml()}
     ${ieltsStatsHtml()}
     ${cards}
   </div>`;
@@ -1737,7 +1757,7 @@ function renderMana(){
   const chart = items.length<1 ? '<p class="hint">记录体重后，这里会显示柱状趋势图～</p>' : barChart(items);
   const bfItems=Object.keys(rec('mana')).filter(d=>rec('mana')[d].bodyFat!=null).map(d=>({d,bf:Number(rec('mana')[d].bodyFat)})).sort((a,b)=>a.d.localeCompare(b.d));
   const bfChart = bfItems.length<2 ? '' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
-  const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight; const lw=latestWeight(); if(gw!=null&&lw!=null){ const diff=+(lw-gw).toFixed(1); return `<p class="hint" style="margin-top:6px">🎯 目标体重 ${gw}kg，当前 ${lw}kg，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。</p>`; } return ''; })();
+  const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight!=null?Number(state.settings.goal.weight):null; const lw=latestWeight(); if(gw==null) return ''; if(lw==null){ return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b> 已设定。还没记录体重——在上方输入框填今天的体重，系统会自动算出离目标还差多少 💡</p>`; } const diff=+(lw-gw).toFixed(1); return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。</p>`; })();
 
   // 运动
   const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)} · ${e.min}分钟 · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
