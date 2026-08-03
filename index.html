@@ -389,6 +389,13 @@
       <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
     </div>
     <div class="sect">
+      <h3>🔔 每日打卡提醒</h3>
+      <p class="hint">到设定时间若今日还没全打卡，首页顶部会弹出提醒横幅；若浏览器已授权通知，还会发系统通知。建议配合手机「添加到主屏」使用。</p>
+      <div class="field"><label>开启提醒</label>
+        <select id="setRemind"><option value="on">开启</option><option value="off">关闭</option></select></div>
+      <div class="field"><label>提醒时间(小时 0–23)</label><input id="setRemindHour" type="number" min="0" max="23" placeholder="21" /></div>
+    </div>
+    <div class="sect">
       <h3>📚 雅思 B站 链接</h3>
       <p class="hint">直接填入你想要的 B站 视频/合集链接，栏目里点开即跳。</p>
       <div class="field"><label>杨帅口语课程</label><input id="biliYs" placeholder="https://b23.tv/..." /></div>
@@ -533,13 +540,13 @@ function defaultState(){
       {name:'纳瓦尔宝典', cover:'', url:wereadUrl('纳瓦尔宝典')}
     ],
     modules: Object.fromEntries(MODULES.map(m=>[m.key,{records:{}}])),
-    aiMastered:[],
+    aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{},
     ieltsListened:[],
     trainCancel:{total:0, log:{}},
     planSkip:{},
     planCollapsed:[],
     focusLog:{},
-    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'', goal:{weight:null, ielts:null} }
+    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'', goal:{weight:null, ielts:null}, reminderEnabled:true, reminderHour:21 }
   };
 }
 let state = load();
@@ -554,7 +561,8 @@ function load(){
     const d = defaultState();
     s.user = s.user || d.user;
     s.aiMastered = s.aiMastered || [];
-    if((s.aiLibVersion||0)!==2){ s.aiMastered = []; s.aiLibVersion = 2; } // 术语库 v2（69 词/AI PM）整体替换，旧序号已失效，重置掌握进度
+    s.aiMasteredTs = s.aiMasteredTs || {}; s.aiMasteredDel = s.aiMasteredDel || {};
+    if((s.aiLibVersion||0)!==2){ s.aiMastered = []; s.aiMasteredTs={}; s.aiMasteredDel={}; s.aiLibVersion = 2; } // 术语库 v2（69 词/AI PM）整体替换，旧序号已失效，重置掌握进度
     s.ieltsListened = Array.isArray(s.ieltsListened) ? s.ieltsListened : [];
     s.profile = Object.assign(d.profile, s.profile||{});
     s.bili = Object.assign(d.bili, s.bili||{});
@@ -956,6 +964,7 @@ function planDayExtra(mmdd){
   return h;
 }
 let aiFocusTerm=null;
+let monthlyOpen=false;
 function openTerm(idx){ aiFocusTerm=idx; setView('ai'); }
 function planSkipped(n){ return !!(state.planSkip && state.planSkip[String(n)]); }
 function planCurrentSeq(){ for(let i=0;i<STUDY_PLAN.length;i++){ const n=i+1; if(!planSeqDone(n) && !planSkipped(n)) return n; } return 0; }
@@ -1222,6 +1231,20 @@ function renderSidebar(){
 }
 function setView(v){ currentView=v; render(); }
 
+let _reminderPending=[];
+function reminderBannerHtml(){
+  const s=state.settings; _reminderPending=[];
+  if(!s.reminderEnabled) return '';
+  const hour=new Date().getHours();
+  if(hour < (Number(s.reminderHour)||21)) return '';
+  const pending=MODULES.filter(m=>!dayDone(m.key,today()));
+  if(!pending.length) return '';
+  _reminderPending=pending.map(m=>m.name);
+  return `<div class="reminder warn" style="cursor:default">
+    <div class="ri">🔔</div>
+    <div><div class="rt">今天还有 ${pending.length} 项没完成</div><div class="rs">${_reminderPending.join('、')} · 去对应栏目补上吧</div></div>
+  </div>`;
+}
 function renderHome(){
   const now=new Date(); const wd=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   const done=MODULES.filter(m=>dayDone(m.key,today())).length;
@@ -1258,6 +1281,8 @@ function renderHome(){
     ${quizReminderHtml()}
     ${todayChecklistHtml()}
     ${weeklyReviewHtml()}
+    <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
+    ${monthlyOpen?monthlyReviewHtml():''}
     ${habitHeatmapHtml()}
     <div class="mini-row" style="margin:10px 0">
       <button class="mini accent" onclick="openFocus()">⏱️ 专注计时（今日 ${focusTodayMin()} 分钟）</button>
@@ -1265,6 +1290,9 @@ function renderHome(){
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
+  if(_reminderPending.length && 'Notification' in window && Notification.permission==='granted' && state.settings._lastNotify!==today()){
+    try{ new Notification('自律打卡提醒 🔔',{body:'今天还有：'+_reminderPending.join('、')}); state.settings._lastNotify=today(); save(); }catch(e){}
+  }
 }
 
 function planDoneOnDate(ds){ return Object.keys(rec('plan')).some(k=>{ const r=rec('plan')[k]; return r && r.done && r.date===ds; }); }
@@ -1286,11 +1314,13 @@ function todayChecklistHtml(){
   const m=rec('mana')[td]; const weightDone=!!(m&&m.weight!=null);
   const ieltsDone=dayDone('ielts',td);
   const readDone=isDone('reading',td);
+  const newsDone=isDone('news',td);
   const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.exercises&&m.exercises.length); if(trainAllCancelled) trainDone=true; const trainText = trainAllCancelled ? ('今日训练已取消（'+cancelledToday.length+' 项）🚫') : (trainDone?'已完成今日训练记录':(tp.items.length?('下班后训练：'+tp.title):'今日休息日，轻松一下'));
   const items=[
     {view:'plan', done:planDone, text:planText},
     {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
     {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（菜单打卡）':'雅思练习（菜单打卡 · 点选1-2项）'},
+    {view:'news', done:newsDone, text: newsDone?'已读今日虎嗅早报':'阅读虎嗅早报（新闻阅读）'},
     {view:'reading', done:readDone, text: readDone?'已阅读打卡':'每日阅读打卡'},
     {view:'mana', done:trainDone, text: trainText}
   ];
@@ -1335,9 +1365,46 @@ function weeklyReviewHtml(){
     <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
   </div>`;
 }
+function monthlyReviewHtml(){
+  const td=today();
+  const days=30;
+  const mods=MODULES.filter(m=>m.key!=='plan');
+  const modRows=mods.map(mk=>{ let c=0; for(let i=days-1;i>=0;i--){ if(dayDone(mk.key,addDays(td,-i))) c++; } return {name:mk.name, c}; });
+  const totalChecks=modRows.reduce((s,r)=>s+r.c,0); const maxChecks=mods.length*days;
+  const rate=Math.round(totalChecks/maxChecks*100);
+  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b));
+  let wt='—';
+  if(items.length>=2){ const inMonth=items.filter(i=>new Date(i.d) >= addDays(td,-(days-1))); const a=inMonth.length>=2?inMonth:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
+  const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
+  const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
+  const cancelLog=(state.trainCancel&&state.trainCancel.log)||{}; let cancelM=0; for(let i=days-1;i>=0;i--){ const d=addDays(td,-i); if(cancelLog[d]) cancelM+=cancelLog[d].length; }
+  const goalW=state.settings.goal&&state.settings.goal.weight; let goalLine='';
+  if(goalW!=null){ const lw=latestWeight(); if(lw!=null){ const diff=+(lw-goalW).toFixed(1); goalLine=' · 距目标体重还剩 '+(diff>0?diff+'kg 要减':(diff<0?(-diff)+'kg 余量':'已达成'))+' 🎯'; } }
+  const summary= rate>=75?'这一个月很稳，习惯已经长出来了 💪' : (rate>=45?'这一个月完成近半，节奏不错，下个月再紧一点 🔥':'这个月有点松，下个月从「每天只做一件最小的事」捡起就好 🍃');
+  const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
+  return `<div class="dcard">
+    <div class="ltitle">📅 月度复盘（近 ${days} 天）</div>
+    <div class="stats">
+      <div class="stat"><b>${rate}%</b><span>整体打卡率</span></div>
+      <div class="stat"><b>${wt}</b><span>体重变化</span></div>
+      <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
+      <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
+      <div class="stat"><b>${cancelM}</b><span>训练取消</span></div>
+    </div>
+    <div class="ichips" style="margin-top:6px">${chips}</div>
+    <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
+  </div>`;
+}
 function historyByDate(){
   const map={};
-  MODULES.forEach(m=>{ Object.keys(rec(m)).forEach(d=>{ if(rec(m)[d].done){ (map[d]=map[d]||[]).push(m.name); } }); });
+  MODULES.forEach(m=>{
+    Object.keys(rec(m)).forEach(d=>{
+      const r=rec(m)[d]; if(!r||!r.done) return;
+      const ds = (m.key==='plan') ? (r.date||null) : d; // 学习计划按序号存，需用真实完成日期而非序号
+      if(!ds) return;
+      (map[ds]=map[ds]||[]).push(m.name);
+    });
+  });
   return Object.keys(map).sort((a,b)=>b.localeCompare(a));
 }
 function historyByDateHtml(){
@@ -1408,6 +1475,34 @@ function togglePlanCollapse(n){
   if(i>=0) state.planCollapsed.splice(i,1); else state.planCollapsed.push(n);
   save(); renderModule('plan');
 }
+function togglePlanCollapseAll(collapse){
+  state.planCollapsed = collapse ? STUDY_PLAN.map((d,i)=>i+1).filter(seq=>planSeqDone(seq)) : [];
+  save(); renderModule('plan');
+}
+// 今日学习计划关联 AI 术语（关键词映射到术语库序号），用于「AI 知识」页自动推荐
+function planFocusTerm(cur){
+  if(!cur) return null;
+  const d=STUDY_PLAN[cur-1]; if(!d) return null;
+  const txt=(d.title+' '+d.content.join(' ')+' '+d.output+' '+(d.tip||'')).toLowerCase();
+  const map=[
+    [/transformer|自注意力|注意力机制/, 58], // Transformer
+    [/大模型|llm|大语言模型/, 3],
+    [/预训练|微调|fine.?tun|sft|指令微调/, 20], // 微调
+    [/rag|检索增强|知识库|向量/, 62], // RAG
+    [/数据标注|标注|训练数据/, 24], // 监督学习
+    [/强化学习|rlhf|奖励模型/, 19], // 强化学习
+    [/提示词|prompt/, 60], // 提示词
+    [/智能体|agent/, 67], // 智能体
+    [/部署|推理|算力|gpu|量化|剪枝|容器|边缘/, 57], // 模型推理
+    [/多模态/, 6],
+    [/aigc|生成式/, 4], // 生成式AI
+    [/对齐|合规|幻觉|风险/, 68], // 对齐
+    [/产品|场景|项目|立项|范围|pm|项目经理/, 0], // 人工智能
+    [/复盘|总结|笔记/, -1]
+  ];
+  for(const [re,idx] of map){ if(re.test(txt) && idx>=0 && AI_TERMS[idx]) return idx; }
+  return null;
+}
 function planStreak(){
   let s=0;
   for(let i=1;i<=STUDY_PLAN.length;i++){ if(planSeqDone(i)) s++; else break; }
@@ -1415,6 +1510,7 @@ function planStreak(){
 }
 function renderPlan(){
   const cur=planCurrentSeq();
+  if(cur && aiFocusTerm==null) aiFocusTerm=planFocusTerm(cur); // 自动关联今日计划的 AI 术语
   const totalN=STUDY_PLAN.length;
   const done=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
   const pct=Math.round(done/totalN*100);
@@ -1429,9 +1525,15 @@ function renderPlan(){
       <div class="stat"><b>${cur===0?'✓':('第'+cur)}</b><span>当前进度</span></div>
       <div class="stat"><b>${done}</b><span>累计完成</span></div>
     </div>`;
+  const ftIdx = cur?planFocusTerm(cur):null;
   h+=`<button class="btn ghost w100" onclick="aiFocusTerm=null;setView('ai')" style="margin-bottom:12px">🧠 配套学习：AI 术语卡（69 词库）</button>`;
+  if(ftIdx!=null && AI_TERMS[ftIdx]){ h+=`<div class="notice" style="margin-bottom:12px">📌 今日计划关联术语：<b>${escapeHtml(AI_TERMS[ftIdx].term)}</b> —— <a href="#" onclick="aiFocusTerm=${ftIdx};setView('ai');return false;" style="color:var(--accent);font-weight:700">去 AI 卡复习 →</a></div>`; }
   if(cur===0){ h+=`<div class="notice good">🎉 全部 24 天已完成！可参考 8.24 的小项目实践计划进入下一步。</div>`; }
   else { h+=`<p class="hint">顺序解锁：完成一项才开启下一项。当前进度 <b>第 ${cur} 项</b>。超过原定日期未打卡会显示「延期 / 逾期（超 7 天上限标红）」。<b>逾期也不怕卡住</b>：可「⏭️ 跳过」解锁后续，或稍后直接「✅ 标记完成」补卡。打卡自动同步云端。</p>`; }
+  h+=`<div class="mini-row" style="margin-top:10px">
+      <button class="mini line" onclick="togglePlanCollapseAll(true)">📂 收起全部已完成</button>
+      <button class="mini line" onclick="togglePlanCollapseAll(false)">📂 展开全部</button>
+    </div>`;
   h+=`</div>`;
   PLAN_WEEKS.forEach(wk=>{
     const days=STUDY_PLAN.filter(d=>d.w===wk.n);
@@ -1664,7 +1766,7 @@ function newsLearn(){
     <div id="huxiuResult"></div>
     <div class="ltitle">🔗 我的其他新闻源</div>
     ${links || '<p class="hint">还没添加，去 ⚙️ 设置里加几个吧</p>'}
-    <p class="hint">📅 读完后点上方「标记今日完成」记录一下～</p>
+    <button class="btn ${isDone('news',today())?'ghost':'primary'} w100" onclick="toggleDone('news')">${isDone('news',today())?'✏️ 取消今日完成':'✅ 标记今日已读虎嗅'}</button>
   </div>`;
 }
 async function tryFetchHuxiu(){
@@ -1680,7 +1782,14 @@ async function tryFetchHuxiu(){
 
 /* ---- AI 知识卡 ---- */
 function isMastered(term){ return (state.aiMastered||[]).includes(term); }
-function markTerm(term){ state.aiMastered=state.aiMastered||[]; const i=state.aiMastered.indexOf(term); if(i>=0) state.aiMastered.splice(i,1); else state.aiMastered.push(term); save(); render(); toast(isMastered(term)?'已记为掌握 👍':'已取消掌握'); }
+// 统一的「掌握状态」写入：带时间戳(ts)，移除时记 del 时间戳，供多端同步做 last-write-wins，避免「答错移除后同步被复活」
+function aiMarkMastered(idx, mastered){
+  state.aiMastered=state.aiMastered||[]; state.aiMasteredTs=state.aiMasteredTs||{}; state.aiMasteredDel=state.aiMasteredDel||{};
+  const i=state.aiMastered.indexOf(idx);
+  if(mastered){ if(i<0) state.aiMastered.push(idx); state.aiMasteredTs[idx]=Date.now(); delete state.aiMasteredDel[idx]; }
+  else { if(i>=0) state.aiMastered.splice(i,1); state.aiMasteredDel[idx]=Date.now(); }
+}
+function markTerm(term){ const was=isMastered(term); aiMarkMastered(term, !was); save(); render(); toast(!was?'已记为掌握 👍':'已取消掌握'); }
 /* ---- AI 每周六测试 ---- */
 function aiQuizKey(){ const d=new Date(); const onejan=new Date(d.getFullYear(),0,1); const wk=Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7); return d.getFullYear()+'-W'+wk; }
 function aiQuizQuestions(){
@@ -1707,9 +1816,7 @@ function aiQuizAnswer(qi,oi){
   // 答错：自动把该术语从「已掌握」移除，强制重新复习
   const q=aiQuizQuestions()[qi];
   if(q && oi!==q.correctOpt){
-    state.aiMastered=state.aiMastered||[];
-    const i=state.aiMastered.indexOf(q.correct);
-    if(i>=0){ state.aiMastered.splice(i,1); save(); }
+    aiMarkMastered(q.correct, false); save();
     renderModule('ai');
     toast('答错了：已把「'+q.ansTerm+'」标记为未掌握，去术语卡复习 👀');
     return;
@@ -1717,7 +1824,7 @@ function aiQuizAnswer(qi,oi){
   renderModule('ai');
 }
 function aiQuizScore(qs){ const st=aiQuizState(); return qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).length; }
-function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).map(q=>q.correct); state.aiMastered=state.aiMastered||[]; let n=0; right.forEach(i=>{ if(!state.aiMastered.includes(i)){ state.aiMastered.push(i); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
+function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).map(q=>q.correct); let n=0; right.forEach(i=>{ if(!isMastered(i)){ aiMarkMastered(i,true); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
 function aiQuizDoneThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); return qs.length>0 && qs.every((q,qi)=>st.sel[qi]!==undefined); }
 function quizReminderHtml(){
   const wd=new Date().getDay();
@@ -1940,6 +2047,17 @@ function periodLoss(kind){
   const first=inP[0].w, last=inP[inP.length-1].w;
   return +(first-last).toFixed(1);
 }
+function predictGoalDays(){
+  const goalW=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
+  if(goalW==null) return null;
+  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b));
+  if(items.length<3) return null;
+  const recent=items.slice(-10); const x1=recent.length-1; const slope=(recent[x1].w-recent[0].w)/x1;
+  if(Math.abs(slope)<0.005) return Infinity; // 近期变化不明显，无法预测
+  const days=(goalW-recent[x1].w)/slope;
+  if(days<=0) return 0; // 已达成或背道而驰
+  return Math.ceil(days);
+}
 function manaMotivation(){
   const w=periodLoss('week');
   if(w==null) return '记录下今天的体重，开启你的蜕变之旅吧 🌱 哪怕只是开始，也已经赢过昨天的自己。';
@@ -2007,7 +2125,11 @@ function renderMana(){
   const chart = items.length<1 ? '<p class="hint">记录体重后，这里会显示柱状趋势图～</p>' : barChart(items);
   const bfItems=Object.keys(rec('mana')).filter(d=>rec('mana')[d].bodyFat!=null).map(d=>({d,bf:Number(rec('mana')[d].bodyFat)})).sort((a,b)=>a.d.localeCompare(b.d));
   const bfChart = bfItems.length<2 ? '' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
-  const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight!=null?Number(state.settings.goal.weight):null; const lw=latestWeight(); if(gw==null) return ''; if(lw==null){ return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b> 已设定。还没记录体重——在上方输入框填今天的体重，系统会自动算出离目标还差多少 💡</p>`; } const diff=+(lw-gw).toFixed(1); return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。</p>`; })();
+  const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight!=null?Number(state.settings.goal.weight):null; const lw=latestWeight(); if(gw==null) return ''; if(lw==null){ return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b> 已设定。还没记录体重——在上方输入框填今天的体重，系统会自动算出离目标还差多少 💡</p>`; } const diff=+(lw-gw).toFixed(1);
+    const pd=predictGoalDays(); let pstr='';
+    if(pd===Infinity) pstr='（近期体重变化不明显，暂无法预测达成日）';
+    else if(pd&&pd>0){ const d=new Date(); d.setDate(d.getDate()+pd); pstr=' · 按近期速度约 <b>'+pd+' 天</b>（'+(d.getMonth()+1)+'/'+d.getDate()+'）到目标 📅'; }
+    return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。${pstr}</p>`; })();
 
   // 运动
   const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)} · ${e.min}分钟 · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
@@ -2102,20 +2224,35 @@ document.addEventListener('click', e=>{
   const tip=document.getElementById('barTip');
   if(tip && !tip.contains(e.target)) tip.style.display='none';
 });
+function bmrForW(w){ const p=state.profile; const h=Number(p.height)||170; const a=Number(p.age)||30; const base=10*w+6.25*h-5*a; return Math.round(p.sex==='female'? base-161 : base+5); }
 function barChart(items){
   const W=320,H=180,pad=24; const ws=items.map(p=>p.w);
   const goalW=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
   let min=Math.min(...ws),max=Math.max(...ws);
   if(goalW!=null){ min=Math.min(min,goalW); max=Math.max(max,goalW); }
   if(min===max){min-=1;max+=1;}
+  const h=Number(state.profile.height)||170; const hm=h/100;
+  const wLow=+(18.5*hm*hm).toFixed(1), wHigh=+(24*hm*hm).toFixed(1); // 健康 BMI 区间对应的体重
+  min=Math.min(min,wLow); max=Math.max(max,wHigh); if(min===max){min-=1;max+=1;}
   const n=items.length; const bw=Math.min(26,(W-2*pad)/n*0.7);
   const X=i=> pad + i*((W-2*pad)/Math.max(n-1,1)) + ((W-2*pad)/Math.max(n-1,1)-bw)/2;
   const Y=w=> H-pad - (w-min)/(max-min)*(H-2*pad);
   const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.w).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.w)).toFixed(1)}" rx="4" fill="#5cb3e6" cursor="pointer" onclick="showBarTip(event,'${p.d}','${p.w} kg')"/>`).join('');
+  // 健康 BMI 区间阴影
+  const bandY1=Math.max(pad, Y(wHigh)), bandY2=Math.min(H-pad, Y(wLow));
+  const band = (wHigh>min && wLow<max) ? `<rect x="${pad}" y="${bandY1.toFixed(1)}" width="${(W-2*pad).toFixed(1)}" height="${(bandY2-bandY1).toFixed(1)}" fill="#27a567" opacity="0.10"/>`+
+    `<text x="${pad+2}" y="${(bandY1+9).toFixed(1)}" font-size="8" fill="#27a567">健康BMI 18.5–24</text>` : '';
+  // BMR 趋势线（独立刻度）
+  const bms=items.map(p=>bmrForW(p.w));
+  let bmin=Math.min(...bms), bmax=Math.max(...bms); if(bmin===bmax){bmin-=50;bmax+=50;}
+  const Yb=v=> H-pad - (v-bmin)/(bmax-bmin)*(H-2*pad);
+  const bmrLine = items.map((p,i)=>`<circle cx="${(X(i)+bw/2).toFixed(1)}" cy="${Yb(bms[i]).toFixed(1)}" r="2" fill="#2f9e44"/>`).join('')+
+    `<polyline points="${items.map((p,i)=>(X(i)+bw/2).toFixed(1)+','+Yb(bms[i]).toFixed(1)).join(' ')}" fill="none" stroke="#2f9e44" stroke-width="1.4" stroke-dasharray="3 3" opacity="0.85"/>`;
   const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
   const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}</text>`;
   const goalLine = goalW!=null ? `<line x1="${pad}" y1="${Y(goalW).toFixed(1)}" x2="${W-pad}" y2="${Y(goalW).toFixed(1)}" stroke="#e8590c" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W-pad}" y="${(Y(goalW)-4).toFixed(1)}" font-size="9" fill="#e8590c" text-anchor="end">目标 ${goalW}kg</text>` : '';
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${goalLine}${labs}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${band}${bars}${goalLine}${bmrLine}${labs}</svg>`+
+    `<p class="hint" style="margin:4px 2px 0">🔵 体重 · 🟢 健康 BMI(18.5–24) 区间 · 🟩 BMR(基础代谢)趋势。点击柱子看数值。</p>`;
 }
 function bodyFatChart(items){
   const W=320,H=180,pad=24; const ws=items.map(p=>p.bf); let min=Math.min(...ws),max=Math.max(...ws);
@@ -2331,6 +2468,8 @@ function openSettings(){
   document.getElementById('setWeight').value=p.weight||'';
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
+  document.getElementById('setRemind').value=state.settings.reminderEnabled?'on':'off';
+  document.getElementById('setRemindHour').value=(state.settings.reminderHour!=null)?state.settings.reminderHour:21;
   document.getElementById('biliYs').value=state.bili.ysSpeak||'';
   document.getElementById('bili99').value=state.bili.ys99||'';
   document.getElementById('biliSimon').value=state.bili.simon||'';
@@ -2384,6 +2523,9 @@ function closeSettings(){
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
   s.encPass=document.getElementById('setEncPass').value;
   s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
+  s.reminderEnabled = document.getElementById('setRemind').value==='on';
+  s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
+  if(s.reminderEnabled && 'Notification' in window && Notification.permission==='default'){ try{ Notification.requestPermission(); }catch(e){} }
   save(); render(); document.getElementById('settingsPanel').classList.remove('show');
 }
 
@@ -2489,7 +2631,12 @@ function mergeState(remote){
   state.bili=Object.assign(d.bili,remote.bili||{});
   state.newsLinks=remote.newsLinks&&remote.newsLinks.length?remote.newsLinks:d.newsLinks;
   state.readingBooks=remote.readingBooks&&remote.readingBooks.length?remote.readingBooks:d.readingBooks;
-  state.aiMastered=[...new Set([...(state.aiMastered||[]),...(remote.aiMastered||[])])];
+  // 术语掌握：按 ts 的 last-write-wins，避免「A 端答错移除、B 端还在」合并时被复活
+  { const ts=Object.assign({}, state.aiMasteredTs||{}, remote.aiMasteredTs||{});
+    const del=Object.assign({}, state.aiMasteredDel||{}, remote.aiMasteredDel||{});
+    const set=new Set([...(state.aiMastered||[]), ...(remote.aiMastered||[])]);
+    set.forEach(idx=>{ if(del[idx] && (!ts[idx] || del[idx] > ts[idx])) set.delete(idx); });
+    state.aiMastered=[...set]; state.aiMasteredTs=ts; state.aiMasteredDel=del; }
   state.ieltsListened=[...new Set([...(state.ieltsListened||[]),...(remote.ieltsListened||[])])];
   state.settings=Object.assign({}, d.settings, state.settings); // 设备配置(Token/密钥)不跨端同步：保留本机设置，云端绝不覆盖
   // 真合并：按模块、按日期并集，冲突时远端优先（避免任一端记录丢失）
