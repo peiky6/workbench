@@ -140,6 +140,8 @@
   .focus-time{font-size:48px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:10px 0;color:var(--accent);letter-spacing:2px;}
   .focus-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
   .update-bar{position:fixed;left:0;right:0;bottom:0;background:var(--accent);color:#fff;font-size:13px;font-weight:700;text-align:center;padding:11px;cursor:pointer;z-index:90;box-shadow:0 -4px 16px rgba(0,0,0,.18);}
+  .bartip{position:fixed;transform:translate(-50%,-100%);margin-top:-8px;background:#2b3a45;color:#fff;padding:5px 11px;border-radius:8px;font-size:12px;z-index:95;pointer-events:none;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.22);line-height:1.5;}
+  .bartip::after{content:'';position:absolute;left:50%;bottom:-4px;transform:translateX(-50%) rotate(45deg);width:8px;height:8px;background:#2b3a45;}
 
   .wstats{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;}
   .wstats div{flex:1;min-width:70px;background:#f3f9fe;border-radius:14px;padding:10px;text-align:center;}
@@ -255,6 +257,9 @@
   .pday-out{background:#eaf5fd;border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.55;margin-bottom:7px;}
   .pday-out b{color:var(--accent);}
   .pday-tip{font-size:12px;color:var(--sub);line-height:1.55;margin-bottom:10px;}
+  .pday-ans{margin:6px 0 10px;background:#f0f6ff;border:1px solid #d5e5ff;border-radius:10px;padding:7px 11px;font-size:12.5px;color:#2b4a7a;line-height:1.65;}
+  .pday-ans summary{cursor:pointer;font-weight:700;color:#3b6fe0;font-size:12.5px;}
+  .pday-ans-body{padding-top:6px;white-space:pre-line;}
   .pday-dur{font-size:11px;background:#eef7f0;color:#2f9e44;border-radius:20px;padding:1px 8px;font-weight:700;}
   .pday-delay{font-size:11px;background:#fff4e6;color:#e8590c;border-radius:20px;padding:1px 9px;font-weight:700;}
   .pday-overdue{font-size:11px;background:#ffe3e3;color:#c92a2a;border-radius:20px;padding:1px 9px;font-weight:800;}
@@ -296,6 +301,21 @@
   /* 雅思按模块统计 */
   .ielts-stats .istat{background:#f7faff;border-radius:12px;padding:10px 12px;margin-bottom:9px;border:1px solid var(--line);}
   .ielts-stats .istat.done{background:#eafaf0;border-color:#63e6be;}
+  .imenu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .imenu-item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 10px;cursor:pointer;transition:box-shadow .15s,transform .05s;}
+  .imenu-item:active{transform:scale(.98);}
+  .imenu-item.picked{border-color:var(--accent2);background:#eef6ff;box-shadow:0 0 0 1px var(--accent2);}
+  .imenu-item.done{opacity:.55;}
+  .imenu-h{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:4px;font-weight:700;color:#2b3a45;}
+  .imenu-e{font-size:15px;}
+  .imenu-dur{margin-left:auto;font-size:10.5px;color:var(--sub);background:#f1f3f5;border-radius:20px;padding:0 7px;font-weight:600;}
+  .imenu-badge{font-size:10.5px;background:var(--accent2);color:#fff;border-radius:20px;padding:0 7px;font-weight:700;}
+  .imenu-how{font-size:11.5px;color:var(--sub);line-height:1.5;}
+  .imenu-combo{margin-top:14px;background:#fdf6ec;border:1px solid #f3e2c3;border-radius:12px;padding:8px 11px;font-size:12.5px;color:#8a5a1e;line-height:1.75;}
+  .imenu-combo summary{cursor:pointer;font-weight:700;}
+  .imenu-combo-body{padding-top:6px;}
+  .imenu-combo-body p{margin:0 0 4px;}
+  @media (max-width:400px){ .imenu-grid{grid-template-columns:1fr;} }
   .istat-h{display:flex;align-items:center;gap:6px;font-size:14px;}
   .iemoji{font-size:16px;}
   .istat-sub{font-size:12px;color:var(--sub);margin:4px 0 5px;}
@@ -474,6 +494,7 @@
   </div>
 </div>
 <div id="updateBar" class="update-bar" style="display:none" onclick="location.reload()">✨ 已更新到新版本，点击刷新查看新功能</div>
+<div id="barTip" class="bartip" style="display:none"></div>
 
 <script>
 /* ===================== 数据层 ===================== */
@@ -517,6 +538,7 @@ function defaultState(){
     ieltsListened:[],
     trainCancel:{total:0, log:{}},
     planSkip:{},
+    planCollapsed:[],
     focusLog:{},
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'', goal:{weight:null, ielts:null} }
   };
@@ -544,6 +566,7 @@ function load(){
     MODULES.forEach(m=>{ if(!s.modules[m.key]) s.modules[m.key] = {records:{}}; });
     s.trainCancel = (s.trainCancel && s.trainCancel.log) ? s.trainCancel : {total:0, log:{}};
     s.planSkip = s.planSkip || {};
+    s.planCollapsed = Array.isArray(s.planCollapsed) ? s.planCollapsed : [];
     s.focusLog = s.focusLog || {};
     return s;
   }catch(e){ return defaultState(); }
@@ -848,6 +871,33 @@ const STUDY_PLAN = [
     tip: '个人学习笔记复盘'
   }
 ];
+// 每日学习内容参考答案（按序号 1-24，随学习计划展示）
+const PLAN_ANS = {
+1:'AI ⊃ ML ⊃ DL ⊃ 大模型 ⊃ 生成式AI：AI 是总称（机器模拟智能）；ML 是从数据中学习的 AI；DL 是用多层神经网络做的 ML；大模型是超大参数量的 DL 模型；生成式AI 是能产出新内容（文本/图/代码）的大模型应用。\n范式：监督学习=带标签数据教它判断（如质检良莠、风控黑白）；无监督学习=无标签自己找规律（如用户分群、异常发现）；强化学习=试错+奖励信号（如推荐、Agent 决策）。',
+2:'预训练：海量文本学通用语言，成本最高、只做一次；SFT（监督微调）：用人工标注的问答数据教它按指令/格式作答，是微调的常见手段；RLHF：人类反馈强化学习，让输出更符合人类偏好（对齐）。\n生成式AI 能：写文案/代码/翻译/总结、草图创作；不能：保证事实正确（会幻觉）、知道实时信息、做严谨推理、替你拍板决策——所以交付时要设计验证与兜底。',
+3:'需求模糊度：传统 PM 需求较明确，AI 项目"效果"难定义 → 要渐进明细+频繁验证；迭代速度：AI 靠小步快跑+实验驱动；资源成本：传统是开发人力，AI 多了数据+算力+模型成本（GPU 昂贵）。\n传统 PM 方法 3 点调整：①把"模型效果指标"纳入验收；②预算预留算力/标注费用；③里程碑绑定评估节点（而非只绑功能开发）。',
+4:'流程：原始数据 → 标注（人工/半自动）→ 清洗（去重/纠错/格式统一）→ 质检（抽检/标注一致性）→ 入库。成本大头通常是人工标注。\n合规 3 检查点：①数据来源授权（用户同意/版权）；②去标识化脱敏（不泄露个人信息）；③偏见检测（训练集均衡、输出有审核兜底）。',
+5:'选型：训练阶段要算力强（A100/H100 级），推理阶段要性价比（T4/L4，或量化轻量模型）；数据少、任务通用 → 直接调 API 最划算。\n估算公式：GPU 时长 ≈ 数据量×训练轮数×模型规模 ÷ 卡数 ÷ 利用率（约0.5-0.7）；云成本 = 实例单价×时长 + 存储 + 带宽。先最小配置跑 POC，跑通再扩容。',
+6:'准确率=答对的比例（整体质量）；召回率=该找到的找回来多少（漏报敏感，如风控）；ROUGE=生成文本与参考的相似度（摘要/对话类用）。懂含义即可，不用会算。\n对齐验收三件套：量化指标（如准确率≥85%）+ 业务样例集（badcase 数≤N）+ 人工抽检比例，写进 PRD 和验收单，双方签字再开工。',
+7:'预训练：百亿级数据+万卡算力+数月周期，只有大厂做；微调：用十万级业务数据在已有大模型上再训练，成本低、周期短（天/周级）。\n选择口诀：先 API/POC → 效果不够再微调 → 数据海量且领域独特才考虑预训练。PM 决策看的是成本/周期/数据量三者的平衡。',
+8:'轻量化：量化（FP16→INT8 模型变小变快）、蒸馏（大模型教小模型）、剪枝（删冗余参数）；容器化：Docker 打包模型+依赖，K8s 编排扩缩容。\n推理延迟影响因素：模型大小、批处理量、硬件、是否命中缓存、网络。常用优化：量化 + 请求结果缓存 + GPU 常驻预热。',
+9:'监控：性能指标（准确率/延迟/成本）、幻觉率（抽查 badcase）、用户反馈（点赞/投诉）、数据漂移（输入分布是否变化）。\n迭代：效果下降 → 先查数据/提示词变化 → 小样本回归 → 回滚或热修（切旧模型/加规则兜底）→ 复盘沉淀。\n幻觉应急流程：发现 → 记录样例 → 5 分钟内上报 → 评估影响 → 回滚/热修 → 复盘改进。',
+10:'拆解「电商智能文案生成」：需求明确（生成商品卖点文案）→ 数据准备（商品库+历史优秀文案标注）→ 选型（API 或开源模型微调）→ Prompt 工程（模板+规则+示例）→ 评估（与人工文案对比/人工抽检）→ 上线（接入上架流程）→ 监控迭代。\n负责人：业务（需求+验收）、算法（模型训练）、数据（标注质检）、开发（系统集成）、PM（统筹+里程碑+风险）。',
+11:'示例（金融/制造/教育任选 2）：①金融风控：信用评分模型 → 降坏账率；②制造质检：机器视觉检测 → 替代人工抽检、降本；③教育：学情分析 → 个性化推荐。\n写法：场景一句话 + 用什么技术 + 项目价值（可量化，如"质检人力-60%"）。',
+12:'4 段骨架：①需求诊断：客户痛点 + 现状 + 数据可得性（没数据一切白搭）；②技术选型：API/微调/自研 + 一句话理由；③ROI：投入（算力+人力）vs 收益（降本/增收，量化）；④POC：小范围试点 + 验收指标 + 决策门槛（达不到就停，不恋战）。',
+13:'提示词模板五要素：角色 + 任务 + 背景 + 输入格式/输出格式 + 示例 + 约束（错误情况怎么处理）。\n给业务的需求模板：要解决什么问题、输入是什么、期望输出什么样、错误怎么处理、衡量标准是什么。用模板把模糊需求逼成可执行需求。',
+14:'RAG = 检索增强生成：先到知识库检索相关资料，再让大模型基于资料回答 → 答案有出处、可溯源，显著降低幻觉（治本）。\n适用：文档问答、企业知识库、客服助手、政策解读；不适用：需要实时计算/创造性推理的场景。落地注意：文档解析质量 + 分块策略 + 检索召回率。',
+15:'隐私：GDPR 要求数据最小化+明确同意；中国《生成式 AI 服务管理办法》要求真实信息、可追溯、防深度伪造、备案。\n偏见风险：训练数据本身有偏差 → 输出歧视（招聘/风控领域最敏感）。对策：数据审查 + 输出审核 + 人工兜底 + 定期审计。',
+16:'合规节点（硬性关卡 Gate）：数据采集前（授权/脱敏）→ 训练前（数据审查、偏见检测）→ 上线前（内容审核、安全评估、备案）→ 上线后（监控、投诉通道、模型更新合规）。\n做法：在里程碑计划里把"合规检查"设为独立验收项，不过不进入下一阶段。',
+17:'《企业智能文档问答》一页纸：需求背景（员工找资料慢、知识散落）；技术方案（RAG：文档解析 → 向量化 → 检索 → 大模型回答，或先 API 方案）；实施计划（2 周 POC → 4 周上线）；风险（知识库不全、幻觉 → 答案带出处 + 兜底话术 + 人工审核）。',
+18:'迭代节奏 3 条：①站会：每日 15 分钟（进展/阻塞/下一步）；②演示：每 2 周给业务看可运行版本；③复盘：迭代后 30 分钟（做得好/待改进/行动项）。\nAI 项目每迭代必须带评估环节（看指标变化），需求渐进明细——先做核心路径，边做边补，不一次性锁死。',
+19:'算法团队对齐话术（用指标和数据说话，别催进度）：需求："这轮目标是准确率 80%→85%，用你建议的评估集验证"；进度："模型训练到第几版了？badcase 主要类型？"；风险："效果卡在 85%，是不是数据质量问题？要不要补标或调 prompt？"',
+20:'启动会议程 6 步：①背景与目标（业务价值+量化目标）②范围与里程碑 ③团队分工（算法/数据/开发/测试）④数据与算力就绪情况 ⑤风险与依赖（数据质量/算力预算/合规）⑥行动项与下次检查点。\n控场：时间盒管理、争论转为行动项；行动项必带：负责人 + 截止日 + 验收标准。',
+21:'不确定性来源：效果（指标不达标）、数据（质量/量不足）、需求（客户描述模糊）、外部（算力/合规变化）。\n回答 3 要点：①里程碑验证——分阶段设评估点，早暴露早调整；②预案——效果不达标有备选（换模型/调参/降级方案）；③透明沟通——及时向干系人同步不确定性，管理预期。',
+22:'PMI-ACP：敏捷通用、适合已有 PM 经验者打底，考敏捷原则/迭代/看板/Scrum；AWS AI 认证：技术向，考 AWS 的 AI 服务（Bedrock/SageMaker），适合展示 AI 落地能力。\n建议路径：先 ACP（PM 通用底盘）→ 再 AWS AI（加分项）。ACP 考点：敏捷原则、迭代、看板、Scrum；AWS 考点：Bedrock 模型选择、提示词、Agent 基础。',
+23:'4 周节奏：W1 过一遍考纲 + 刷章节题；W2 重点模块二刷 + 建错题集；W3 全真模拟 3 套 + 查漏补缺；W4 冲刺错题 + 高频考点 + 预约考试。\n每日 30 分钟、周末 2 小时即可；模拟考成绩稳定通过线以上再约考。',
+24:'复盘：核心知识点（术语/流程/工具模板）归档进个人知识库；未解疑问列清单继续跟进。\n下一步实践计划：在现有工作找 1 个 AI 小场景（如周报自动总结 → 智能会议纪要 POC），写清：目标 / 2 周 POC 范围 / 验收指标 / 所需资源。'
+};
 function planRealDate(mmdd){ const mm=mmdd.slice(0,2), dd=mmdd.slice(2); return '2026-'+mm+'-'+dd; }
 function planWeekday(mmdd){ return ['周日','周一','周二','周三','周四','周五','周六'][new Date(2026, Number(mmdd.slice(0,2))-1, Number(mmdd.slice(2))).getDay()]; }
 function planSeqDone(n){ return !!(rec('plan')[String(n)] && rec('plan')[String(n)].done); }
@@ -1220,7 +1270,11 @@ function renderHome(){
 function planDoneOnDate(ds){ return Object.keys(rec('plan')).some(k=>{ const r=rec('plan')[k]; return r && r.done && r.date===ds; }); }
 function dayDone(key,ds){
   if(key==='plan') return planDoneOnDate(ds);
-  if(key==='ielts'){ const r=rec('ielts')[ds]; return !!(r&&r.parts&&IELTS_PARTS.some(p=>r.parts[p.key]&&r.parts[p.key].done)); }
+  if(key==='ielts'){
+    const r=rec('ielts')[ds];
+    if(r && r.menu && r.menu.picks && r.menu.picks.length) return r.menu.picks.every(id=>r.menu.done && r.menu.done[id]);
+    return !!(r&&r.parts&&IELTS_PARTS.some(p=>r.parts[p.key]&&r.parts[p.key].done));
+  }
   return isDone(key,ds);
 }
 function todayChecklistHtml(){
@@ -1236,7 +1290,7 @@ function todayChecklistHtml(){
   const items=[
     {view:'plan', done:planDone, text:planText},
     {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
-    {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（听说读写）':'雅思练习（听说读写打卡）'},
+    {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（菜单打卡）':'雅思练习（菜单打卡 · 点选1-2项）'},
     {view:'reading', done:readDone, text: readDone?'已阅读打卡':'每日阅读打卡'},
     {view:'mana', done:trainDone, text: trainText}
   ];
@@ -1348,6 +1402,12 @@ function togglePlanSkip(n){
   else { if(planSeqDone(n)){ toast('已完成的项无需跳过'); return; } state.planSkip[k]=true; toast('⏭️ 第 '+n+' 项已跳过（不影响后续解锁）'); }
   save(); render();
 }
+function togglePlanCollapse(n){
+  state.planCollapsed=state.planCollapsed||[];
+  const i=state.planCollapsed.indexOf(n);
+  if(i>=0) state.planCollapsed.splice(i,1); else state.planCollapsed.push(n);
+  save(); renderModule('plan');
+}
 function planStreak(){
   let s=0;
   for(let i=1;i<=STUDY_PLAN.length;i++){ if(planSeqDone(i)) s++; else break; }
@@ -1398,6 +1458,7 @@ function renderPlan(){
         else badge=`<span class="pday-future">📅 原定 ${md}</span>`;
       } else { badge=`<span class="pday-locked">🔒 待解锁（完成第${seq-1}项后开启）</span>`; }
       const cls=on?'done':(skipped?'skip':(isCur?'today':'locked'));
+      const coll=on && state.planCollapsed.includes(seq);
       h+=`<div class="plan-day ${cls}">
         <div class="pday-head">
           <span class="pday-date">${md}</span>
@@ -1406,13 +1467,17 @@ function renderPlan(){
           <span class="pday-spacer"></span>
           ${d.weekend?'<span class="pday-weekend">周末</span>':''}
           ${badge}
+          ${on?`<button class="mtoggle line" onclick="togglePlanCollapse(${seq})">${coll?'📂 展开':'📂 收起'}</button>`:''}
         </div>
         <div class="pday-title">${d.title}</div>
+        <div class="pday-body" ${coll?'style="display:none"':''}>
         <ul class="pday-list">${d.content.map(c=>`<li>${c}</li>`).join('')}</ul>
         <div class="pday-out"><b>📤 输出成果</b> ${d.output}</div>
         <div class="pday-tip">💡 ${d.tip}</div>
+        ${PLAN_ANS[seq]?`<details class="pday-ans"><summary>📖 参考答案（做完再对）</summary><div class="pday-ans-body">${PLAN_ANS[seq]}</div></details>`:''}
         ${on?`<button class="mtoggle" onclick="togglePlanSeq(${seq})">↺ 取消完成</button>`:(skipped?`<button class="mtoggle" onclick="togglePlanSkip(${seq})">↩️ 恢复此项</button>`:(isCur?`<button class="mtoggle" onclick="togglePlanSeq(${seq})">✅ 标记完成</button><button class="mtoggle line" onclick="togglePlanSkip(${seq})">⏭️ 跳过</button>`:`<button class="mtoggle locked" disabled>🔒 待解锁</button>`))}
         ${planDayExtra(d.mmdd)}
+        </div>
       </div>`;
     });
     h+=`</div>`;
@@ -1449,59 +1514,128 @@ function toggleIeltsPart(key){ const date=today(); const p=ieltsPartMut(date,key
 function toggleIeltsSub(key,sub){ const date=today(); const p=ieltsPartMut(date,key); p.sub=p.sub||{}; p.sub[sub]=!p.sub[sub]; save(); renderModule('ielts'); }
 function setIeltsNote(key,val){ const date=today(); const p=ieltsPartMut(date,key); p.note=val; save(); }
 function ieltsPartDays(key){ const a=[]; const base=new Date(); for(let i=6;i>=0;i--){ const d=new Date(base); d.setDate(d.getDate()-i); const ds=fmt(d); const r=rec('ielts')[ds]; a.push(!!(r&&r.parts&&r.parts[key]&&r.parts[key].done)); } return a; }
+/* ---- 雅思：菜单制（每日点选 1-2 项，18 项菜单，源自《每日英语学习计划_菜单制.md》） ---- */
+const IELTS_MENU=[
+  {id:1, cat:'IELTS', emoji:'🎧', name:'听力·精听', how:'1 篇真题：盲听 1 遍 → 逐句暂停听写 → 对答案复听', dur:'20-25min', tag:'听'},
+  {id:2, cat:'IELTS', emoji:'🎧', name:'听力·泛听', how:'英文播客 / 美剧当背景音磨耳朵，不用懂全', dur:'15min', tag:'听'},
+  {id:3, cat:'IELTS', emoji:'💬', name:'口语·看课', how:'看口语教学视频，学答题框架（Part 1/2/3 怎么组织）', dur:'15-20min', tag:'说'},
+  {id:4, cat:'IELTS', emoji:'💬', name:'口语·影子跟读', how:'老师说一句 → 暂停 → 模仿一句，练发音节奏', dur:'15min', tag:'说'},
+  {id:5, cat:'IELTS', emoji:'💬', name:'口语·开口录音', how:'拿当季题库录 1 条（Part 2 讲 2 分钟），回听找问题', dur:'15-20min', tag:'说'},
+  {id:6, cat:'IELTS', emoji:'📖', name:'阅读·精读', how:'1 篇真题：查生词 + 拆 2 个长难句', dur:'20-25min', tag:'读'},
+  {id:7, cat:'IELTS', emoji:'📖', name:'阅读·泛读', how:'读 1 篇感兴趣领域的英文文章，只求大意', dur:'15min', tag:'读'},
+  {id:8, cat:'IELTS', emoji:'✍️', name:'写作·小作文', how:'写 1 篇小作文（图表题），或大作文写提纲', dur:'25-30min', tag:'写'},
+  {id:9, cat:'IELTS', emoji:'✍️', name:'写作·仿写', how:'选范文 1 段，模仿句式重写一遍', dur:'15-20min', tag:'写'},
+  {id:10, cat:'IELTS', emoji:'🔤', name:'单词', how:'背 20 个新词 + 复习昨天的（保底项）', dur:'10-15min', tag:''},
+  {id:11, cat:'RESUME', emoji:'📄', name:'简历·熟读', how:'跟读网页练 1 段简历（5-8 句），刷到流利', dur:'15min', tag:''},
+  {id:12, cat:'RESUME', emoji:'🗣️', name:'简历·复述', how:'用「背景→问题→方案→结果」框架，英文讲 1 个项目故事', dur:'15-20min', tag:''},
+  {id:13, cat:'RESUME', emoji:'🎯', name:'简历·面试问答', how:'模拟面试：walk me through a project you led…', dur:'15min', tag:''},
+  {id:14, cat:'RESUME', emoji:'🗂️', name:'简历·词汇', how:'挑 3 个简历里的词（如 orchestrate），找同义替换扩展', dur:'10-15min', tag:''},
+  {id:15, cat:'HANDBOOK', emoji:'📘', name:'手册·场景跟读', how:'选 1 个场景（站会 / 邮件 / 合规…）练 10 句', dur:'15min', tag:''},
+  {id:16, cat:'HANDBOOK', emoji:'🎭', name:'手册·场景演练', how:'挑 1 个场景，自己扮演双方把对话演出来', dur:'10-15min', tag:''},
+  {id:17, cat:'HANDBOOK', emoji:'📧', name:'手册·邮件写作', how:'用邮件句式，写一封真实的模拟邮件', dur:'15min', tag:''},
+  {id:18, cat:'HANDBOOK', emoji:'⚡', name:'手册·短语速查', how:'过一遍 20 个高频短语，造句加深记忆', dur:'10min', tag:''}
+];
+const IELTS_MENU_CATS=[
+  {key:'IELTS', label:'雅思 · 听说读写', emoji:'📚'},
+  {key:'RESUME', label:'简历 · 实用表达（投递面试用）', emoji:'📄'},
+  {key:'HANDBOOK', label:'日常手册 · 场景英语（入职沟通用）', emoji:'📘'}
+];
+function ieltsMenuToday(){ const d=today(); const m=rec('ielts'); m[d]=m[d]||{}; if(!m[d].menu) m[d].menu={picks:[],done:{},notes:{}}; return m[d].menu; }
+function ieltsMenuPick(id){
+  const t=ieltsMenuToday(); const i=t.picks.indexOf(id);
+  if(i>=0){ t.picks.splice(i,1); delete t.done[id]; save(); renderModule('ielts'); toast('已从今日任务移除 ✕'); return; }
+  if(t.picks.length>=2){ toast('菜单制原则：每天最多选 2 项（状态再差也保底 1 项）⚠️'); return; }
+  t.picks.push(id); save(); renderModule('ielts'); toast('已加入今日任务 ✅');
+}
+function ieltsMenuDone(id){ const t=ieltsMenuToday(); t.done[id]=!t.done[id]; syncIeltsDone(today()); save(); renderModule('ielts'); }
+function ieltsMenuNote(id,val){ const t=ieltsMenuToday(); t.notes[id]=val; save(); }
+function ieltsMenuWeekDone(ds){ const r=rec('ielts')[ds]; return !!(r&&r.menu&&r.menu.picks&&r.menu.picks.length&&r.menu.picks.every(id=>r.menu.done&&r.menu.done[id])); }
+function ieltsWeekCover(){
+  const cov={'听':0,'说':0,'读':0,'写':0};
+  const now=new Date(); const day=now.getDay()||7; const mon=new Date(now); mon.setDate(now.getDate()-day+1);
+  for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); const ds=fmt(d); if(ds>today()) break;
+    const r=rec('ielts')[ds]; if(!r||!r.menu||!r.menu.picks) continue;
+    r.menu.picks.forEach(id=>{ const it=IELTS_MENU.find(x=>x.id===id); if(it&&it.tag&&r.menu.done[id]) cov[it.tag]++; });
+  }
+  return cov;
+}
 function ieltsStatsHtml(){
-  const date=today();
-  const rows=IELTS_PARTS.map(p=>{
-    const rec0=getIeltsPart(date,p.key); const done=rec0.done;
-    const days=ieltsPartDays(p.key); const weekCnt=days.filter(Boolean).length;
-    const dots=days.map((on,i)=>`<div class="d ${on?'on':''} ${i===6?'today':''}"></div>`).join('');
-    const subs=p.subs?p.subs.map(s=>{ const on=rec0.sub&&rec0.sub[s.key]; return `<span class="ichip ${on?'on':''}">${on?'✓':'○'} ${escapeHtml(s.label)}</span>`; }).join(''):'';
-    return `<div class="istat ${done?'done':''}">
-      <div class="istat-h"><span class="iemoji">${p.emoji}</span><b>${p.name}</b> ${done?'<span class="mbadge">✓ 今日完成</span>':'<span class="inot">今日未完成</span>'}</div>
-      <div class="istat-sub">近 7 天完成 <b>${weekCnt}</b> 天</div>
-      <div class="dots sm">${dots}</div>
-      ${subs?`<div class="ichips">${subs}</div>`:''}
-      ${rec0.note?`<div class="inote">📝 ${escapeHtml(rec0.note)}</div>`:''}
-    </div>`;
-  }).join('');
-  return `<div class="dcard ielts-stats"><div class="ltitle">📊 雅思打卡统计（按模块）</div>${rows}
-    <p class="hint">每个模块可单独打卡；子任务勾选后即部分完成，全部完成 + 标记才算「今日完成」。</p></div>`;
+  const t=ieltsMenuToday();
+  const cov=ieltsWeekCover();
+  const weekDays=[0,1,2,3,4,5,6].map(i=>{ const d=new Date(); d.setDate(d.getDate()-i); return fmt(d); }).reverse();
+  const weekCnt=weekDays.filter(ds=>ieltsMenuWeekDone(ds)).length;
+  const tags=['听','说','读','写'].map(tg=>`<span class="ichip ${cov[tg]?'on':''}" style="margin:2px 4px 2px 0">${tg} ×${cov[tg]}</span>`).join('');
+  return `<div class="dcard ielts-stats"><div class="ltitle">📊 本周概览（菜单制）</div>
+    <div class="istat ${t.picks.length&&t.picks.every(id=>t.done[id])?'done':''}">
+      <div class="istat-h"><span class="iemoji">🍽️</span><b>今日任务</b> ${t.picks.length?`<span class="mbadge">${t.picks.filter(id=>t.done[id]).length}/${t.picks.length} 完成</span>`:'<span class="inot">还没点菜</span>'}</div>
+      <div class="istat-sub">本周打卡 <b>${weekCnt}</b> 天 · 每天 1-2 项，保底 1 项</div>
+    </div>
+    <div class="ltitle" style="margin-top:10px">🔄 本周听说读写覆盖（不偏科铁律）</div>
+    <div>${tags}</div>
+    <p class="hint">听说读写各至少碰 1 次即可；可通过组合一次练两项（如「口语录音 + 简历复述」）。</p></div>`;
 }
 function ieltsGoalHtml(){
   const g=(state.settings.goal&&state.settings.goal.ielts!=null)?Number(state.settings.goal.ielts):null;
-  const date=today();
-  const doneToday=['reading','listening','speaking','writing'].filter(k=>{ const r=rec('ielts')[date]; return r&&r.parts&&r.parts[k]&&r.parts[k].done; }).length;
+  const t=ieltsMenuToday();
+  const doneToday=t.picks.filter(id=>t.done[id]).length;
   if(g==null){
     return `<div class="dcard ielts-goal"><div class="ltitle">🎯 雅思目标</div><p class="hint">还没设定雅思目标总分。去 ⚙️ 设置 → 目标设定，填写「目标雅思总分」，这里会显示你的冲刺目标与进度。</p></div>`;
   }
   return `<div class="dcard ielts-goal">
     <div class="ltitle">🎯 雅思目标</div>
     <div class="goal-row"><div class="goal-main">目标总分 <b>${g}</b> 分</div><div class="goal-sub">建议每科尽量 ≥ ${g} 分（总分 = 四科平均分，四舍五入至 0.5）</div></div>
-    <p class="hint">今天已完成 <b>${doneToday}/4</b> 个模块打卡。每天坚持 4 项，离 ${g} 分目标更近一步 💪</p>
+    <p class="hint">今天已完成 <b>${doneToday}/${t.picks.length||1}</b> 个菜单任务。每天碰 1-2 项，离 ${g} 分目标更近一步 💪</p>
   </div>`;
 }
+function ieltsPhaseNotice(){
+  const key=String(new Date().getFullYear())+String(new Date().getMonth()+1).padStart(2,'0')+String(new Date().getDate()).padStart(2,'0');
+  if(key<'20260815'){
+    return `<div class="notice">🗓️ <b>8/15 前（输入期）</b>：口语 = 看课 + 影子跟读搭地基，不算拖沓。8/15 起（开口期）：每天必须录音至少 1 条，直接用简历里的项目故事练。</div>`;
+  }
+  return `<div class="notice">🗓️ <b>8/15 起（开口期）</b>：口语必须每天录音至少 1 条，素材用简历项目故事（背景→问题→方案→结果框架），一箭双雕：雅思口语 + 外企面试。</div>`;
+}
 function ieltsLearn(){
-  const date=today();
-  const cards=IELTS_PARTS.map(p=>{
-    const rec0=getIeltsPart(date,p.key);
-    const done=rec0.done, note=rec0.note||'';
-    const subsHtml=p.subs?`<div class="subs">${p.subs.map(s=>{ const on=rec0.sub&&rec0.sub[s.key]; return `<label class="sub"><input type="checkbox" ${on?'checked':''} onchange="toggleIeltsSub('${p.key}','${s.key}')"><span>${s.label}</span></label>`; }).join('')}</div>`:'';
-    const linksHtml=p.links.filter(l=>{ const u=l.bili?state.bili[l.bili]:l.url; return u; }).map(l=>{ const u=l.bili?state.bili[l.bili]:l.url; return `<a class="lcard" href="${escapeAttr(u)}" target="_blank" rel="noopener"><div class="lc-main">${l.label}</div></a>`; }).join('');
-    return `<div class="term ${done?'mastered':''}">
-      <div class="term-h">${p.emoji} ${p.name} ${done?'<span class="mbadge">✓ 今日完成</span>':''}</div>
-      <div class="term-b"><b>今日打卡内容</b> ${p.desc}</div>
-      ${linksHtml?`<div class="lc-wrap">${linksHtml}</div>`:''}
-      ${subsHtml}
-      <textarea class="note" placeholder="${p.noteLabel}" oninput="setIeltsNote('${p.key}',this.value)">${escapeHtml(note)}</textarea>
-      <button class="mtoggle" onclick="toggleIeltsPart('${p.key}')">${done?'↺ 取消完成':'✅ 标记今日完成'}</button>
+  const t=ieltsMenuToday();
+  const menuItemHtml=it=>{
+    const picked=t.picks.includes(it.id); const done=!!t.done[it.id];
+    return `<div class="imenu-item ${picked?'picked':''} ${done?'done':''}" onclick="ieltsMenuPick(${it.id})">
+      <div class="imenu-h"><span class="imenu-e">${it.emoji}</span><b>${it.name}</b>${picked?'<span class="imenu-badge">✓ 已选</span>':''}<span class="imenu-dur">${it.dur}</span></div>
+      <div class="imenu-how">${it.how}</div>
     </div>`;
+  };
+  const cats=IELTS_MENU_CATS.map(c=>{
+    const items=IELTS_MENU.filter(it=>it.cat===c.key).map(menuItemHtml).join('');
+    return `<div class="imenu-cat"><div class="ltitle" style="margin-top:14px">${c.emoji} ${c.label}</div><div class="imenu-grid">${items}</div></div>`;
   }).join('');
+  const todayCards=t.picks.length?t.picks.map(id=>{
+    const it=IELTS_MENU.find(x=>x.id===id); if(!it) return '';
+    const done=!!t.done[id]; const note=(t.notes&&t.notes[id])||'';
+    return `<div class="term ${done?'mastered':''}">
+      <div class="term-h">${it.emoji} ${it.name} ${done?'<span class="mbadge">✓ 完成</span>':''}<span style="margin-left:auto;font-size:11px;color:var(--sub)">${it.dur}</span></div>
+      <div class="term-b"><b>做法</b> ${it.how}</div>
+      <textarea class="note" placeholder="笔记 / 生词（可选）" oninput="ieltsMenuNote(${it.id},this.value)">${escapeHtml(note)}</textarea>
+      <button class="mtoggle" onclick="ieltsMenuDone(${it.id})">${done?'↺ 取消完成':'✅ 标记完成'}</button>
+      <button class="mtoggle line" onclick="ieltsMenuPick(${it.id})">✕ 移除</button>
+    </div>`;
+  }).join(''):'<div class="notice">🍽️ 今天还没点菜：去下面菜单选 1-2 项加入今日任务；状态再差也做 1 项（10 分钟单词也算）。</div>';
+  const combos=`<details class="imenu-combo"><summary>🧭 懒得选？抄作业（搭配参考）</summary><div class="imenu-combo-body">
+    <p>· 精力好：💬 口语·开口录音 + 🗣️ 简历·复述（一箭双雕）</p>
+    <p>· 精力一般：🎧 听力·泛听 + 📘 手册·场景跟读</p>
+    <p>· 想输出：✍️ 写作·小作文 + 📧 手册·邮件写作</p>
+    <p>· 碎片时间：🔤 单词 + 🎧 听力·泛听</p>
+    <p>· 面试临近：🎯 简历·面试问答 + 🗣️ 简历·复述</p>
+    <p>· 只想躺平：⚡ 手册·短语速查（10 分钟搞定）</p>
+  </div></details>`;
   return `<div class="learn">
-    <div class="ltitle">🎯 雅思 · 分模块打卡（每日）</div>
-    <p class="hint">点开链接去对应平台练习，完成后勾选子任务并「标记今日完成」。不会的单词 / 笔记填在框里，按日期自动保存。</p>
+    <div class="ltitle">🎯 雅思 · 菜单制学习（每天点 1-2 项）</div>
+    <p class="hint">18 个小项分 3 类：雅思听说读写 / 简历 / 日常手册。每天任选 <b>1-2 项</b>点进今日任务，完成后打勾。三条铁律：<b>不偏科</b>（本周听说读写各碰≥1次）、<b>保底</b>（状态再差做 1 项）、<b>断了不补</b>（漏一天从今天继续，不回溯不内疚）。</p>
+    ${ieltsPhaseNotice()}
     ${ieltsGoalHtml()}
     ${ieltsStatsHtml()}
-    ${cards}
+    <div class="ltitle" style="margin-top:16px">🍽️ 今日任务（已选 ${t.picks.length}/2）</div>
+    ${todayCards}
+    ${cats}
+    ${combos}
   </div>`;
 }
 async function tryFetchIdictation(){
@@ -1569,7 +1703,20 @@ function aiQuizQuestions(){
   });
 }
 function aiQuizState(){ const key=aiQuizKey(); state.aiQuiz=state.aiQuiz||{}; if(!state.aiQuiz[key]) state.aiQuiz[key]={sel:{}}; return state.aiQuiz[key]; }
-function aiQuizAnswer(qi,oi){ const st=aiQuizState(); st.sel[qi]=oi; save(); renderModule('ai'); }
+function aiQuizAnswer(qi,oi){
+  const st=aiQuizState(); st.sel[qi]=oi; save();
+  // 答错：自动把该术语从「已掌握」移除，强制重新复习
+  const q=aiQuizQuestions()[qi];
+  if(q && oi!==q.correctOpt){
+    state.aiMastered=state.aiMastered||[];
+    const i=state.aiMastered.indexOf(q.correct);
+    if(i>=0){ state.aiMastered.splice(i,1); save(); }
+    renderModule('ai');
+    toast('答错了：已把「'+q.ansTerm+'」标记为未掌握，去术语卡复习 👀');
+    return;
+  }
+  renderModule('ai');
+}
 function aiQuizScore(qs){ const st=aiQuizState(); return qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).length; }
 function aiQuizMasterThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); const right=qs.filter((q,qi)=>st.sel[qi]===q.correctOpt).map(q=>q.correct); state.aiMastered=state.aiMastered||[]; let n=0; right.forEach(i=>{ if(!state.aiMastered.includes(i)){ state.aiMastered.push(i); n++; } }); save(); renderModule('ai'); toast('已把本次答对的 '+right.length+' 个标记已掌握 👍'); }
 function aiQuizDoneThisWeek(){ const qs=aiQuizQuestions(); const st=aiQuizState(); return qs.length>0 && qs.every((q,qi)=>st.sel[qi]!==undefined); }
@@ -1597,7 +1744,7 @@ function aiQuizRender(){
     h+='<div class="quiz-result">🎯 本周得分 <b>'+score+'/'+qs.length+'</b> '+(score===qs.length?'🏆 全部正确，掌握扎实！':(score>=3?'👍 不错，继续巩固':'💡 还需加强，回头看看术语卡'))+'</div>';
     h+='<button class="mini accent" onclick="aiQuizMasterThisWeek()">✅ 把答对的标记已掌握</button>';
   }
-  h+='<p class="hint">两种题型：① 看定义选术语 ② 看术语选定义（共 '+qs.length+' 题，每周六正式测试）。</p>';
+  h+='<p class="hint">两种题型：① 看定义选术语 ② 看术语选定义（共 '+qs.length+' 题，每周六正式测试）。<b>答错会自动把该术语标记为未掌握</b>（解除「已掌握」状态）；答对的可在做完后一键批量标记。</p>';
   qs.forEach((q,qi)=>{
     const chosen=st.sel[qi]; const isTerm=q.type==='term';
     h+='<div class="quiz-q"><div class="qq-prompt"><span class="qtag">'+(q.type==='term'?'定义→术语':'术语→定义')+'</span>'+escapeHtml(q.prompt)+'</div><div class="quiz-opts">';
@@ -1942,6 +2089,20 @@ function renderMana(){
     </div>
     ${hist}`;
 }
+function showBarTip(ev,label,val){
+  ev.stopPropagation();
+  const tip=document.getElementById('barTip');
+  if(!tip) return;
+  tip.innerHTML='<b>'+label+'</b><br>'+val;
+  tip.style.display='block';
+  const r=ev.target.getBoundingClientRect();
+  tip.style.left=(r.left+r.width/2)+'px';
+  tip.style.top=(r.top)+'px';
+}
+document.addEventListener('click', e=>{
+  const tip=document.getElementById('barTip');
+  if(tip && !tip.contains(e.target)) tip.style.display='none';
+});
 function barChart(items){
   const W=320,H=180,pad=24; const ws=items.map(p=>p.w);
   const goalW=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
@@ -1951,7 +2112,7 @@ function barChart(items){
   const n=items.length; const bw=Math.min(26,(W-2*pad)/n*0.7);
   const X=i=> pad + i*((W-2*pad)/Math.max(n-1,1)) + ((W-2*pad)/Math.max(n-1,1)-bw)/2;
   const Y=w=> H-pad - (w-min)/(max-min)*(H-2*pad);
-  const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.w).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.w)).toFixed(1)}" rx="4" fill="#5cb3e6"/>`).join('');
+  const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.w).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.w)).toFixed(1)}" rx="4" fill="#5cb3e6" cursor="pointer" onclick="showBarTip(event,'${p.d}','${p.w} kg')"/>`).join('');
   const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
   const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}</text>`;
   const goalLine = goalW!=null ? `<line x1="${pad}" y1="${Y(goalW).toFixed(1)}" x2="${W-pad}" y2="${Y(goalW).toFixed(1)}" stroke="#e8590c" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W-pad}" y="${(Y(goalW)-4).toFixed(1)}" font-size="9" fill="#e8590c" text-anchor="end">目标 ${goalW}kg</text>` : '';
@@ -1963,7 +2124,7 @@ function bodyFatChart(items){
   const n=items.length; const bw=Math.min(26,(W-2*pad)/n*0.7);
   const X=i=> pad + i*((W-2*pad)/Math.max(n-1,1)) + ((W-2*pad)/Math.max(n-1,1)-bw)/2;
   const Y=v=> H-pad - (v-min)/(max-min)*(H-2*pad);
-  const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.bf).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.bf)).toFixed(1)}" rx="4" fill="#e0861e"/>`).join('');
+  const bars=items.map((p,i)=>`<rect x="${X(i).toFixed(1)}" y="${Y(p.bf).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pad-Y(p.bf)).toFixed(1)}" rx="4" fill="#e0861e" cursor="pointer" onclick="showBarTip(event,'${p.d}','体脂 ${p.bf}%')"/>`).join('');
   const labs=items.map((p,i)=> (i%Math.ceil(n/5)===0||i===n-1)?`<text x="${(X(i)+bw/2).toFixed(1)}" y="${H-6}" font-size="9" fill="#7d93a6" text-anchor="middle">${p.d.slice(5)}</text>`:'').join('');
   const vl=`<text x="4" y="${Y(max).toFixed(1)}" font-size="9" fill="#7d93a6">${max}%</text><text x="4" y="${Y(min).toFixed(1)}" font-size="9" fill="#7d93a6">${min}%</text>`;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
