@@ -248,7 +248,6 @@
   .pday-date{font-size:18px;font-weight:800;color:var(--accent);}
   .pday-wd{font-size:12px;color:var(--sub);}
   .pday-spacer{flex:1;}
-  .pday-weekend{font-size:11px;background:#fff0f6;color:#e84393;border-radius:20px;padding:1px 9px;font-weight:700;}
   .pday-check{font-size:13px;color:var(--good);font-weight:800;}
   .pday-today{font-size:11px;background:var(--accent);color:#fff;border-radius:20px;padding:1px 9px;font-weight:700;}
   .pday-title{font-weight:800;font-size:14px;margin-bottom:7px;color:#2b3a45;}
@@ -1466,7 +1465,6 @@ function renderPlan(){
           <span class="pday-wd">${planWeekday(d.mmdd)}</span>
           <span class="pday-dur">⏱️ 30分钟</span>
           <span class="pday-spacer"></span>
-          ${d.weekend?'<span class="pday-weekend">周末</span>':''}
           ${badge}
           ${on?`<button class="mtoggle line" onclick="togglePlanCollapse(${seq})">${coll?'📂 展开':'📂 收起'}</button>`:''}
         </div>
