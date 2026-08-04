@@ -390,10 +390,14 @@
     </div>
     <div class="sect">
       <h3>🔔 每日打卡提醒</h3>
-      <p class="hint">到设定时间若今日还没全打卡，首页顶部会弹出提醒横幅；若浏览器已授权通知，还会发系统通知。建议配合手机「添加到主屏」使用。</p>
+      <p class="hint">到设定时间若今日还没全打卡，首页顶部会弹出提醒横幅；点下方「开启系统通知」授权后，打开 App 若仍有未完成项会发系统通知（锁屏定时提醒需服务端，当前仅 App 打开时触发）。建议配合手机「添加到主屏」使用。</p>
       <div class="field"><label>开启提醒</label>
         <select id="setRemind"><option value="on">开启</option><option value="off">关闭</option></select></div>
       <div class="field"><label>提醒时间(小时 0–23)</label><input id="setRemindHour" type="number" min="0" max="23" placeholder="21" /></div>
+      <div class="mini-row" style="margin-top:8px">
+        <button class="mini accent" onclick="requestNotify()">🔔 开启系统通知</button>
+        <span id="notifyState" class="hint"></span>
+      </div>
     </div>
     <div class="sect">
       <h3>📚 雅思 B站 链接</h3>
@@ -1245,6 +1249,16 @@ function reminderBannerHtml(){
     <div><div class="rt">今天还有 ${pending.length} 项没完成</div><div class="rs">${_reminderPending.join('、')} · 去对应栏目补上吧</div></div>
   </div>`;
 }
+function requestNotify(){
+  if(!('Notification' in window)){ toast('当前浏览器不支持系统通知'); return; }
+  const st=document.getElementById('notifyState');
+  if(Notification.permission==='granted'){ if(st) st.textContent='已开启 ✅'; toast('系统通知已开启 ✅'); return; }
+  if(Notification.permission==='denied'){ if(st) st.textContent='被系统拒绝，请在手机设置开启'; toast('通知权限被系统拒绝，请在手机设置里开启'); return; }
+  Notification.requestPermission().then(p=>{
+    if(p==='granted'){ if(st) st.textContent='已开启 ✅'; toast('已开启系统通知 🔔'); try{ new Notification('自律打卡提醒 🔔',{body:'授权成功！未完成打卡时打开 App 会提醒你'}); }catch(e){} }
+    else { if(st) st.textContent='未授权'; toast('未授权系统通知'); }
+  });
+}
 function renderHome(){
   const now=new Date(); const wd=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   const done=MODULES.filter(m=>dayDone(m.key,today())).length;
@@ -1610,7 +1624,7 @@ const IELTS_PARTS=[
 ];
 function getIeltsPart(date,key){ const r=rec('ielts')[date]; if(!r||!r.parts||!r.parts[key]) return {done:false,note:'',sub:{}}; return r.parts[key]; }
 function ieltsPartMut(date,key){ const m=rec('ielts'); m[date]=m[date]||{}; m[date].parts=m[date].parts||{}; m[date].parts[key]=m[date].parts[key]||{done:false,note:'',sub:{}}; return m[date].parts[key]; }
-function syncIeltsDone(date){ const r=rec('ielts')[date]||{}; r.done=['reading','listening','speaking','writing'].some(k=>r.parts&&r.parts[k]&&r.parts[k].done); r.ts=Date.now(); }
+function syncIeltsDone(date){ const m=rec('ielts'); const r=m[date]||{}; if(!m[date]) m[date]=r; r.done=['reading','listening','speaking','writing'].some(k=>r.parts&&r.parts[k]&&r.parts[k].done); r.ts=Date.now(); }
 function toggleIeltsPart(key){ const date=today(); const p=ieltsPartMut(date,key); p.done=!p.done; syncIeltsDone(date); const nm=(IELTS_PARTS.find(x=>x.key===key)||{}).name||key; save(); renderModule('ielts'); toast(p.done?nm+' 已标记完成 ✅':nm+' 已取消'); }
 function toggleIeltsSub(key,sub){ const date=today(); const p=ieltsPartMut(date,key); p.sub=p.sub||{}; p.sub[sub]=!p.sub[sub]; save(); renderModule('ielts'); }
 function setIeltsNote(key,val){ const date=today(); const p=ieltsPartMut(date,key); p.note=val; save(); }
@@ -1951,7 +1965,7 @@ function renderReading(){
       <div class="stats">
         <div class="stat"><b>${streak('reading')}</b><span>连续天数</span></div>
         <div class="stat"><b>${total('reading')}</b><span>累计打卡</span></div>
-        <div class="stat"><b>${done?(dur+'′'):'—'}</b><span>今日</span></div>
+        <div class="stat"><b>${done?(dur?dur+'′':'已读'):'—'}</b><span>今日</span></div>
       </div>
       <div class="dots">${dots}</div>
       <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
@@ -1967,6 +1981,7 @@ function renderReading(){
         <input id="readingMin" type="number" placeholder="阅读时长(分钟)" value="${dur?dur:''}"/>
         <button class="mini accent" onclick="saveReading()">${done?'更新':'完成打卡'}</button>
       </div>
+      <input id="readingNote" class="full" placeholder="读了什么 / 一句话感想（可选）" value="${t.note?escapeAttr(t.note):''}" style="margin-top:8px"/>
       <button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('reading')" style="margin-top:10px">${done?'✏️ 取消今日完成':'✅ 标记今日完成'}</button>
       <p class="hint">读完填写时长并打卡，连续天数会自动累计 💪</p>
     </div>
@@ -1985,8 +2000,10 @@ function readingHistoryHtml(){
 }
 function saveReading(){
   const v=document.getElementById('readingMin').value.trim();
+  const note=(document.getElementById('readingNote')?document.getElementById('readingNote').value:'').trim();
+  if(v && (Number(v)<1 || Number(v)>1440)){ toast('阅读时长请填 1–1440 分钟'); return; }
   const t=rec('reading')[today()]||{done:false,note:''};
-  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now();
+  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now(); t.note=note;
   rec('reading')[today()]=t; // 修复：新记录必须写回 state，否则 save() 不持久化（首次打卡时长丢失）
   save(); renderReading(); toast('已记录阅读时长 📖');
 }
