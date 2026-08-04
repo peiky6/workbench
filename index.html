@@ -1986,7 +1986,9 @@ function readingHistoryHtml(){
 function saveReading(){
   const v=document.getElementById('readingMin').value.trim();
   const t=rec('reading')[today()]||{done:false,note:''};
-  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now(); save(); renderReading(); toast('已记录阅读时长 📖');
+  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now();
+  rec('reading')[today()]=t; // 修复：新记录必须写回 state，否则 save() 不持久化（首次打卡时长丢失）
+  save(); renderReading(); toast('已记录阅读时长 📖');
 }
 function openBookEditor(){
   const books=state.readingBooks;
