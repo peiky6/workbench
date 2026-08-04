@@ -390,14 +390,10 @@
     </div>
     <div class="sect">
       <h3>🔔 每日打卡提醒</h3>
-      <p class="hint">到设定时间若今日还没全打卡，首页顶部会弹出提醒横幅；点下方「开启系统通知」授权后，打开 App 若仍有未完成项会发系统通知（锁屏定时提醒需服务端，当前仅 App 打开时触发）。建议配合手机「添加到主屏」使用。</p>
+      <p class="hint">到设定时间若今日还没全打卡，打开本应用时首页顶部会弹出提醒横幅（任何浏览器、任何打开方式都能用）。</p>
       <div class="field"><label>开启提醒</label>
         <select id="setRemind"><option value="on">开启</option><option value="off">关闭</option></select></div>
       <div class="field"><label>提醒时间(小时 0–23)</label><input id="setRemindHour" type="number" min="0" max="23" placeholder="21" /></div>
-      <div class="mini-row" style="margin-top:8px">
-        <button class="mini accent" onclick="requestNotify()">🔔 开启系统通知</button>
-        <span id="notifyState" class="hint"></span>
-      </div>
     </div>
     <div class="sect">
       <h3>📚 雅思 B站 链接</h3>
@@ -1249,16 +1245,6 @@ function reminderBannerHtml(){
     <div><div class="rt">今天还有 ${pending.length} 项没完成</div><div class="rs">${_reminderPending.join('、')} · 去对应栏目补上吧</div></div>
   </div>`;
 }
-function requestNotify(){
-  if(!('Notification' in window)){ toast('当前浏览器不支持系统通知'); return; }
-  const st=document.getElementById('notifyState');
-  if(Notification.permission==='granted'){ if(st) st.textContent='已开启 ✅'; toast('系统通知已开启 ✅'); return; }
-  if(Notification.permission==='denied'){ if(st) st.textContent='被系统拒绝，请在手机设置开启'; toast('通知权限被系统拒绝，请在手机设置里开启'); return; }
-  Notification.requestPermission().then(p=>{
-    if(p==='granted'){ if(st) st.textContent='已开启 ✅'; toast('已开启系统通知 🔔'); try{ new Notification('自律打卡提醒 🔔',{body:'授权成功！未完成打卡时打开 App 会提醒你'}); }catch(e){} }
-    else { if(st) st.textContent='未授权'; toast('未授权系统通知'); }
-  });
-}
 function renderHome(){
   const now=new Date(); const wd=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   const done=MODULES.filter(m=>dayDone(m.key,today())).length;
@@ -1304,9 +1290,6 @@ function renderHome(){
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
-  if(_reminderPending.length && 'Notification' in window && Notification.permission==='granted' && state.settings._lastNotify!==today()){
-    try{ new Notification('自律打卡提醒 🔔',{body:'今天还有：'+_reminderPending.join('、')}); state.settings._lastNotify=today(); save(); }catch(e){}
-  }
 }
 
 function planDoneOnDate(ds){ return Object.keys(rec('plan')).some(k=>{ const r=rec('plan')[k]; return r && r.done && r.date===ds; }); }
@@ -2544,7 +2527,6 @@ function closeSettings(){
   s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
   s.reminderEnabled = document.getElementById('setRemind').value==='on';
   s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
-  if(s.reminderEnabled && 'Notification' in window && Notification.permission==='default'){ try{ Notification.requestPermission(); }catch(e){} }
   save(); render(); document.getElementById('settingsPanel').classList.remove('show');
 }
 
