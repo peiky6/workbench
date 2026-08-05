@@ -1061,8 +1061,14 @@ const EXERCISES = [
   {n:'跑步',met:7},{n:'慢跑',met:8},{n:'快走',met:3.5},{n:'散步',met:2.5},{n:'游泳',met:6},
   {n:'骑车',met:6},{n:'跳绳',met:10},{n:'力量训练',met:5},{n:'瑜伽',met:2.5},{n:'普拉提',met:3},
   {n:'爬楼',met:8},{n:'HIIT',met:8},{n:'羽毛球',met:7},{n:'篮球',met:6.5},{n:'跳舞',met:5},
-  {n:'椭圆机',met:5},{n:'太极',met:3}
+  {n:'椭圆机',met:5},{n:'太极',met:3},
+  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3}
 ];
+// 乐刻团课（可临时替代原计划）
+const GROUP_CLASSES = [
+  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3}
+];
+const GROUP_CLASS_MIN = 50; // 乐刻团课单节默认时长（分钟）
 
 // AI 知识术语卡（来源取自大厂知识库）
 // 术语库 v2（2026-07-29）：面向 AI 项目经理，4 大技术层级共 69 词
@@ -2102,7 +2108,9 @@ function trainPlanHtml(){
   return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 暂定均为下班后训练</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
     <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
     <div class="mrow" style="color:var(--warn)"><span>🚫 训练取消统计</span><span>今日 ${todayCancel} 次 · 累计 ${totalCancel} 次</span></div>
-    <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button></div>`;
+    <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button>
+    <div class="mrow" style="margin-top:10px"><span>🏃 改上乐刻团课？（点一下记到今日运动，与原计划无关）</span></div>
+    <div class="chips">${GROUP_CLASSES.map(c=>`<button class="chip" onclick="addTrainItem('${escapeAttr(c.n)}',${c.met},${GROUP_CLASS_MIN})">${escapeHtml(c.n)} ·${GROUP_CLASS_MIN}′</button>`).join('')}</div></div>`;
 }
 function cancelTrainItem(name){
   state.trainCancel = state.trainCancel||{total:0, log:{}};
@@ -2383,7 +2391,7 @@ function previewEx(){
   const box=document.getElementById('exPrev'); if(!box) return;
   const mt=matchExercise(v);
   if(mt && mt.ex){ box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>（按体重${effectiveWeight()}kg估算）`; box.className='prev ok'; }
-  else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练'; box.className='prev warn'; }
+  else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练/核心雕塑/燃脂搏击'; box.className='prev warn'; }
   else { box.innerHTML=''; }
 }
 function addExTyped(){
