@@ -2158,7 +2158,7 @@ function renderMana(){
       ${meal==='lunch'?`<div class="chips" style="margin:6px 0 2px">${['轻食套餐','烤猪颈肉','带骨猪扒','烤猪扒','烤蔬菜','鸡胸沙拉','牛肉沙拉','藜麦碗'].map(n=>{const f=FOODS.find(x=>x.n===n);return f?`<button class="chip" onclick="addFood('lunch','${escapeAttr(n)}',${f.k})">${escapeHtml(n)}</button>`:'';}).join('')}</div>`:''}
       ${meal==='lunch'?`<div style="margin:8px 0 2px;padding:8px;border:1px dashed var(--line);border-radius:10px">
         <div style="font-size:13px;margin-bottom:4px">✏️ 自由写轻食（按你写的份量估算，记录<b>上限</b>热量）</div>
-        <textarea id="lightMealText" rows="2" placeholder="如：烤猪颈肉3片 带骨猪扒 烤蔬菜 烤猪扒3条" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);padding:6px;font:inherit;resize:vertical"></textarea>
+        <textarea id="lightMealText" rows="2" placeholder="如：烤猪颈肉3片 带骨猪扒 烤蔬菜 烤猪扒3条" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);padding:6px;font-family:inherit;font-size:13px;line-height:1.5;resize:vertical"></textarea>
         <div class="mini-row" style="margin-top:6px">
           <button class="mini accent" onclick="estimateLightMeal()">估算热量</button>
           <button class="mini" onclick="addLightMeal()">📥 按上限记录</button>
