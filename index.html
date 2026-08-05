@@ -2156,6 +2156,15 @@ function renderMana(){
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个" oninput="previewFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
       ${meal==='lunch'?`<div class="chips" style="margin:6px 0 2px">${['轻食套餐','烤猪颈肉','带骨猪扒','烤猪扒','烤蔬菜','鸡胸沙拉','牛肉沙拉','藜麦碗'].map(n=>{const f=FOODS.find(x=>x.n===n);return f?`<button class="chip" onclick="addFood('lunch','${escapeAttr(n)}',${f.k})">${escapeHtml(n)}</button>`:'';}).join('')}</div>`:''}
+      ${meal==='lunch'?`<div style="margin:8px 0 2px;padding:8px;border:1px dashed var(--line);border-radius:10px">
+        <div style="font-size:13px;margin-bottom:4px">✏️ 自由写轻食（按你写的份量估算，记录<b>上限</b>热量）</div>
+        <textarea id="lightMealText" rows="2" placeholder="如：烤猪颈肉3片 带骨猪扒 烤蔬菜 烤猪扒3条" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);padding:6px;font:inherit;resize:vertical"></textarea>
+        <div class="mini-row" style="margin-top:6px">
+          <button class="mini accent" onclick="estimateLightMeal()">估算热量</button>
+          <button class="mini" onclick="addLightMeal()">📥 按上限记录</button>
+        </div>
+        <div id="lightPrev" class="prev"></div>
+      </div>`:''}
       <div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
@@ -2409,7 +2418,7 @@ function matchFood(text){
   const matches=FOODS.filter(f=> text.includes(f.n)).sort((a,b)=>b.n.length-a.n.length);
   const food=matches[0];
   if(!food){ const num=text.match(/(\d+(?:\.\d+)?)/); if(num) return {food:null,kcal:Number(num[1]),custom:true,label:'自定义'+Number(num[1])+'kcal'}; return null; }
-  let qty=1; const num=text.match(/(\d+(?:\.\d+)?)/); if(num) qty=Number(num[1]);
+  let qty=parseQty(text);
   const kcal=Math.round(food.k*qty);
   return {food,qty,kcal,label:food.n};
 }
@@ -2438,6 +2447,61 @@ function pickFood(meal,val){
   const f=FOODS.find(x=>x.n===val);
   if(!f) return;
   const t=manaToday(); t.meals[meal].push({n:f.n,k:f.k}); t.done=true; t.ts=Date.now(); save(); renderMana(); toast('已添加 '+f.n+' 🍽️');
+}
+
+/* ---- 中文/阿拉伯数量解析（支持：三片/两片/半份/十五/二十） ---- */
+function parseQty(str){
+  let m=str.match(/(\d+(?:\.\d+)?)/); if(m) return Number(m[1]);
+  const map={'零':0,'一':1,'两':2,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'半':0.5};
+  const cn=str.match(/([零一二两三四五六七八九十半]+)/);
+  if(!cn) return 1;
+  const s=cn[1];
+  if(s==='半') return 0.5;
+  if(map[s]!==undefined) return map[s];
+  if(s.includes('十')){
+    const a=s.split('十')[0], b=s.split('十')[1]||'';
+    const t=(a===''?10:((map[a]||1)*10));
+    const o=b?((map[b]||0)):0;
+    return t+o;
+  }
+  return 1;
+}
+
+/* ---- 自由写轻食：按整段描述估算热量，记录上限 ---- */
+let _lightEst=null;
+function estimateLightMeal(){
+  const el=document.getElementById('lightMealText'); if(!el) return;
+  const parts=(el.value||'').replace(/[+＋，,;；、\n\r]+/g,' ').split(/\s+/).map(s=>s.trim()).filter(Boolean);
+  const items=[], unmatched=[];
+  parts.forEach(p=>{
+    const mt=matchFood(p);
+    if(mt && mt.food){ items.push({raw:p, name:mt.food.n, qty:mt.qty, kcal:mt.kcal}); }
+    else if(mt && mt.custom){ items.push({raw:p, name:mt.label, qty:1, kcal:mt.kcal, custom:true}); }
+    else { unmatched.push({raw:p}); }
+  });
+  _lightEst={items, unmatched};
+  renderLightPreview();
+}
+function renderLightPreview(){
+  const box=document.getElementById('lightPrev'); if(!box) return;
+  if(!_lightEst){ box.innerHTML=''; return; }
+  let html='';
+  if(_lightEst.items.length){
+    html+=_lightEst.items.map(it=>`<div class="lmrow">✅ ${escapeHtml(it.name)} ×${it.qty} · <b>${it.kcal}</b> kcal</div>`).join('');
+  }
+  if(_lightEst.unmatched.length){
+    html+='<div style="margin-top:4px;color:var(--warn)">⚠️ 未识别（可填热量，留空则不计入）：</div>';
+    html+=_lightEst.unmatched.map((u,i)=>`<div class="lmrow"><input id="um_${i}" type="number" placeholder="kcal" style="width:70px"/> <span>${escapeHtml(u.raw)}</span></div>`).join('');
+  }
+  if(!_lightEst.items.length && !_lightEst.unmatched.length){ box.innerHTML='<span class="hint">没解析到内容，换种写法试试～</span>'; return; }
+  box.innerHTML=html;
+}
+function addLightMeal(){
+  if(!_lightEst){ return toast('请先点「估算热量」'); }
+  const t=manaToday(); let total=0;
+  _lightEst.items.forEach(it=>{ t.meals.lunch.push({n:it.name,k:it.kcal}); total+=it.kcal; });
+  _lightEst.unmatched.forEach((u,i)=>{ const v=document.getElementById('um_'+i); const kc=v?Number(v.value)||0:0; if(kc>0){ t.meals.lunch.push({n:u.raw+'('+kc+'kcal)',k:kc}); total+=kc; } });
+  t.done=true; t.ts=Date.now(); save(); renderMana(); toast('已按上限记录轻食 ≈'+total+' kcal 🥗');
 }
 
 /* ---- 标记完成 ---- */
