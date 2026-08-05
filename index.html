@@ -1055,6 +1055,8 @@ const FOODS = [
   {n:'素菜麻辣烫',k:350,u:'1份'},{n:'麻辣烫',k:400,u:'1份'},{n:'鸡肉',k:250,u:'1份'},
   {n:'美式',k:15,u:'1杯'},{n:'拿铁',k:200,u:'1杯'},{n:'澳白',k:130,u:'1杯'},{n:'果味美式',k:100,u:'1杯'},{n:'卡布奇诺',k:120,u:'1杯'},{n:'燕麦拿铁',k:180,u:'1杯'},{n:'生椰拿铁',k:170,u:'1杯'},{n:'焦糖玛奇朵',k:240,u:'1杯'},{n:'摩卡',k:280,u:'1杯'}
   ,{n:'腐乳饼',k:180,u:'1个'},{n:'鲜花饼',k:220,u:'1个'},{n:'蛋黄酥',k:200,u:'1个'},{n:'绿豆糕',k:150,u:'1块'},{n:'麻薯',k:120,u:'1个'},{n:'沙琪玛',k:230,u:'1块'},{n:'锅巴',k:120,u:'1小包'},{n:'薯片',k:150,u:'1小包'},{n:'奥利奥',k:90,u:'2块'},{n:'每日坚果',k:180,u:'1袋'},{n:'瓜子',k:120,u:'1把'},{n:'芒果干',k:100,u:'1包'},{n:'葡萄干',k:120,u:'1把'},{n:'辣条',k:150,u:'1包'},{n:'果冻',k:60,u:'1个'},{n:'棉花糖',k:80,u:'1个'},{n:'华夫饼',k:200,u:'1个'},{n:'蛋挞',k:200,u:'1个'},{n:'泡芙',k:150,u:'1个'}
+  ,{n:'烤猪颈肉',k:90,u:'1片≈30g'},{n:'带骨猪扒',k:350,u:'1块'},{n:'烤猪扒',k:120,u:'1条'},{n:'烤蔬菜',k:80,u:'1份'},
+  {n:'轻食套餐',k:1030,u:'1份=烤猪颈肉3片+带骨猪扒+烤蔬菜+烤猪扒3条'},{n:'沙拉碗',k:380,u:'1份(基底+鸡胸+酱)'},{n:'鸡胸沙拉',k:320,u:'1份'},{n:'牛肉沙拉',k:420,u:'1份'},{n:'藜麦碗',k:450,u:'1份'},{n:'能量碗',k:500,u:'1份(碳水+蛋白+蔬菜)'},{n:'全麦贝果',k:250,u:'1个'},{n:'希腊酸奶',k:100,u:'100g'}
 ];
 // 运动 MET 值（代谢当量）
 const EXERCISES = [
@@ -2153,6 +2155,7 @@ function renderMana(){
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个" oninput="previewFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
+      ${meal==='lunch'?`<div class="chips" style="margin:6px 0 2px">${['轻食套餐','烤猪颈肉','带骨猪扒','烤猪扒','烤蔬菜','鸡胸沙拉','牛肉沙拉','藜麦碗'].map(n=>{const f=FOODS.find(x=>x.n===n);return f?`<button class="chip" onclick="addFood('lunch','${escapeAttr(n)}',${f.k})">${escapeHtml(n)}</button>`:'';}).join('')}</div>`:''}
       <div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
