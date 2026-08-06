@@ -173,6 +173,10 @@
   .prev{font-size:13px;margin:2px 2px 6px;color:var(--sub);min-height:18px;line-height:1.5;}
   .prev.ok{color:var(--good);font-weight:700;}
   .prev.warn{color:var(--warn);}
+  .sug{display:flex;flex-direction:column;gap:4px;margin:4px 0 6px;}
+  .sug button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;font-size:13px;cursor:pointer;color:var(--ink);}
+  .sug button:hover{border-color:var(--accent);background:#f3f9fe;}
+  .sug .k{font-size:12px;color:var(--sub);font-weight:700;white-space:nowrap;}
   .inline input{border:1.5px solid var(--line);border-radius:12px;padding:10px;font-size:14px;outline:none;flex:1;min-width:0;}
   .inline input:focus{border-color:var(--accent);}
   .foodpick{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px;font-size:14px;outline:none;background:#fff;margin-bottom:8px;color:var(--ink);}
@@ -2592,9 +2596,8 @@ function renderMana(){
     const arr=t.meals[meal];
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
-      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个" oninput="previewFood('${meal}')" />
+      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个（输入任意字联想食物）" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
-      ${meal==='lunch'?`<div class="chips" style="margin:6px 0 2px">${['轻食套餐','烤猪颈肉','带骨猪扒','烤猪扒','烤蔬菜','鸡胸沙拉','牛肉沙拉','藜麦碗'].map(n=>{const f=FOODS.find(x=>x.n===n);return f?`<button class="chip" onclick="addFood('lunch','${escapeAttr(n)}',${f.k})">${escapeHtml(n)}</button>`:'';}).join('')}</div>`:''}
       ${meal==='lunch'?`<div style="margin:8px 0 2px;padding:8px;border:1px dashed var(--line);border-radius:10px">
         <div style="font-size:13px;margin-bottom:4px">✏️ 自由写轻食（按你写的份量估算，记录<b>上限</b>热量）</div>
         <textarea id="lightMealText" rows="2" placeholder="如：烤猪颈肉3片 带骨猪扒 烤蔬菜 烤猪扒3条" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);padding:6px;font-family:inherit;font-size:11px;line-height:2;resize:vertical"></textarea>
@@ -2604,8 +2607,7 @@ function renderMana(){
         </div>
         <div id="lightPrev" class="prev"></div>
       </div>`:''}
-      ${meal==='dinner'?`<div class="chips" style="margin:6px 0 2px">${['关东煮','关东煮萝卜','关东煮豆腐串','臭豆腐','关东煮福袋','关东煮蛋','关东煮鱼丸','关东煮竹轮','关东煮魔芋结','关东煮海带结'].map(n=>{const f=FOODS.find(x=>x.n===n);return f?`<button class="chip" onclick="addFood('dinner','${escapeAttr(n)}',${f.k})">${escapeHtml(n)}</button>`:'';}).join('')}</div>`:''}
-      <div id="foodPrev_${meal}" class="prev"></div></div>`;
+      <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
   const out=Math.round(bmr())+exTotal;
@@ -2870,6 +2872,22 @@ function previewFood(meal){
   else if(mt && mt.custom){ box.innerHTML=`🔥 自定义热量 <b>${mt.kcal} kcal</b>`; box.className='prev ok'; }
   else if(v.trim()){ box.innerHTML='⚠️ 未识别食物，试试：米饭/鸡蛋/鸡胸肉… 或直接填数字当热量'; box.className='prev warn'; }
   else { box.innerHTML=''; }
+}
+/* ---- 输入联想：输入任意字（含1个字）即列出匹配食物+热量 ---- */
+function suggestFood(meal){
+  const inp=document.getElementById('food_'+meal); const v=inp?inp.value.trim():'';
+  const box=document.getElementById('foodSug_'+meal); if(!box) return;
+  previewFood(meal);
+  if(!v){ box.innerHTML=''; return; }
+  const q=v.toLowerCase();
+  const list=FOODS.filter(f=>f.n.toLowerCase().includes(q)).slice(0,12);
+  if(!list.length){ box.innerHTML=''; return; }
+  box.innerHTML=list.map(f=>`<button onclick="fillFood('${meal}','${escapeAttr(f.n)}')">${escapeHtml(f.n)}<span class="k">${f.k} kcal · ${escapeHtml(f.u||'')}</span></button>`).join('');
+}
+function fillFood(meal,name){
+  const inp=document.getElementById('food_'+meal); if(inp){ inp.value=name; inp.focus(); }
+  const box=document.getElementById('foodSug_'+meal); if(box) box.innerHTML='';
+  previewFood(meal);
 }
 function addFoodTyped(meal){
   const inp=document.getElementById('food_'+meal); const v=inp.value;
