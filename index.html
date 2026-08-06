@@ -2598,15 +2598,6 @@ function renderMana(){
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个（输入任意字联想食物）" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
-      ${meal==='lunch'?`<div style="margin:8px 0 2px;padding:8px;border:1px dashed var(--line);border-radius:10px">
-        <div style="font-size:13px;margin-bottom:4px">✏️ 自由写轻食（按你写的份量估算，记录<b>上限</b>热量）</div>
-        <textarea id="lightMealText" rows="2" placeholder="如：烤猪颈肉3片 带骨猪扒 烤蔬菜 烤猪扒3条" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);padding:6px;font-family:inherit;font-size:11px;line-height:2;resize:vertical"></textarea>
-        <div class="mini-row" style="margin-top:6px">
-          <button class="mini accent" onclick="estimateLightMeal()">估算热量</button>
-          <button class="mini" onclick="addLightMeal()">📥 按上限记录</button>
-        </div>
-        <div id="lightPrev" class="prev"></div>
-      </div>`:''}
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
