@@ -2596,7 +2596,7 @@ function renderMana(){
     const arr=t.meals[meal];
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
-      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个（输入任意字联想食物）" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" />
+      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个（输入任意字联想食物）" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用计划</button>`}</div>
       ${meal==='lunch'?`<div style="margin:8px 0 2px;padding:8px;border:1px dashed var(--line);border-radius:10px">
         <div style="font-size:13px;margin-bottom:4px">✏️ 自由写轻食（按你写的份量估算，记录<b>上限</b>热量）</div>
