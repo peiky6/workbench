@@ -1740,10 +1740,11 @@ function dayDone(key,ds){
 }
 function todayChecklistHtml(){
   const td=today();
-  const cur=planCurrentSeq(); const planAll=cur===0;
+  const tmmdd=td.slice(5).replace('-',''); // 今天对应 mmdd，如 '0806'
+  const tpIdx=STUDY_PLAN.findIndex(d=>d.mmdd===tmmdd);
   let planDone, planText;
-  if(planAll){ planDone=true; planText='8月 AI 转型计划已全部完成 🎉'; }
-  else { const d=STUDY_PLAN[cur-1]; planDone=planSeqDone(cur); planText='完成学习计划第 '+cur+' 项：'+d.title+'（约30分钟）'; }
+  if(tpIdx<0){ planDone=true; planText='今日无排定的学习计划，放松一下 🌿'; }
+  else { const seq=tpIdx+1; const d=STUDY_PLAN[tpIdx]; planDone=planSeqDone(seq); const md=Number(d.mmdd.slice(0,2))+'.'+Number(d.mmdd.slice(2)); planText=(planDone?'已完成今日学习计划 ':'完成今日学习计划 ')+'（'+md+'）：'+d.title+'（约30分钟）'; }
   const m=rec('mana')[td]; const weightDone=!!(m&&m.weight!=null);
   const ieltsDone=dayDone('ielts',td);
   const readDone=isDone('reading',td);
@@ -1996,7 +1997,7 @@ function renderPlan(){
       const coll=on && state.planCollapsed.includes(seq);
       h+=`<div class="plan-day ${cls}">
         <div class="pday-head">
-          <span class="pday-date">${md}</span>
+          <span class="pday-date">${md}</span>${td===real?'<span style="background:#e6f4ff;color:#1677ff;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-left:6px">📍今日</span>':''}
           <span class="pday-wd">${planWeekday(d.mmdd)}</span>
           <span class="pday-dur">⏱️ 30分钟</span>
           <span class="pday-spacer"></span>
