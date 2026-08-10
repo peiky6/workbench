@@ -553,7 +553,7 @@ function defaultState(){
       {name:'纳瓦尔宝典', cover:'', url:wereadUrl('纳瓦尔宝典')}
     ],
     modules: Object.fromEntries(MODULES.map(m=>[m.key,{records:{}}])),
-    aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{},
+    aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{}, aiDaily:{},
     ieltsListened:[],
     trainCancel:{total:0, log:{}},
     planSkip:{},
@@ -575,6 +575,7 @@ function load(){
     s.user = s.user || d.user;
     s.aiMastered = s.aiMastered || [];
     s.aiMasteredTs = s.aiMasteredTs || {}; s.aiMasteredDel = s.aiMasteredDel || {};
+    s.aiDaily = s.aiDaily || {};
     if((s.aiLibVersion||0)!==2){ s.aiMastered = []; s.aiMasteredTs={}; s.aiMasteredDel={}; s.aiLibVersion = 2; } // 术语库 v2（69 词/AI PM）整体替换，旧序号已失效，重置掌握进度
     s.ieltsListened = Array.isArray(s.ieltsListened) ? s.ieltsListened : [];
     s.profile = Object.assign(d.profile, s.profile||{});
@@ -2234,6 +2235,21 @@ function aiMarkMastered(idx, mastered){
   else { if(i>=0) state.aiMastered.splice(i,1); state.aiMasteredDel[idx]=Date.now(); }
 }
 function markTerm(term){ const was=isMastered(term); aiMarkMastered(term, !was); save(); render(); toast(!was?'已记为掌握 👍':'已取消掌握'); }
+// 今日术语卡：每天0点按日期种子从未掌握里分配5张作为当日打卡任务，当天固定（打卡后不实时跳动）
+function aiTodayPicks(){
+  const day=today();
+  state.aiDaily=state.aiDaily||{};
+  if(state.aiDaily[day] && state.aiDaily[day].length) return state.aiDaily[day];
+  const lib=AI_TERMS;
+  const allIdx=lib.map((t,i)=>i);
+  const seed=Number(day.replace(/-/g,''));
+  const mastered=new Set(state.aiMastered||[]);
+  const unmastered=seededShuffle(allIdx.filter(i=>!mastered.has(i)), seed);
+  const fill=seededShuffle(allIdx, seed+777); // 未掌握不足5时，含已掌握补位确保有5张
+  const picks=[...unmastered, ...fill].slice(0,5);
+  state.aiDaily[day]=picks; save();
+  return picks;
+}
 /* ---- AI 每周六测试 ---- */
 function aiQuizKey(){ const d=new Date(); const onejan=new Date(d.getFullYear(),0,1); const wk=Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7); return d.getFullYear()+'-W'+wk; }
 function aiQuizQuestions(){
@@ -2332,18 +2348,13 @@ function aiLayerProgressHtml(){
 }
 function aiLearn(){
   const lib=AI_TERMS;
-  const seed=Number(today().replace(/-/g,'')); // YYYYMMDD 作为种子
-  const mastered=new Set(state.aiMastered||[]);
-  const allIdx=lib.map((t,i)=>i);
   let picksIdx;
   if(aiOnlyUnmastered){
-    // 含已掌握：按原种子顺序纯轮换（用于复习全部/已掌握）
-    picksIdx=seededShuffle(allIdx, seed);
+    // 含已掌握：复习模式，按原种子顺序实时轮换（含已掌握）
+    picksIdx=seededShuffle(lib.map((t,i)=>i), Number(today().replace(/-/g,'')));
   } else {
-    // 默认：未掌握优先，已掌握沉底补位 → 标记掌握后自动轮换成下一批未掌握的
-    const unmastered=seededShuffle(allIdx.filter(i=>!mastered.has(i)), seed);
-    const ms=seededShuffle(allIdx.filter(i=>mastered.has(i)), seed+777);
-    picksIdx=[...unmastered, ...ms];
+    // 默认：今日批次（每天0点从未掌握里分配5张，当天固定，打卡不变动）
+    picksIdx=aiTodayPicks();
   }
   const picks=picksIdx.slice(0,5).map(idx=>({t:lib[idx], idx}));
   const mc=picks.filter(p=>isMastered(p.idx)).length; const totalMastered=(state.aiMastered||[]).length;
@@ -2376,7 +2387,7 @@ function aiLearn(){
         <button class="mtoggle" onclick="markTerm(${p.idx})">${m?'↺ 取消掌握':'✅ 标记已掌握'}</button>
       </div>`; }).join('')+
     `<div class="ailink"><button class="btn ghost w100" onclick="setView('plan')">🗓️ 配套：8月 AI 转型学习计划（每日打卡）</button></div>`+
-    `<p class="hint">📅 每天 5 张：默认优先展示"未掌握"术语，标记掌握后会自动轮换成下一批未掌握的（循序渐进覆盖「基础概念→训练→部署→应用」4 大层级）；点「🔄 仅未掌握」可切换为"含已掌握"复习全部。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>` + aiQuizRender();
+    `<p class="hint">📅 每日 5 张（每天 0 点自动分配一批"未掌握"术语作当日打卡任务，当天固定不跳动；打卡标记掌握后保持显示带✓，次日 0 点再轮换下一批）；点「🔄 仅未掌握 / 🗂 含已掌握」可切换为复习全部。词库依据你的《AI 核心术语清单（项目经理版）》整理，共 ${total} 词。</p></div>` + aiQuizRender();
 }
 
 /* ---- 每日阅读 ---- */
@@ -3105,6 +3116,7 @@ function needEncrypt(){ return state.settings.autoEncrypt && state.settings.encP
 async function encodeState(){
   const clone=JSON.parse(JSON.stringify(state));
   delete clone.settings;   // 不同步设备私有配置(Token/密钥)，避免把密钥上传到云端泄露
+  delete clone.aiDaily;    // 每日术语卡快照为本地每日生成，不跨端同步（避免覆盖当天打卡批次）
   const json=JSON.stringify(clone,null,2);
   if(needEncrypt()){ try{ return await encryptText(json,state.settings.encPass); }catch(e){ throw new Error('加密失败：'+e.message); } }
   return json;
