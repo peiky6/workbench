@@ -2468,7 +2468,7 @@ function saveBookEditor(){
 function closeSheet(){ document.getElementById('sheetMask').classList.remove('show'); }
 
 /* ---- 体重管理（合并运动+体重+饮食） ---- */
-function manaToday(){ if(!rec('mana')[today()]) rec('mana')[today()]={done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''}; return rec('mana')[today()]; }
+function manaToday(){ if(!rec('mana')[today()]) rec('mana')[today()]={done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[],snack:[]},note:''}; return rec('mana')[today()]; }
 function latestWeight(){
   const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
   return items.length?items[items.length-1].w:null;
@@ -2521,7 +2521,8 @@ function manaMotivation(){
 function dietTrain(){ return {free:false, tag:'训练日', meals:{
   breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'贝果',k:300}],
   lunch:[{n:'鸡扒',k:200},{n:'杂粮饭',k:180},{n:'烤蔬菜',k:80}],
-  dinner:[{n:'2煮蛋',k:140},{n:'关东煮萝卜',k:25},{n:'关东煮豆腐串',k:60}]
+  dinner:[{n:'2煮蛋',k:140},{n:'关东煮萝卜',k:25},{n:'关东煮豆腐串',k:60}],
+  snack:[{n:'香蕉',k:90}]
 }}; }
 // 休息日（周六）：贝果半个 + 鸡腿(去皮)轻食 + 糯玉米晚餐
 function dietRest(){ return {free:false, tag:'休息日', meals:{
@@ -2599,8 +2600,8 @@ function renderMana(){
   const exTotal = t.exercises.reduce((s,e)=>s+e.kcal,0);
 
   // 饮食
-  const mealsHtml=['breakfast','lunch','dinner'].map(meal=>{
-    const name={breakfast:'🍳 早餐',lunch:'🍱 午餐',dinner:'🍲 晚餐'}[meal];
+  const mealsHtml=['breakfast','lunch','dinner','snack'].map(meal=>{
+    const name={breakfast:'🍳 早餐',lunch:'🍱 午餐',dinner:'🍲 晚餐',snack:'🍎 加餐'}[meal];
     const arr=t.meals[meal];
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
@@ -2608,7 +2609,7 @@ function renderMana(){
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用${dietPlanToday().tag||''}计划</button>`}</div>
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
-  const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
+  const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner)+mealKcal(t.meals.snack);
   const out=Math.round(bmr())+exTotal;
   const net=intake-out;
   const predict = net<0 ? `预计每周约减 <b>${(Math.abs(net)*7/7700).toFixed(2)} kg</b> 📉` : (net>0?`今日盈余 ${net}kcal，预计每周约增 <b>${(net*7/7700).toFixed(2)} kg</b> 📈`:'今日收支平衡，体重维稳');
@@ -2730,14 +2731,14 @@ function bodyFatChart(items){
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
 }
 function manaHistoryHtml(){
-  const dates=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null||rec('mana')[d].exercises.length||(rec('mana')[d].meals&&(rec('mana')[d].meals.breakfast.length||rec('mana')[d].meals.lunch.length||rec('mana')[d].meals.dinner.length))).sort((a,b)=>b.localeCompare(a)).slice(0,20);
+  const dates=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null||rec('mana')[d].exercises.length||(rec('mana')[d].meals&&(rec('mana')[d].meals.breakfast.length||rec('mana')[d].meals.lunch.length||rec('mana')[d].meals.dinner.length||rec('mana')[d].meals.snack.length))).sort((a,b)=>b.localeCompare(a)).slice(0,20);
   if(!dates.length) return '';
   const body=dates.map(d=>{
     const r=rec('mana')[d]; const w=r.weight!=null?r.weight+'kg':'—';
     const bf=r.bodyFat!=null?r.bodyFat+'%':null;
     const bmi=r.bmi!=null?r.bmi:null;
     const ex=r.exercises.reduce((s,e)=>s+e.kcal,0);
-    const intake=mealKcal(r.meals.breakfast)+mealKcal(r.meals.lunch)+mealKcal(r.meals.dinner);
+    const intake=mealKcal(r.meals.breakfast)+mealKcal(r.meals.lunch)+mealKcal(r.meals.dinner)+mealKcal(r.meals.snack);
     const sumExtra=[bf?('体脂 '+bf):'', bmi?('BMI '+bmi):''].filter(Boolean).join(' · ');
     return `<details class="fold"><summary>${d} · 体重 ${w}${sumExtra?' · '+sumExtra:''}</summary><div class="body">
       ${bf?`<div class="mrow"><span>体脂率</span><span>${bf}</span></div>`:''}
@@ -2817,7 +2818,7 @@ function importAntafu(text){
   let added=0;
   Object.keys(map).forEach(ds=>{
     const o=map[ds];
-    const t=rec('mana')[ds]||{done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    const t=rec('mana')[ds]||{done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[],snack:[]},note:''};
     if(o.weight!=null) t.weight=o.weight;
     if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
     if(o.bmi!=null) t.bmi=o.bmi;
@@ -2911,7 +2912,7 @@ function addFoodTyped(meal){
   else { if(!v.trim()) return toast('请输入食物'); t.meals[meal].push({n:v.trim(),k:0}); }
   t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已记录 '+(mealNameCn(meal))+' 🍽️');
 }
-function mealNameCn(m){ return {breakfast:'早餐',lunch:'午餐',dinner:'晚餐'}[m]||m; }
+function mealNameCn(m){ return {breakfast:'早餐',lunch:'午餐',dinner:'晚餐',snack:'加餐'}[m]||m; }
 function delEx(i){ manaToday().exercises.splice(i,1); save(); renderMana(); }
 function addFood(meal,name,k){ manaToday().meals[meal].push({n:name,k}); manaToday().done=true; save(); renderMana(); }
 function delFood(meal,i){ manaToday().meals[meal].splice(i,1); save(); renderMana(); }
