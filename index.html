@@ -1078,7 +1078,7 @@ const EXERCISES = [
   {n:'骑车',met:6},{n:'跳绳',met:10},{n:'力量训练',met:5},{n:'瑜伽',met:2.5},{n:'普拉提',met:3},
   {n:'爬楼',met:8},{n:'HIIT',met:8},{n:'羽毛球',met:7},{n:'篮球',met:6.5},{n:'跳舞',met:5},
   {n:'椭圆机',met:5},{n:'太极',met:3},
-  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3},{n:'爬坡走',met:6},{n:'跑步机爬坡',met:7},{n:'深蹲',met:5},{n:'负重深蹲',met:6},{n:'俯卧撑',met:4},{n:'平板支撑',met:3},{n:'波比跳',met:8},{n:'开合跳',met:7},{n:'臀桥',met:3},{n:'箭步蹲',met:5},{n:'卷腹',met:3.5},{n:'仰卧起坐',met:3.5},{n:'引体向上',met:4},{n:'硬拉',met:5},{n:'卧推',met:4},{n:'器械划船',met:4},{n:'高抬腿',met:6},{n:'登山跑',met:8},{n:'划船机',met:7},{n:'动感单车',met:8},{n:'战绳',met:9},{n:'壶铃摆动',met:8},{n:'拉伸',met:2.5}
+  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3},{n:'爬坡走',met:6},{n:'跑步机爬坡',met:7},{n:'深蹲',met:5},{n:'负重深蹲',met:6},{n:'俯卧撑',met:4},{n:'平板支撑',met:3},{n:'波比跳',met:8},{n:'开合跳',met:7},{n:'臀桥',met:3},{n:'箭步蹲',met:5},{n:'卷腹',met:3.5},{n:'仰卧起坐',met:3.5},{n:'引体向上',met:4},{n:'硬拉',met:5},{n:'卧推',met:4},{n:'器械划船',met:4},{n:'高抬腿',met:6},{n:'登山跑',met:8},{n:'划船机',met:7},{n:'动感单车',met:8},{n:'战绳',met:9},{n:'壶铃摆动',met:8},{n:'拉伸',met:2.5},{n:'肌肉塑造',met:5},{n:'燃脂踏板',met:7},{n:'腿举机',met:3.5},{n:'坐姿腿屈伸',met:3.5},{n:'俯卧腿弯举',met:3.5},{n:'自重臀桥',met:3},{n:'绳索面拉',met:3.5},{n:'坐姿绳索划船',met:3.5},{n:'器械高位下拉',met:3.5},{n:'器械推胸',met:3.5},{n:'反向蝴蝶机',met:3.5},{n:'史密斯机深蹲',met:4},{n:'保加利亚分腿蹲',met:5},{n:'死虫式',met:2.5},{n:'鸟狗式',met:2.5},{n:'前臂平板支撑',met:3},{n:'跑步机坡度走',met:6},{n:'全身大拉伸',met:2.5},{n:'门框胸肌拉伸',met:2.5}
 ];
 
 // AI 知识术语卡（来源取自大厂知识库）
@@ -2518,15 +2518,15 @@ function manaMotivation(){
 /* ---- 训练计划 / 饮食计划（减脂塑形）---- */
 function dietWork(){ return {free:false, meals:{ breakfast:[{n:'2煮蛋',k:140},{n:'牛奶200ml+黑咖',k:120},{n:'全麦吐司2片',k:200}], lunch:[{n:'赛百味 照烧鸡/牛肉+加蛋+蔬菜+黄芥末',k:400}], dinner:[{n:'糯玉米1根',k:160},{n:'2煮蛋',k:140},{n:'黄瓜/圣女果',k:40}] }}; }
 const TRAIN_PLAN = {
- 1:{title:'周一：有氧 + 下肢力量 + 核心微训练', items:[{n:'椭圆机热身',met:5,min:10},{n:'腿举机 Leg Press',met:3.5,min:8},{n:'坐姿腿屈伸',met:3.5,min:8},{n:'俯卧腿弯举',met:3.5,min:8},{n:'坐姿髋外展',met:3.5,min:6},{n:'自重臀桥',met:3.5,min:6},{n:'跑步机快走/慢跑(有氧)',met:6,min:20},{n:'核心微训练(死虫+平板+鸟狗)',met:3,min:5}]},
- 2:{title:'周二：有氧 + 上肢拉 + 驼背矫正', items:[{n:'风阻单车热身',met:5,min:10},{n:'单车耐力骑行(有氧)',met:7,min:20},{n:'绳索面拉',met:3.5,min:8},{n:'坐姿绳索划船',met:3.5,min:8},{n:'器械高位下拉',met:3.5,min:6},{n:'反向蝴蝶机',met:3.5,min:6},{n:'器械推胸',met:3.5,min:4},{n:'核心微训练',met:3,min:5},{n:'门框胸肌拉伸',met:2.5,min:5}]},
- 3:{title:'周三：有氧 + 核心强化日', items:[{n:'椭圆机热身',met:5,min:10},{n:'椭圆机/坡度快走(有氧)',met:6,min:25},{n:'核心强化(死虫+平板+鸟狗+举腿+侧抬+臀桥)',met:3,min:25},{n:'驼背矫正拉伸',met:2.5,min:5}]},
- 4:{title:'周四：有氧间歇 + 下肢力量', items:[{n:'跑步机快走热身',met:4,min:10},{n:'跑步机HIIT间歇(有氧)',met:8,min:20},{n:'史密斯机深蹲',met:3.5,min:8},{n:'保加利亚分腿蹲',met:4,min:6},{n:'坐姿腿屈伸',met:3.5,min:6},{n:'俯卧腿弯举',met:3.5,min:6},{n:'核心微训练',met:3,min:5},{n:'拉伸',met:2.5,min:5}]},
- 5:{title:'周五：上肢拉 + 驼背矫正 + 全身拉伸', items:[{n:'椭圆机热身',met:5,min:10},{n:'爬楼机/坡度走(有氧)',met:7,min:20},{n:'绳索面拉',met:3.5,min:8},{n:'坐姿绳索划船',met:3.5,min:8},{n:'器械高位下拉',met:3.5,min:6},{n:'反向蝴蝶机',met:3.5,min:6},{n:'器械推肩',met:3.5,min:6},{n:'核心微训练',met:3,min:5},{n:'全身大拉伸',met:2.5,min:12}]},
- 6:{title:'周六：户外快走30分钟 / 瑜伽 / 休息', items:[{n:'户外快走30分钟',met:3.5,min:30}]},
- 0:{title:'周日：休息', items:[]}
+ 1:{title:'周一：下肢力量 → 基础普拉提（~90分钟）', items:[{n:'腿举机',met:3.5,min:8},{n:'坐姿腿屈伸',met:3.5,min:8},{n:'俯卧腿弯举',met:3.5,min:8},{n:'自重臀桥',met:3,min:8},{n:'基础普拉提',met:3,min:60}]},
+ 2:{title:'周二：上肢拉+驼背 → 燃脂踏板（~90分钟）', items:[{n:'绳索面拉',met:3.5,min:8},{n:'坐姿绳索划船',met:3.5,min:8},{n:'器械高位下拉',met:3.5,min:6},{n:'器械推胸',met:3.5,min:4},{n:'燃脂踏板',met:7,min:60}]},
+ 3:{title:'周三：腰腹塑形（纯操课，~60分钟）', items:[{n:'腰腹塑形',met:4.5,min:60}]},
+ 4:{title:'周四：肌肉塑造（~60分钟，方案A/B）', items:[{n:'肌肉塑造',met:5,min:60}]},
+ 5:{title:'周五：自主练 上肢拉+驼背 → 跑步机坡度走（~60分钟）', items:[{n:'绳索面拉',met:3.5,min:10},{n:'坐姿绳索划船',met:3.5,min:8},{n:'反向蝴蝶机',met:3.5,min:6},{n:'全身大拉伸',met:2.5,min:12},{n:'跑步机坡度走',met:6,min:25}]},
+ 6:{title:'周六：彻底休息（恢复日）', items:[]},
+ 0:{title:'周日：核心雕塑（低强度收尾，~60分钟）', items:[{n:'核心雕塑',met:5,min:60}]}
 };
-const DIET_PLAN = { 1:dietWork(),2:dietWork(),3:dietWork(),4:dietWork(),5:dietWork(), 6:{free:true}, 0:{free:true} };
+const DIET_PLAN = { 1:dietWork(),2:dietWork(),3:dietWork(),4:dietWork(),5:dietWork(), 0:dietWork(), 6:{free:true} };
 function weekdayToday(){ return new Date().getDay(); }
 function trainPlanToday(){ return TRAIN_PLAN[weekdayToday()]||{title:'今日无计划',items:[]}; }
 function dietPlanToday(){ const d=DIET_PLAN[weekdayToday()]; return d&&!d.free ? d : {free:true,meals:dietWork().meals}; }
@@ -2546,7 +2546,7 @@ function trainPlanHtml(){
   const totalK=tp.items.reduce((s,it)=>s+trainKcal(it.met,it.min),0);
   const totalCancel=(state.trainCancel&&state.trainCancel.total)||0;
   const todayCancel=cancelled.length;
-  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 暂定均为下班后训练</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
+  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 均为下班后训练 · ⚠️ 左手腱鞘炎：掌撑/握重动作做不了，课前说明换前臂支撑</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
     <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
     <div class="mrow" style="color:var(--warn)"><span>🚫 训练取消统计</span><span>今日 ${todayCancel} 次 · 累计 ${totalCancel} 次</span></div>
     <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button>
