@@ -456,9 +456,10 @@
           <code>create policy "pub" on workbench_sync for all using (true) with check (true);</code><br>
           这样本机用 anon key 就能读写这一行（id 固定为 me，数据按你设置的口令加密）。</p>
       </div>
-      <div class="field" style="margin-top:6px"><label><input type="checkbox" id="setAutoEncrypt" style="width:auto;margin-right:6px"/>启用本地口令加密（推荐，保护隐私）</label></div>
-      <div class="field"><label>加密口令</label><input id="setEncPass" type="password" placeholder="设一个只有你知道的口令" /></div>
-      <p class="hint">⚠️ 口令丢失将无法解密云端数据，请牢记。</p>
+      <div class="field" style="margin-top:6px"><label><input type="checkbox" id="setAutoEncrypt" onchange="encWarnUpdate()" style="width:auto;margin-right:6px"/>启用本地口令加密（默认开启 · 强烈推荐）</label></div>
+      <div class="field"><label>加密口令</label><input id="setEncPass" type="password" placeholder="设一个只有你知道的口令" oninput="encWarnUpdate()" /></div>
+      <p class="hint">⚠️ 口令丢失将无法解密云端数据，请牢记。加密后云端（GitHub Gist / Supabase）只存密文，即使链接或仓库泄露也解不开。</p>
+      <p id="encWarn" style="display:none;color:#e0533d;font-size:13px;margin:4px 2px 0">🔒 加密已开启，但还没设口令——请在上方「加密口令」填写并保存，否则云端仍是明文。</p>
       <div class="mini-row">
         <button class="mini accent" id="btnPush">⬆️ 上传本机</button>
         <button class="mini line" id="btnPull">⬇️ 下载云端</button>
@@ -566,7 +567,7 @@ function defaultState(){
     planSkip:{},
     planCollapsed:[],
     focusLog:{},
-    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:false, encPass:'', goal:{weight:null, ielts:null}, reminderEnabled:true, reminderHour:21 }
+    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, reminderEnabled:true, reminderHour:21 }
   };
 }
 let state = load();
@@ -2624,7 +2625,7 @@ function manaMotivation(){
   return `本周 +${(-w).toFixed(1)} kg，可能是水分或饮食波动。别慌，回顾下饮食热量，明天轻一点就好 🍃`;
 }
 
-/* ---- 训练计划 / 饮食计划（减脂塑形）---- */
+/* ---- 训练计划 / 饮食计划 ---- */
 // 训练日：早餐不写死（贝果/面包自己加） + 午餐一份肉 + 练后轻晚餐（参照减脂饮食指南·乐刻版）
 function dietTrain(){ return {free:false, tag:'训练日', meals:{
   breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120}],
@@ -3140,6 +3141,7 @@ function openSettings(){
   document.getElementById('setSyncMethod').value=state.settings.syncMethod||'gist';
   document.getElementById('setAutoEncrypt').checked=!!state.settings.autoEncrypt;
   document.getElementById('setEncPass').value=state.settings.encPass||'';
+  encWarnUpdate();
   toggleSyncBox();
   renderLinkEdits();
   updateConnBox();
@@ -3182,6 +3184,7 @@ function closeSettings(){
   s.syncMethod=document.getElementById('setSyncMethod').value;
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
   s.encPass=document.getElementById('setEncPass').value;
+  if(s.autoEncrypt && !s.encPass){ toast('⚠️ 加密已开启但未设口令，云端仍是明文，请填口令后重存'); }
   s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
   s.reminderEnabled = document.getElementById('setRemind').value==='on';
   s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
@@ -3206,6 +3209,7 @@ async function decryptText(b64,pass){
   return new TextDecoder().decode(pt);
 }
 function needEncrypt(){ return state.settings.autoEncrypt && state.settings.encPass; }
+function encWarnUpdate(){ const w=document.getElementById('encWarn'); if(!w) return; const on=document.getElementById('setAutoEncrypt').checked; const has=document.getElementById('setEncPass').value.trim(); w.style.display=(on&&!has)?'block':'none'; }
 async function encodeState(){
   const clone=JSON.parse(JSON.stringify(state));
   delete clone.settings;   // 不同步设备私有配置(Token/密钥)，避免把密钥上传到云端泄露
