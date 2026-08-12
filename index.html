@@ -561,7 +561,7 @@ function defaultState(){
       {name:'纳瓦尔宝典', cover:'', url:wereadUrl('纳瓦尔宝典')}
     ],
     modules: Object.fromEntries(MODULES.map(m=>[m.key,{records:{}}])),
-    aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{}, aiDaily:{}, aiStudy:{}, aiStudyTs:{}, aiPass1:[],
+    aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{}, aiDaily:{}, aiStudy:{}, aiStudyTs:{}, aiPass1:[], aiExt:{},
     ieltsListened:[],
     trainCancel:{total:0, log:{}},
     planSkip:{},
@@ -585,7 +585,7 @@ function load(){
     s.aiMasteredTs = s.aiMasteredTs || {}; s.aiMasteredDel = s.aiMasteredDel || {};
     s.aiDaily = s.aiDaily || {};
     if((s.aiLibVersion||0)!==2){ s.aiMastered = []; s.aiMasteredTs={}; s.aiMasteredDel={}; s.aiLibVersion = 2; } // 术语库 v2（69 词/AI PM）整体替换，旧序号已失效，重置掌握进度
-    s.aiStudy = s.aiStudy || {}; s.aiStudyTs = s.aiStudyTs || {};
+    s.aiStudy = s.aiStudy || {}; s.aiStudyTs = s.aiStudyTs || {}; s.aiExt = s.aiExt || {};
     s.aiPass1 = Array.isArray(s.aiPass1) ? s.aiPass1 : [];
     // 复习期（cycle 1）：首轮已学完，转入「每卡刷满 AI_REVIEW_TARGET 遍才能标记已掌握」的复习循环。
     // 首轮成绩存入 aiPass1 永久保留展示；aiMastered 清零由复习重新累积，并写 del 时间戳防止云端旧数据把掌握状态"复活"。
@@ -2250,8 +2250,8 @@ const AI_REVIEW_TARGET = 3; // 复习期：每张卡至少刷满 3 遍，才解�
 function isMastered(term){ return (state.aiMastered||[]).includes(term); }
 // 复习刷卡遍数
 function aiStudyCount(idx){ const v=(state.aiStudy||{})[idx]; return typeof v==='number'&&v>0 ? v : 0; }
-function aiReadyCount(){ return AI_TERMS.map((t,i)=>i).filter(i=>aiStudyCount(i)>=AI_REVIEW_TARGET).length; }
-function aiRoundsTotal(){ return AI_TERMS.map((t,i)=>i).reduce((a,i)=>a+aiStudyCount(i),0); }
+function aiReadyCount(){ return aiTermIdxList().filter(i=>aiStudyCount(i)>=AI_REVIEW_TARGET).length; }
+function aiRoundsTotal(){ return aiTermIdxList().reduce((a,i)=>a+aiStudyCount(i),0); }
 // 重渲染 AI 板块并保留滚动位置（连续点「已学习」时页面不跳到顶部）
 function aiRerender(){ const y=window.scrollY||0; (currentView==='ai')?renderModule('ai'):render(); window.scrollTo(0,y); }
 // 点「已学习」：遍数 +1
@@ -2287,11 +2287,18 @@ function markTerm(term){
 }
 // 今日术语卡：每天0点按日期种子分配5张作为当日打卡任务，当天固定（打卡后不实时跳动）
 // 复习期排序：刷卡遍数少的优先 → 刷满3遍待确认掌握 → 已掌握的沉底补位
+function aiExtEntries(){ return Object.keys(state.aiExt||{}).map(k=>({key:k,t:state.aiExt[k]})).sort((a,b)=>((a.t.idx||1000)-(b.t.idx||1000))); }
+function allAiTerms(){ return [...AI_TERMS.map((t,i)=>({key:i,t})), ...aiExtEntries().map(e=>({key:e.key,t:e.t}))]; }
+function aiTermIdxList(){ return allAiTerms().map(x=>x.key); }
+function aiTermByIdx(key){ if(typeof key==='number'){ return AI_TERMS[key]; } return (state.aiExt&&state.aiExt[key])||null; }
+function jsKey(k){ return (typeof k==='number')? k : JSON.stringify(k); }
+function aiSlugOf(term){ return 'ext:'+ (term||'').trim().toLowerCase().replace(/[^a-z0-9一-龥]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48) || ('ext_'+Date.now()); }
+function aiAddTerm(obj){ const s=state.aiExt=state.aiExt||{}; const k=obj.id||aiSlugOf(obj.term); if(s[k]) return false; const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); s[k]=Object.assign({},obj,{idx:maxIdx+1}); save(); return k; }
 function aiTodayPicks(){
   const day=today();
   state.aiDaily=state.aiDaily||{};
   if(state.aiDaily[day] && state.aiDaily[day].length) return state.aiDaily[day];
-  const allIdx=AI_TERMS.map((t,i)=>i);
+  const allIdx=aiTermIdxList();
   const seed=Number(day.replace(/-/g,''));
   const rank=i=>{
     if(isMastered(i)) return 100;                              // 已掌握：沉底
@@ -2393,9 +2400,9 @@ function aiLayerProgressHtml(){
   const layers=['基础概念层','训练技术层','部署技术层','应用技术层'];
   const colors={'基础概念层':['#e8f0ff','#3b6fe0'],'训练技术层':['#eafaf0','#27a567'],'部署技术层':['#fff3e0','#e0861e'],'应用技术层':['#fdeef5','#d64b8b']};
   const mastered=new Set(state.aiMastered||[]);
-  const total=AI_TERMS.length; const totalDone=mastered.size;
+  const total=allAiTerms().length; const totalDone=mastered.size;
   const rows=layers.map(L=>{
-    const idxs=AI_TERMS.map((t,i)=>i).filter(i=>AI_TERMS[i].layer===L);
+    const idxs=allAiTerms().filter(x=>x.t.layer===L).map(x=>x.key);
     const tot=idxs.length; const done=idxs.filter(i=>mastered.has(i)).length; const pct=tot?Math.round(done/tot*100):0;
     const c=colors[L];
     return `<div style="margin:8px 0">
@@ -2427,18 +2434,18 @@ function aiLearn(){
   let picksIdx;
   if(aiOnlyUnmastered){
     // 含已掌握：复习模式，按原种子顺序实时轮换（含已掌握）
-    picksIdx=seededShuffle(lib.map((t,i)=>i), Number(today().replace(/-/g,'')));
+    picksIdx=seededShuffle(aiTermIdxList(), Number(today().replace(/-/g,'')));
   } else {
     // 默认：今日批次（每天0点从未掌握里分配5张，当天固定，打卡不变动）
     picksIdx=aiTodayPicks();
   }
-  const picks=picksIdx.slice(0,5).map(idx=>({t:lib[idx], idx}));
+  const picks=picksIdx.slice(0,5).map(idx=>({idx, t:aiTermByIdx(idx)}));
   const mc=picks.filter(p=>isMastered(p.idx)).length; const totalMastered=(state.aiMastered||[]).length;
   const layerColor={'基础概念层':'#e8f0ff,#3b6fe0','训练技术层':'#eafaf0,#27a567','部署技术层':'#fff3e0,#e0861e','应用技术层':'#fdeef5,#d64b8b'};
-  const total=lib.length;
+  const total=allAiTerms().length;
   let focusHtml='';
   if(aiFocusTerm!=null){
-    const ft=AI_TERMS[aiFocusTerm]; const fm=isMastered(aiFocusTerm); const flc=(layerColor[ft.layer]||'#eee,#666').split(',');
+    const ft=aiTermByIdx(aiFocusTerm); const fm=isMastered(aiFocusTerm); const flc=(layerColor[ft.layer]||'#eee,#666').split(',');
     const fc=aiStudyCount(aiFocusTerm); const fready=fc>=AI_REVIEW_TARGET;
     focusHtml=`<div class="term focus-term">
       <div class="term-h">📌 计划关联术语：${escapeHtml(ft.term)} ${fm?'<span class="mbadge">✓ 已掌握</span>':`<span class="rbadge ${fready?'ok':''}">📖 ${fc}/${AI_REVIEW_TARGET} 遍</span>`}</div>
@@ -2455,7 +2462,7 @@ function aiLearn(){
     <p class="hint">↑ 来自「学习计划」今日关联术语；下方为每日轮换的 5 张术语卡。</p>`;
   }
   const todayRounds=picks.reduce((a,p)=>a+aiStudyCount(p.idx),0);
-  return `${aiLayerProgressHtml()}<div class="learn"><div class="ltitle" style="display:flex;align-items:center;gap:8px">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 本批累计刷 ${todayRounds} 遍</span><button class="mini" onclick="aiOnlyUnmastered=!aiOnlyUnmastered;render()">${aiOnlyUnmastered?'🗂 全部术语（点回今日）':'📅 今日批次（点看全部）'}</button></div>`+
+  return `${aiLayerProgressHtml()}<div class="ailink" style="margin-bottom:8px"><button class="btn ghost" onclick="aiToggleAddTerm()">➕ 添加我的术语</button><div id="aiAddBox" style="display:none;margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:10px"><div class="field"><input id="atTerm" placeholder="术语名（如 MoE 混合专家）" style="width:100%"></div><div class="field"><input id="atMean" placeholder="通俗含义" style="width:100%"></div><div class="field"><input id="atScene" placeholder="项目应用场景" style="width:100%"></div><div class="field"><select id="atLayer"><option>基础概念层</option><option>训练技术层</option><option>部署技术层</option><option>应用技术层</option></select></div><div class="field"><input id="atExample" placeholder="生动例子（可选）" style="width:100%"></div><button class="btn" onclick="aiAddTermFromForm()">💾 保存术语卡</button> <button class="mini line" onclick="aiToggleAddTerm()">取消</button></div></div><div class="learn"><div class="ltitle" style="display:flex;align-items:center;gap:8px">🧠 今日 AI 术语卡（5 张）<span style="margin-left:auto;font-size:12px;color:var(--good)">今日已掌握 ${mc}/5 · 本批累计刷 ${todayRounds} 遍</span><button class="mini" onclick="aiOnlyUnmastered=!aiOnlyUnmastered;render()">${aiOnlyUnmastered?'🗂 全部术语（点回今日）':'📅 今日批次（点看全部）'}</button></div>`+
     `<div class="layer-legend">共 ${total} 词 · 4 大层级：<span class="lc" style="background:#e8f0ff;color:#3b6fe0">基础概念</span><span class="lc" style="background:#eafaf0;color:#27a567">训练技术</span><span class="lc" style="background:#fff3e0;color:#e0861e">部署技术</span><span class="lc" style="background:#fdeef5;color:#d64b8b">应用技术</span></div>`+
     focusHtml+
     picks.map(p=>{ const t=p.t, m=isMastered(p.idx); const c=aiStudyCount(p.idx); const ready=c>=AI_REVIEW_TARGET;
@@ -2467,13 +2474,23 @@ function aiLearn(){
         <div class="term-b"><b>项目应用场景</b> ${t.scene}</div>
         ${t.example?`<div class="term-ex">🌰 <b>生动例子</b> ${escapeHtml(t.example)}</div>`:''}
         ${m
-          ? `<button class="mtoggle" onclick="markTerm(${p.idx})">↺ 取消掌握</button>`
-          : `<button class="mtoggle" onclick="aiStudyTerm(${p.idx})">📖 已学习（记第 ${c+1} 遍）</button>
-             ${ready?`<button class="mtoggle ok" onclick="markTerm(${p.idx})">✅ 已掌握（已刷 ${c} 遍）</button>`:`<p class="rhint">还差 ${AI_REVIEW_TARGET-c} 遍解锁「✅ 已掌握」</p>`}
-             ${c>0?`<button class="mini line" onclick="aiStudyUndo(${p.idx})">↺ 撤销一次</button>`:''}`}
+          ? `<button class="mtoggle" onclick="markTerm(${jsKey(p.idx)})">↺ 取消掌握</button>`
+          : `<button class="mtoggle" onclick="aiStudyTerm(${jsKey(p.idx)})">📖 已学习（记第 ${c+1} 遍）</button>
+             ${ready?`<button class="mtoggle ok" onclick="markTerm(${jsKey(p.idx)})">✅ 已掌握（已刷 ${c} 遍）</button>`:`<p class="rhint">还差 ${AI_REVIEW_TARGET-c} 遍解锁「✅ 已掌握」</p>`}
+             ${c>0?`<button class="mini line" onclick="aiStudyUndo(${jsKey(p.idx)})">↺ 撤销一次</button>`:''}`}
       </div>`; }).join('')+
     `<div class="ailink"><button class="btn ghost w100" onclick="setView('plan')">🗓️ 配套：8月 AI 转型学习计划（每日打卡）</button></div>`+
     `<p class="hint">🔁 <b>复习期规则</b>：每张卡至少刷 <b>${AI_REVIEW_TARGET} 遍</b>——每读完一遍点「📖 已学习」记一次，满 ${AI_REVIEW_TARGET} 遍才解锁「✅ 已掌握」按钮。<br>📅 每天 0 点自动分配 5 张作当日任务（<b>刷卡遍数少的优先</b>，已掌握的沉底），当天固定不跳动，次日再轮换下一批；点右上角可切换「今日批次 / 全部术语」。误点了用「↺ 撤销一次」。词库共 ${total} 词。</p></div>` + aiQuizRender();
+}
+
+function aiToggleAddTerm(){ const b=document.getElementById('aiAddBox'); if(b) b.style.display = (b.style.display==='none'||!b.style.display)?'block':'none'; }
+function aiAddTermFromForm(){
+  const term=(document.getElementById('atTerm').value||'').trim();
+  if(!term){ toast('请填写术语名'); return; }
+  const obj={ term, mean:(document.getElementById('atMean').value||'').trim(), scene:(document.getElementById('atScene').value||'').trim(), layer:document.getElementById('atLayer').value, example:(document.getElementById('atExample').value||'').trim(), custom:true };
+  const k=aiAddTerm(obj);
+  if(k===false){ toast('该术语已存在（同名）'); return; }
+  toast('已添加术语卡：'+term+' 🎉 去「今日批次」刷一遍吧'); render();
 }
 
 /* ---- 每日阅读 ---- */
@@ -3267,6 +3284,7 @@ async function pullData(silent){
       const content=data.files['workbench.json'] && data.files['workbench.json'].content;
       if(!content) throw new Error('Gist 里没有 workbench.json');
       const remote=await decodeState(content,pass);
+      try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
       mergeState(remote); _pulledThisSession=true; save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
     }catch(e){ _pullFail(e,silent); }
   } else {
@@ -3311,6 +3329,8 @@ function mergeState(remote){
       else { outS[k]=(ls[k]!=null?ls[k]:rs[k]); outT[k]=(lt||rt); }
     });
     state.aiStudy=outS; state.aiStudyTs=outT;
+    // 外部/自定义术语：按 key 合并（remote 补入本地没有的，不互相覆盖、不删除本地已有）
+    { const lo=state.aiExt||{}, ro=remote.aiExt||{}, out=Object.assign({},lo); for(const k in ro){ if(!out[k]) out[k]=ro[k]; } state.aiExt=out; }
     state.aiPass1=[...new Set([...(state.aiPass1||[]), ...(remote.aiPass1||[])])];
     state.aiReviewCycle=Math.max(state.aiReviewCycle||0, remote.aiReviewCycle||0); }
   state.ieltsListened=[...new Set([...(state.ieltsListened||[]),...(remote.ieltsListened||[])])];
