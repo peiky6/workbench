@@ -73,13 +73,9 @@
   .pill.done{background:#e6f7ee;color:var(--good);}
   .i-ielts{background:#eaf5fd;} .i-mana{background:#eaf7f1;} .i-news{background:#f3eefc;}
   .i-ai{background:#fdf3e8;} .i-reading{background:#fdeef2;} .i-plan{background:#e8f0fb;}
-  .books{display:flex;gap:10px;margin:10px 0;}
-  .bcard{flex:1;text-decoration:none;color:var(--ink);text-align:center;display:block;}
-  .bcard:active{transform:scale(.97);}
-  .bcover{width:100%;aspect-ratio:3/4;border-radius:12px;display:flex;align-items:center;justify-content:center;
-    color:#fff;font-weight:800;font-size:14px;line-height:1.3;padding:8px;box-shadow:var(--shadow);overflow:hidden;}
-  .bcover span{text-shadow:0 1px 3px rgba(0,0,0,.25);}
-  .bname{font-size:12px;font-weight:700;margin-top:6px;display:block;}
+  .books{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+  .bname-link{display:block;font-size:14px;font-weight:700;color:var(--accent);text-decoration:none;padding:11px 13px;background:var(--bg);border-radius:11px;border:1px solid var(--line);}
+  .bname-link:active{transform:scale(.98);}
 
   .dcard{background:var(--card);border-radius:20px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px;}
   .stats{display:flex;gap:8px;flex-wrap:wrap;}
@@ -143,8 +139,6 @@
   .hm-cell.l4{background:#216e39;}
   .hm-legend{display:flex;align-items:center;gap:3px;margin-top:6px;font-size:10px;color:var(--sub);}
   .hm-legend .hm-cell{width:10px;height:10px;}
-  .focus-time{font-size:48px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:10px 0;color:var(--accent);letter-spacing:2px;}
-  .focus-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
   .update-bar{position:fixed;left:0;right:0;bottom:0;background:var(--accent);color:#fff;font-size:13px;font-weight:700;text-align:center;padding:11px;cursor:pointer;z-index:90;box-shadow:0 -4px 16px rgba(0,0,0,.18);}
   .bartip{position:fixed;transform:translate(-50%,-100%);margin-top:-8px;background:#2b3a45;color:#fff;padding:5px 11px;border-radius:8px;font-size:12px;z-index:95;pointer-events:none;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.22);line-height:1.5;}
   .bartip::after{content:'';position:absolute;left:50%;bottom:-4px;transform:translateX(-50%) rotate(45deg);width:8px;height:8px;background:#2b3a45;}
@@ -539,21 +533,6 @@
   </div>
 </div>
 
-<div class="modal" id="focusModal">
-  <div class="modal-card">
-    <div class="modal-h">⏱️ 专注计时</div>
-    <p class="hint">开始计时，专注完成一项任务（学习计划 / 训练等）后结束并保存。计时仅在页面打开时运行。</p>
-    <div class="focus-time" id="focusTime">00:00</div>
-    <div class="focus-actions">
-      <button class="mini accent" id="focusStartBtn" onclick="focusStart()">▶ 开始</button>
-      <button class="mini line" onclick="focusPause()">⏸ 暂停</button>
-      <button class="mini line" onclick="focusReset()">↺ 重置</button>
-      <button class="mini" onclick="focusSave()">✅ 结束并保存</button>
-    </div>
-    <p class="hint" id="focusToday"></p>
-    <div class="mini-row" style="margin-top:6px"><button class="mini" onclick="closeFocus()">关闭</button></div>
-  </div>
-</div>
 <div class="modal" id="ieltsDayModal">
   <div class="modal-card">
     <div class="modal-h" id="ieltsDayTitle">📅 雅思打卡内容</div>
@@ -607,7 +586,6 @@ function defaultState(){
     trainCancel:{total:0, log:{}},
     planSkip:{},
     planCollapsed:[],
-    focusLog:{},
     readingCoins:0, readingAch:[], readingFinished:[],
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
@@ -651,7 +629,6 @@ function load(){
     s.trainCancel = (s.trainCancel && s.trainCancel.log) ? s.trainCancel : {total:0, log:{}};
     s.planSkip = s.planSkip || {};
     s.planCollapsed = Array.isArray(s.planCollapsed) ? s.planCollapsed : [];
-    s.focusLog = s.focusLog || {};
     s.readingCoins = s.readingCoins||0;
     s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
     s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
@@ -684,7 +661,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-13b';
+const APP_VERSION = '2026-08-13c';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -721,17 +698,6 @@ function habitHeatmapHtml(){
     <p class="hint">每格=一天，颜色越深=当天完成模块越多（最多 ${MODULES.length} 项）。</p>
   </div>`;
 }
-function focusTodayMin(){ return (state.focusLog&&state.focusLog[today()])||0; }
-let focusTimer=null;
-function fmtFocus(s){ const m=Math.floor(s/60), ss=s%60; return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0'); }
-function openFocus(){ if(!focusTimer) focusTimer={elapsed:0,running:false}; const ft=document.getElementById('focusToday'); if(ft) ft.textContent='今日已专注：'+focusTodayMin()+' 分钟'; renderFocus(); document.getElementById('focusModal').classList.add('show'); }
-function renderFocus(){ const el=document.getElementById('focusTime'); if(el) el.textContent=fmtFocus(focusTimerElapsed()); }
-function focusTimerElapsed(){ return focusTimer?(focusTimer.elapsed+(focusTimer.running?Math.floor((Date.now()-focusTimer.startTs)/1000):0)):0; }
-function focusStart(){ if(!focusTimer) focusTimer={elapsed:0,running:false}; if(focusTimer.running) return; focusTimer.running=true; focusTimer.startTs=Date.now(); if(focusTimer.intervalId) clearInterval(focusTimer.intervalId); focusTimer.intervalId=setInterval(renderFocus,1000); renderFocus(); }
-function focusPause(){ if(!focusTimer||!focusTimer.running) return; focusTimer.elapsed+=Math.floor((Date.now()-focusTimer.startTs)/1000); focusTimer.running=false; if(focusTimer.intervalId) clearInterval(focusTimer.intervalId); renderFocus(); }
-function focusReset(){ focusPause(); focusTimer.elapsed=0; renderFocus(); }
-function focusSave(){ focusPause(); const mins=Math.floor(focusTimer.elapsed/60); if(mins>0){ const td=today(); state.focusLog[td]=(state.focusLog[td]||0)+mins; save(); toast('已记录专注 '+mins+' 分钟 ⏱️'); } else { toast('时长太短，未记录'); } closeFocus(); renderHome(); }
-function closeFocus(){ if(focusTimer&&focusTimer.running) focusPause(); document.getElementById('focusModal').classList.remove('show'); }
 
 /* ===================== 学习计划（2026年8月 · AI 转型）数据 ===================== */
 const PLAN_WEEKS = [{"n":1,"label":"第一周","title":"AI 通识扫盲 + 术语体系搭建","range":"8.1–8.3"},{"n":2,"label":"第二周","title":"AI 项目研发流程 + 关键环节把控","range":"8.4–8.10"},{"n":3,"label":"第三周","title":"AI 行业应用 + 解决方案设计基础","range":"8.11–8.17"},{"n":4,"label":"第四周","title":"项目管理适配 + 实战演练 + 证书准备","range":"8.18–8.24"}];
@@ -1782,14 +1748,10 @@ function renderHome(){
     ${quizReminderHtml()}
     ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
-    ${readingHomeHtml()}
     ${weeklyReviewHtml()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
     ${monthlyOpen?monthlyReviewHtml():''}
     ${habitHeatmapHtml()}
-    <div class="mini-row" style="margin:10px 0">
-      <button class="mini accent" onclick="openFocus()">⏱️ 专注计时（今日 ${focusTodayMin()} 分钟）</button>
-    </div>
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
@@ -1822,7 +1784,7 @@ function todayChecklistHtml(){
     {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
     {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（菜单打卡）':'雅思练习（菜单打卡 · 点选1-2项）'},
     {view:'news', done:newsDone, text: newsDone?'已读今日虎嗅早报':'阅读虎嗅早报（新闻阅读）'},
-    {view:'reading', done:readDone, text: readDone?'已阅读打卡':'每日阅读打卡'},
+    {view:'reading', done:readDone, text: readDone?'已阅读 5 分钟':'每日阅读5分钟'},
     {view:'mana', done:trainDone, text: trainText}
   ];
   const done=items.filter(i=>i.done).length;
@@ -2554,14 +2516,6 @@ function aiAddTermFromForm(){
 }
 
 /* ---- 每日阅读 ---- */
-const COVER_GRAD=['#89CFF0','#f3a7c0','#f6c667','#a9d8f5','#c8a2e0','#7ec8e3'];
-function bookCover(b,i){
-  const inner = b.cover ? '' : `<span>${escapeHtml(b.name)}</span>`;
-  const style = b.cover
-    ? `background-image:url('${escapeAttr(b.cover)}');background-size:cover;background-position:center;`
-    : `background:linear-gradient(135deg,${COVER_GRAD[i%COVER_GRAD.length]},#ffffff55);`;
-  return `<div class="bcover" style="${style}">${inner}</div>`;
-}
 function renderReading(){
   const done=isDone('reading',today());
   const t=rec('reading')[today()]||{done:false,extra:0,note:''};
@@ -2577,10 +2531,7 @@ function renderReading(){
       : `<div class="bprog-txt hint">未设总页数（点「更新进度」）</div>`;
     return `
     <div class="bcard-wrap">
-      <a class="bcard" href="${escapeAttr(b.url)}" target="_blank" rel="noopener">
-        ${bookCover(b,i)}
-        <span class="bname">${escapeHtml(b.name)}</span>
-      </a>
+      <a class="bname-link" href="${escapeAttr(b.url)}" target="_blank" rel="noopener">📖 ${escapeHtml(b.name)}</a>
       ${prog}
       <button class="mini line" onclick="openBookProgress(${i})">📈 更新进度</button>
     </div>`;
@@ -2604,9 +2555,9 @@ function renderReading(){
       <div class="week-mini">📅 本周已读 <b>${week.days}</b> 天 · ⏱️ <b>${week.mins}</b> 分钟 · 📚 读完 <b>${week.finished}</b> 本</div>
     </div>
     <div class="dcard">
-      <div class="ltitle">📚 本期推荐 Top 3（点封面去微信读书）</div>
+      <div class="ltitle">📚 本期推荐 Top 3（点书名去微信读书）</div>
       <div class="books">${books}</div>
-      <p class="hint">点击任意书封面开始阅读；封面/书名/链接/进度都可在「编辑书籍」里改。</p>
+      <p class="hint">点击任意书名开始阅读；书名/链接/进度都可在「编辑书籍」里改。</p>
       <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
     </div>
     ${readingFinishedHtml()}
@@ -2685,8 +2636,6 @@ function readingCheckAch(){
   });
   return fresh;
 }
-// 首页一键打卡：直接按目标分钟完成
-function readingQuickCheckIn(){ readingComplete(state.settings.readGoal||5); }
 // 随机金句/知识点卡池：AI 术语库 + 你的读书笔记
 function readingRandomCard(){
   const pool=[];
@@ -2715,27 +2664,6 @@ function readingCelebrate(mins,newAch){
   requestAnimationFrame(()=>ov.classList.add('show'));
 }
 function closeCelebrate(ovId){ const ov=document.getElementById(ovId||'readCelebrate'); if(ov) ov.classList.remove('show'); }
-// 首页一键打卡卡
-function readingHomeHtml(){
-  const goal=state.settings.readGoal||5;
-  const done=isDone('reading',today());
-  const t=rec('reading')[today()]||{};
-  const stk=streak('reading');
-  const coins=state.readingCoins||0;
-  if(done){
-    return `<div class="dcard read-home done">
-      <div class="ltitle">📖 今日阅读</div>
-      <div class="read-done">✅ 已读 ${t.extra||goal} 分钟 · 🔥连续 ${stk} 天 · 🪙 ${coins}</div>
-      <button class="mini line" onclick="setView('reading')">查看 / 补记分钟 →</button>
-    </div>`;
-  }
-  return `<div class="dcard read-home">
-    <div class="ltitle">📖 今日阅读</div>
-    <p class="hint">微习惯：今天只要读 ${goal} 分钟就赢 ✨</p>
-    <button class="btn primary w100" onclick="readingQuickCheckIn()">✅ 今日已读 ${goal} 分钟（一键打卡）</button>
-    <button class="mini line" onclick="setView('reading')" style="margin-top:6px">想读更久？去模块记分钟 →</button>
-  </div>`;
-}
 // 断卡预警（损失厌恶）：今天没读、且昨天读了（即今天再不读明天中断）
 function readingStreakWarningHtml(){
   if(isDone('reading',today())) return '';
@@ -2747,12 +2675,10 @@ function openBookEditor(){
   const books=state.readingBooks;
   document.getElementById('sheet').innerHTML = `
     <h3>📖 编辑 Top 3 书籍</h3>
-    <p class="desc">修改书名、封面图链接、微信读书跳转链接。封面留空则自动生成文字封面。</p>
+    <p class="desc">修改书名、微信读书跳转链接与阅读进度。</p>
     ${books.map((b,i)=>`
       <label>第 ${i+1} 本 · 书名</label>
       <input id="bk${i}name" value="${escapeAttr(b.name)}" />
-      <label>封面图链接（可选，建议 https 图片）</label>
-      <input id="bk${i}cover" value="${escapeAttr(b.cover)}" placeholder="https://...png/jpg" />
       <label>微信读书链接</label>
       <input id="bk${i}url" value="${escapeAttr(b.url)}" placeholder="https://weread.qq.com/..." />
       <div class="bgrid">
@@ -2771,7 +2697,7 @@ function saveBookEditor(){
     const total=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'total').value)||0));
     const cur=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'current').value)||0));
     const nb={ name: document.getElementById('bk'+i+'name').value.trim()||b.name,
-      cover: document.getElementById('bk'+i+'cover').value.trim(),
+      cover: b.cover,
       url: document.getElementById('bk'+i+'url').value.trim()||b.url,
       total, current:cur };
     nb.finished = total>0 && cur>=total;
