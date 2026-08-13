@@ -660,7 +660,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-13e';
+const APP_VERSION = '2026-08-13f';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1777,7 +1777,7 @@ function todayChecklistHtml(){
   const ieltsDone=dayDone('ielts',td);
   const readDone=isDone('reading',td);
   const newsDone=isDone('news',td);
-  const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.exercises&&m.exercises.length); if(trainAllCancelled) trainDone=true;
+  const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.trainDone); if(trainAllCancelled) trainDone=true;
   let trainText;
   if(trainAllCancelled) trainText='今日训练已取消（'+cancelledToday.length+' 项）🚫';
   else if(!tp.items.length) trainText='今日休息日，轻松一下';
@@ -2801,7 +2801,7 @@ function mergeReadingFinished(local,remote){
 function closeSheet(){ document.getElementById('sheetMask').classList.remove('show'); }
 
 /* ---- 体重管理（合并运动+体重+饮食） ---- */
-function manaToday(){ if(!rec('mana')[today()]) rec('mana')[today()]={done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''}; return rec('mana')[today()]; }
+function manaToday(){ if(!rec('mana')[today()]) rec('mana')[today()]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''}; return rec('mana')[today()]; }
 function latestWeight(){
   const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
   return items.length?items[items.length-1].w:null;
@@ -2870,11 +2870,13 @@ function weekdayToday(){ return new Date().getDay(); }
 function trainPlanToday(){ return TRAIN_PLAN[weekdayToday()]||{title:'今日无计划',items:[]}; }
 function dietPlanToday(){ const d=DIET_PLAN[weekdayToday()]; return d&&!d.free ? d : {free:true,meals:dietTrain().meals}; }
 function trainKcal(met,min){ return Math.round(met*effectiveWeight()*min/60); }
-function addTrainItem(n,met,min){ const t=manaToday(); t.exercises.push({n,met,min,kcal:trainKcal(met,min)}); t.done=true; save(); renderMana(); toast('已添加：'+n+' 🏃'); }
-function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return toast('今日休息，无需训练 😌'); const t=manaToday(); tp.items.forEach(it=>{ t.exercises.push({n:it.n,met:it.met,min:it.min,kcal:trainKcal(it.met,it.min)}); }); t.done=true; save(); renderMana(); toast('已套用今日训练计划 ✅'); }
+function addTrainItem(n,met,min){ const t=manaToday(); t.exercises.push({n,met,min,kcal:trainKcal(met,min)}); save(); renderMana(); toast('已添加：'+n+' 🏃'); }
+function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return toast('今日休息，无需训练 😌'); const t=manaToday(); tp.items.forEach(it=>{ t.exercises.push({n:it.n,met:it.met,min:it.min,kcal:trainKcal(it.met,it.min)}); }); save(); renderMana(); toast('已套用今日计划到运动列表 📋'); }
+function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
 function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
+  const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone);
   if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div></div>`; }
   const cancelled=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[today()])||[];
   const rows=tp.items.map(it=>{
@@ -2888,7 +2890,8 @@ function trainPlanHtml(){
   return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 均为下班后训练 · ⚠️ 左手腱鞘炎：掌撑/握重动作做不了，课前说明换前臂支撑</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
     <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
     <div class="mrow" style="color:var(--warn)"><span>🚫 训练取消统计</span><span>今日 ${todayCancel} 次 · 累计 ${totalCancel} 次</span></div>
-    <button class="btn ghost w100" onclick="addTrainAll()">✅ 一键套用全部到今日运动</button>
+    <button class="btn ghost w100" onclick="addTrainAll()">➕ 一键套用全部到今日运动</button>
+    <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button>
     <div class="mrow" style="margin-top:10px;color:var(--muted)"><span>💡 想临时换/加运动？在下方「🏃 运动」里搜索任意运动（含乐刻操课、爬坡、深蹲等）即可添加，与原计划无关</span></div></div>`;
 }
 function cancelTrainItem(name){
@@ -3145,7 +3148,7 @@ function importAntafu(text){
   let added=0;
   Object.keys(map).forEach(ds=>{
     const o=map[ds];
-    const t=rec('mana')[ds]||{done:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    const t=rec('mana')[ds]||{done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
     if(o.weight!=null) t.weight=o.weight;
     if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
     if(o.bmi!=null) t.bmi=o.bmi;
