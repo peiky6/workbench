@@ -369,6 +369,27 @@
   .modal-card{background:var(--card);border-radius:14px;padding:18px;max-width:560px;width:100%;box-shadow:0 14px 40px rgba(0,0,0,.3)}
   .modal-h{font-size:17px;font-weight:800;margin-bottom:6px}
   #backupText{width:100%;height:42vh;margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--text);resize:vertical}
+
+  /* ---- 阅读激励（微目标 / 一键打卡 / 奖励 / 成就） ---- */
+  .read-home .btn.primary.w100{font-size:16px;padding:14px;margin-top:6px}
+  .read-home.done{background:linear-gradient(180deg,#eafaf0,#f6fffa)}
+  .read-done{font-size:14px;font-weight:700;color:#1f9d55;margin-bottom:6px}
+  .warn-banner{background:#fff3f0;border:1px solid #ffb3a3;color:#c0392b;padding:10px 14px;border-radius:12px;margin:8px 0;font-size:14px;font-weight:700}
+  .ach-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .ach-chip{background:#fff7e6;border:1px solid #ffd591;color:#ad6800;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+  .celeb-overlay{position:fixed;inset:0;background:rgba(20,20,30,.45);display:none;align-items:center;justify-content:center;z-index:90;padding:20px;overflow:hidden}
+  .celeb-overlay.show{display:flex}
+  .celeb-box{position:relative;background:var(--card);border-radius:20px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:pop .35s cubic-bezier(.2,1.4,.5,1)}
+  @keyframes pop{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+  .celeb-emoji{font-size:46px}
+  .celeb-title{font-size:20px;font-weight:800;margin-top:4px}
+  .celeb-sub{color:var(--sub);font-size:13px;margin:4px 0 12px}
+  .quote-card{background:#f7f8ff;border:1px solid #e3e7ff;border-radius:14px;padding:12px 14px;text-align:left}
+  .qc-t{font-weight:700;font-size:14px;margin-bottom:4px;color:#3a3a6a}
+  .qc-b{font-size:13px;color:#555;line-height:1.5}
+  .ach-pop{margin-top:10px;background:#fff7e6;border:1px solid #ffd591;color:#ad6800;border-radius:12px;padding:8px;font-size:13px;font-weight:700}
+  .cf{position:absolute;top:-20px;width:8px;height:14px;border-radius:2px;background:var(--c);left:calc(4% + (var(--i) * 6%));animation:fall 1.6s ease-in forwards;opacity:.9}
+  @keyframes fall{to{transform:translateY(380px) rotate(360deg);opacity:0}}
 </style>
 </head>
 <body>
@@ -400,6 +421,8 @@
       <p class="hint">设定目标后，体重图会显示目标线、首页清单与复盘会追踪进度。先留空也可随时回来填。</p>
       <div class="field"><label>目标体重(kg)</label><input id="setGoalWeight" type="number" step="0.1" placeholder="如 60" /></div>
       <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
+      <div class="field"><label>每日阅读目标(分钟 · 微习惯，默认 5)</label><input id="setReadGoal" type="number" min="1" max="240" placeholder="如 5" /></div>
+      <p class="hint">阅读用「微习惯」思路：目标设很小（如 5 分钟），容易启动、容易坚持；连续打卡会累计 🔥 与 🪙 阅读币，并解锁成就。</p>
     </div>
     <div class="sect">
       <h3>🔔 每日打卡提醒</h3>
@@ -567,7 +590,8 @@ function defaultState(){
     planSkip:{},
     planCollapsed:[],
     focusLog:{},
-    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, reminderEnabled:true, reminderHour:21 }
+    readingCoins:0, readingAch:[],
+    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
 let state = load();
@@ -609,6 +633,9 @@ function load(){
     s.planSkip = s.planSkip || {};
     s.planCollapsed = Array.isArray(s.planCollapsed) ? s.planCollapsed : [];
     s.focusLog = s.focusLog || {};
+    s.readingCoins = s.readingCoins||0;
+    s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
+    s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ return defaultState(); }
 }
@@ -637,7 +664,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-07-31c';
+const APP_VERSION = '2026-08-12a';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1733,7 +1760,9 @@ function renderHome(){
       <div class="bar"><i style="width:${done/MODULES.length*100}%"></i></div>
     </div>
     ${quizReminderHtml()}
+    ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
+    ${readingHomeHtml()}
     ${weeklyReviewHtml()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
     ${monthlyOpen?monthlyReviewHtml():''}
@@ -2523,7 +2552,9 @@ function renderReading(){
         <div class="stat"><b>${streak('reading')}</b><span>连续天数</span></div>
         <div class="stat"><b>${total('reading')}</b><span>累计打卡</span></div>
         <div class="stat"><b>${done?(dur?dur+'′':'已读'):'—'}</b><span>今日</span></div>
+        <div class="stat"><b>🪙${state.readingCoins||0}</b><span>阅读币</span></div>
       </div>
+      <div class="ach-chips">${(state.readingAch||[]).map(id=>{const a=READ_ACH.find(x=>x.id===id);return a?`<span class="ach-chip">${a.emoji} ${a.name}</span>`:'';}).join('')||'<span class="hint" style="font-size:12px">打卡解锁成就 🏅</span>'}</div>
       <div class="dots">${dots}</div>
       <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
     </div>
@@ -2534,6 +2565,7 @@ function renderReading(){
     </div>
     <div class="dcard">
       <div class="ltitle">📖 今日阅读打卡</div>
+      <p class="hint">今日目标 ${state.settings.readGoal||5} 分钟${done?'（已完成 ✅）':''}</p>
       <div class="inline">
         <input id="readingMin" type="number" placeholder="阅读时长(分钟)" value="${dur?dur:''}"/>
         <button class="mini accent" onclick="saveReading()">${done?'更新':'完成打卡'}</button>
@@ -2559,10 +2591,107 @@ function saveReading(){
   const v=document.getElementById('readingMin').value.trim();
   const note=(document.getElementById('readingNote')?document.getElementById('readingNote').value:'').trim();
   if(v && (Number(v)<1 || Number(v)>1440)){ toast('阅读时长请填 1–1440 分钟'); return; }
+  const goal=state.settings.readGoal||5;
   const t=rec('reading')[today()]||{done:false,note:''};
-  t.extra=v?Number(v):0; t.done=true; t.ts=Date.now(); t.note=note;
-  rec('reading')[today()]=t; // 修复：新记录必须写回 state，否则 save() 不持久化（首次打卡时长丢失）
-  save(); renderReading(); toast('已记录阅读时长 📖');
+  t.note=note;
+  if(v){
+    const m=Number(v);
+    if(m>=goal){ t.extra=m; rec('reading')[today()]=t; readingComplete(m); return; }
+    t.extra=m; t.done=false; rec('reading')[today()]=t; save(); renderReading();
+    toast('已记录 '+m+' 分钟，再读 '+(goal-m)+' 分钟即可打卡 📖'); return;
+  }
+  t.extra=t.extra||0; rec('reading')[today()]=t; save(); renderReading(); toast('已保存笔记 📖');
+}
+
+/* ===================== 阅读激励（微目标 / 一键打卡 / 奖励 / 成就） ===================== */
+const READ_ACH = [
+  {id:'c7',    coins:7,   emoji:'🐛', name:'一周书虫'},
+  {id:'c30',   coins:30,  emoji:'📚', name:'月度书迷'},
+  {id:'c100',  coins:100, emoji:'🏆', name:'百读不倦'},
+  {id:'stk7',  streak:7,  emoji:'🔥', name:'七日不断'},
+  {id:'stk30', streak:30, emoji:'🌟', name:'月月相连'}
+];
+// 完成一次阅读打卡：置 done、按目标下限、发阅读币(同一天不重复)、解锁成就、庆祝
+function readingComplete(minutes){
+  const goal=state.settings.readGoal||5;
+  const mins=Math.max(minutes||0,goal);
+  const t=rec('reading')[today()]||{done:false,note:''};
+  t.done=true; t.extra=mins;
+  let earned=0, newAch=[];
+  if(!t.awarded){ t.awarded=true; state.readingCoins=(state.readingCoins||0)+1; earned=1; }
+  rec('reading')[today()]=t;
+  if(earned) newAch=readingCheckAch();
+  save(); render();
+  if(earned) readingCelebrate(mins,newAch);
+}
+// 按「阅读币 / 连续天数」解锁成就，返回本次新解锁列表（写入 state.readingAch）
+function readingCheckAch(){
+  const coins=state.readingCoins||0, stk=streak('reading');
+  const got=state.readingAch||(state.readingAch=[]);
+  const fresh=[];
+  READ_ACH.forEach(a=>{
+    const met=(a.coins!=null && coins>=a.coins) || (a.streak!=null && stk>=a.streak);
+    if(met && !got.includes(a.id)){ got.push(a.id); fresh.push(a); }
+  });
+  return fresh;
+}
+// 首页一键打卡：直接按目标分钟完成
+function readingQuickCheckIn(){ readingComplete(state.settings.readGoal||5); }
+// 随机金句/知识点卡池：AI 术语库 + 你的读书笔记
+function readingRandomCard(){
+  const pool=[];
+  AI_TERMS.forEach(t=>{ if(t.example) pool.push({title:'💡 '+t.term, body:t.example}); });
+  Object.keys(rec('reading')).forEach(d=>{ const r=rec('reading')[d]; if(r&&r.note) pool.push({title:'📝 你的读书笔记 · '+d, body:r.note}); });
+  if(!pool.length) return {title:'🌱 微习惯', body:'今天读 5 分钟，就是胜利。坚持比强度更重要。'};
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+// 庆祝 overlay + confetti + 随机卡 + 成就
+function readingCelebrate(mins,newAch){
+  const card=readingRandomCard();
+  const achHtml=(newAch&&newAch.length)?`<div class="ach-pop">🎉 解锁成就 ${newAch.map(a=>a.emoji+a.name).join(' ')}</div>`:'';
+  const colors=['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c780fa'];
+  const confetti=Array.from({length:16}).map((_,i)=>`<i class="cf" style="--i:${i};--c:${colors[i%colors.length]}"></i>`).join('');
+  let ov=document.getElementById('readCelebrate');
+  if(!ov){ ov=document.createElement('div'); ov.id='readCelebrate'; document.body.appendChild(ov); }
+  ov.className='celeb-overlay';
+  ov.innerHTML=`${confetti}<div class="celeb-box">
+    <div class="celeb-emoji">🎉</div>
+    <div class="celeb-title">阅读打卡成功！</div>
+    <div class="celeb-sub">今日已读 ${mins} 分钟 · 🪙 +1 阅读币</div>
+    <div class="quote-card"><div class="qc-t">${escapeHtml(card.title)}</div><div class="qc-b">${escapeHtml(card.body)}</div></div>
+    ${achHtml}
+    <button class="btn primary w100" onclick="closeCelebrate()">收下 ✨</button>
+  </div>`;
+  requestAnimationFrame(()=>ov.classList.add('show'));
+}
+function closeCelebrate(){ const ov=document.getElementById('readCelebrate'); if(ov) ov.classList.remove('show'); }
+// 首页一键打卡卡
+function readingHomeHtml(){
+  const goal=state.settings.readGoal||5;
+  const done=isDone('reading',today());
+  const t=rec('reading')[today()]||{};
+  const stk=streak('reading');
+  const coins=state.readingCoins||0;
+  if(done){
+    return `<div class="dcard read-home done">
+      <div class="ltitle">📖 今日阅读</div>
+      <div class="read-done">✅ 已读 ${t.extra||goal} 分钟 · 🔥连续 ${stk} 天 · 🪙 ${coins}</div>
+      <button class="mini line" onclick="setView('reading')">查看 / 补记分钟 →</button>
+    </div>`;
+  }
+  return `<div class="dcard read-home">
+    <div class="ltitle">📖 今日阅读</div>
+    <p class="hint">微习惯：今天只要读 ${goal} 分钟就赢 ✨</p>
+    <button class="btn primary w100" onclick="readingQuickCheckIn()">✅ 今日已读 ${goal} 分钟（一键打卡）</button>
+    <button class="mini line" onclick="setView('reading')" style="margin-top:6px">想读更久？去模块记分钟 →</button>
+  </div>`;
+}
+// 断卡预警（损失厌恶）：今天没读、且昨天读了（即今天再不读明天中断）
+function readingStreakWarningHtml(){
+  if(isDone('reading',today())) return '';
+  if(!isDone('reading',addDays(today(),-1))) return '';
+  const goal=state.settings.readGoal||5;
+  return `<div class="warn-banner">⚠️ 你的连续阅读明天将中断！今天读 ${goal} 分钟就能保住 🔥（已连续 ${streak('reading')} 天）</div>`;
 }
 function openBookEditor(){
   const books=state.readingBooks;
@@ -3106,7 +3235,14 @@ function addLightMeal(){
 }
 
 /* ---- 标记完成 ---- */
-function toggleDone(key){ const r=rec(key)[today()]||{}; r.done=!r.done; r.ts=Date.now(); rec(key)[today()]=r; save(); render(); toast(r.done?'已标记完成 ✅':'已取消'); }
+function toggleDone(key){
+  if(key==='reading'){
+    const r=rec(key)[today()]||{done:false,note:''};
+    if(!r.done){ readingComplete(Math.max((r.extra||0),(state.settings.readGoal||5))); return; }
+    r.done=false; r.ts=Date.now(); rec(key)[today()]=r; save(); render(); toast('已取消今日阅读完成'); return;
+  }
+  const r=rec(key)[today()]||{}; r.done=!r.done; r.ts=Date.now(); rec(key)[today()]=r; save(); render(); toast(r.done?'已标记完成 ✅':'已取消');
+}
 
 /* ===================== CORS 代理抓取 ===================== */
 async function fetchViaProxy(url){
@@ -3146,6 +3282,7 @@ function openSettings(){
   document.getElementById('setWeight').value=p.weight||'';
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
+  document.getElementById('setReadGoal').value=(state.settings.readGoal!=null)?state.settings.readGoal:5;
   document.getElementById('setRemind').value=state.settings.reminderEnabled?'on':'off';
   document.getElementById('setRemindHour').value=(state.settings.reminderHour!=null)?state.settings.reminderHour:21;
   document.getElementById('biliYs').value=state.bili.ysSpeak||'';
@@ -3205,6 +3342,7 @@ function closeSettings(){
   s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
   s.reminderEnabled = document.getElementById('setRemind').value==='on';
   s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
+  s.readGoal = document.getElementById('setReadGoal').value.trim()?Math.max(1,Number(document.getElementById('setReadGoal').value.trim())||5):5;
   save(); render(); document.getElementById('settingsPanel').classList.remove('show');
 }
 
