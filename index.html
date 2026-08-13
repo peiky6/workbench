@@ -660,7 +660,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-13d';
+const APP_VERSION = '2026-08-13e';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1777,13 +1777,22 @@ function todayChecklistHtml(){
   const ieltsDone=dayDone('ielts',td);
   const readDone=isDone('reading',td);
   const newsDone=isDone('news',td);
-  const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.exercises&&m.exercises.length); if(trainAllCancelled) trainDone=true; const trainText = trainAllCancelled ? ('今日训练已取消（'+cancelledToday.length+' 项）🚫') : (trainDone?'已完成今日训练记录':(tp.items.length?('下班后训练：'+tp.title):'今日休息日，轻松一下'));
+  const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.exercises&&m.exercises.length); if(trainAllCancelled) trainDone=true;
+  let trainText;
+  if(trainAllCancelled) trainText='今日训练已取消（'+cancelledToday.length+' 项）🚫';
+  else if(!tp.items.length) trainText='今日休息日，轻松一下';
+  else { const names=tp.items.map(it=>it.n).join('、'); trainText = trainDone ? ('已完成「'+names+'」训练计划') : ('下班后训练：'+names); }
+  const wd=weekdayToday(); const isWeekend=(wd===0||wd===6);
+  const hasMeals = !!(m&&m.meals&&['breakfast','lunch','dinner'].some(k=>m.meals[k]&&m.meals[k].length));
+  const dietText = isWeekend ? (hasMeals?'已记录饮食（坚持 16+8 · 下午5点前吃完）':'坚持 16+8 · 下午5点前吃完（周末）') : (hasMeals?'已记录今日三餐':'饮食打卡（记录三餐 · 16+8）');
+  const dietDone = hasMeals;
   const items=[
     {view:'plan', done:planDone, text:planText},
     {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
     {view:'ielts', done:ieltsDone, text: ieltsDone?'雅思已练习（菜单打卡）':'雅思练习（菜单打卡 · 点选1-2项）'},
     {view:'news', done:newsDone, text: newsDone?'已读今日虎嗅早报':'阅读虎嗅早报（新闻阅读）'},
     {view:'reading', done:readDone, text: readDone?'已阅读 5 分钟':'每日阅读5分钟'},
+    {view:'mana', done:dietDone, text: dietText},
     {view:'mana', done:trainDone, text: trainText}
   ];
   const done=items.filter(i=>i.done).length;
@@ -2853,7 +2862,7 @@ const TRAIN_PLAN = {
  3:{title:'周三：腰腹塑形（纯操课，~60分钟）', items:[{n:'腰腹塑形',met:4.5,min:60}]},
  4:{title:'周四：肌肉塑造（~60分钟，方案A/B）', items:[{n:'肌肉塑造',met:5,min:60}]},
  5:{title:'周五：自主练 上肢拉+驼背 → 跑步机坡度走（~60分钟）', items:[{n:'绳索面拉',met:3.5,min:10},{n:'坐姿绳索划船',met:3.5,min:8},{n:'反向蝴蝶机',met:3.5,min:6},{n:'全身大拉伸',met:2.5,min:12},{n:'跑步机坡度走',met:6,min:25}]},
- 6:{title:'周六：彻底休息（恢复日）', items:[]},
+ 6:{title:'周六：Zumba 燃脂舞（~60分钟）', items:[{n:'Zumba 燃脂舞',met:7,min:60}]},
  0:{title:'周日：核心雕塑（低强度收尾，~60分钟）', items:[{n:'核心雕塑',met:5,min:60}]}
 };
 const DIET_PLAN = { 1:dietTrain(),2:dietTrain(),3:dietTrain(),4:dietTrain(),5:dietTrain() };
@@ -2978,7 +2987,7 @@ function renderMana(){
     <div class="dcard">
       <div class="ltitle">🍽️ 饮食（输入即算卡路里）</div>
       ${mealsHtml}
-      <p class="hint" style="margin:4px 2px 8px">🗓️ 周一~五套用训练日计划 · 周末（周六日）自由饮食，不套用计划。工作日 16+8，17:00 晚餐后训练。</p>
+      <p class="hint" style="margin:4px 2px 8px">🗓️ 周一~五套用训练日计划；工作日 16+8，晚餐在 17:00 前吃完、餐后训练。周末自由饮食，但同样坚持 16+8、下午 5 点前吃完 🍽️。</p>
       <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
     </div>
     <div class="dcard">
