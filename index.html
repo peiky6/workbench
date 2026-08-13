@@ -390,6 +390,24 @@
   .ach-pop{margin-top:10px;background:#fff7e6;border:1px solid #ffd591;color:#ad6800;border-radius:12px;padding:8px;font-size:13px;font-weight:700}
   .cf{position:absolute;top:-20px;width:8px;height:14px;border-radius:2px;background:var(--c);left:calc(4% + (var(--i) * 6%));animation:fall 1.6s ease-in forwards;opacity:.9}
   @keyframes fall{to{transform:translateY(380px) rotate(360deg);opacity:0}}
+
+  /* ---- 阅读二梯队：书籍进度 / 已读书架 / 读书卡片 ---- */
+  .bcard-wrap{display:flex;flex-direction:column;align-items:stretch}
+  .bprog{height:7px;background:var(--bg);border-radius:999px;overflow:hidden;margin-top:6px}
+  .bprog-bar{height:100%;background:linear-gradient(90deg,#4d96ff,#6bcb77);border-radius:999px;transition:width .4s ease}
+  .bprog-txt{font-size:11.5px;color:var(--sub);margin:3px 0 5px;text-align:center}
+  .bcard-wrap .mini.line{margin-top:auto}
+  .week-mini{font-size:13px;color:var(--sub);margin-top:10px;background:var(--bg);border-radius:10px;padding:8px 10px}
+  .week-mini b{color:var(--ink)}
+  .finished-shelf{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .fbook{background:#eafaf0;border:1px solid #b7e4c7;border-radius:10px;padding:8px 10px;font-size:13px;color:#1f7a4d}
+  .fbook .hint{color:#7aa98a}
+  .note-timeline{display:flex;flex-direction:column;gap:8px;margin-top:8px;max-height:340px;overflow:auto}
+  .note-card{background:var(--bg);border:1px solid var(--line);border-left:3px solid #4d96ff;border-radius:10px;padding:8px 10px}
+  .nc-date{font-size:11px;color:var(--sub);margin-bottom:3px}
+  .nc-body{font-size:13.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap}
+  .secttitle{margin:18px 0 2px;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .secttitle .mini.line{padding:1px 9px;font-size:11px}
 </style>
 </head>
 <body>
@@ -579,9 +597,9 @@ function defaultState(){
     bili:{ ysSpeak:'https://b23.tv/QyDo3cz', ys99:'https://b23.tv/NgeMe1z', simon:'https://b23.tv/d4Itox3' },
     newsLinks: JSON.parse(JSON.stringify(DEFAULT_LINKS)),
     readingBooks:[
-      {name:'深奥的简洁', cover:'', url:wereadUrl('深奥的简洁')},
-      {name:'爱弥儿', cover:'', url:wereadUrl('爱弥儿')},
-      {name:'纳瓦尔宝典', cover:'', url:wereadUrl('纳瓦尔宝典')}
+      {name:'深奥的简洁', cover:'', url:wereadUrl('深奥的简洁'), total:0, current:0, finished:false, finishedDate:''},
+      {name:'爱弥儿', cover:'', url:wereadUrl('爱弥儿'), total:0, current:0, finished:false, finishedDate:''},
+      {name:'纳瓦尔宝典', cover:'', url:wereadUrl('纳瓦尔宝典'), total:0, current:0, finished:false, finishedDate:''}
     ],
     modules: Object.fromEntries(MODULES.map(m=>[m.key,{records:{}}])),
     aiMastered:[], aiMasteredTs:{}, aiMasteredDel:{}, aiDaily:{}, aiStudy:{}, aiStudyTs:{}, aiPass1:[], aiExt:{},
@@ -590,7 +608,7 @@ function defaultState(){
     planSkip:{},
     planCollapsed:[],
     focusLog:{},
-    readingCoins:0, readingAch:[],
+    readingCoins:0, readingAch:[], readingFinished:[],
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
@@ -626,6 +644,7 @@ function load(){
     s.bili = Object.assign(d.bili, s.bili||{});
     s.newsLinks = s.newsLinks && s.newsLinks.length ? s.newsLinks : d.newsLinks;
     s.readingBooks = s.readingBooks && s.readingBooks.length ? s.readingBooks : d.readingBooks;
+    s.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
     s.settings = Object.assign(d.settings, s.settings||{});
     s.modules = s.modules || {};
     MODULES.forEach(m=>{ if(!s.modules[m.key]) s.modules[m.key] = {records:{}}; });
@@ -635,6 +654,7 @@ function load(){
     s.focusLog = s.focusLog || {};
     s.readingCoins = s.readingCoins||0;
     s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
+    s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
     s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ return defaultState(); }
@@ -664,7 +684,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-12a';
+const APP_VERSION = '2026-08-13b';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1833,6 +1853,7 @@ function weeklyReviewHtml(){
   if(goalW!=null){ const lw=latestWeight(); if(lw!=null){ const diff=+(lw-goalW).toFixed(1); goalLine=' · 距目标体重还剩 '+(diff>0?diff+'kg 要减':(diff<0?(-diff)+'kg 余量':'已达成'))+' 🎯'; } }
   const summary= rate>=80?'本周节奏很稳，继续保持 💪' : (rate>=50?'本周完成过半，再加把劲 🔥':'本周有点松懈，明天从小事捡起就好 🍃');
   const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
+  const rw=readingWeekStats();
   return `<div class="dcard">
     <div class="ltitle">📊 本周复盘（近 7 天）</div>
     <div class="stats">
@@ -1844,6 +1865,16 @@ function weeklyReviewHtml(){
     </div>
     <div class="ichips" style="margin-top:6px">${chips}</div>
     <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
+  </div>
+  <div class="dcard">
+    <div class="ltitle">📖 阅读本周复盘（近 7 天）</div>
+    <div class="stats">
+      <div class="stat"><b>${rw.days}天</b><span>阅读天数</span></div>
+      <div class="stat"><b>${rw.mins}′</b><span>阅读分钟</span></div>
+      <div class="stat"><b>${rw.finished}本</b><span>本周读完</span></div>
+      <div class="stat"><b>🔥${rw.streak}</b><span>当前连续</span></div>
+    </div>
+    <div class="motivate" style="margin-top:8px">${readingWeekGoal(rw.days,rw.mins,rw.finished)}</div>
   </div>`;
 }
 function monthlyReviewHtml(){
@@ -2536,11 +2567,25 @@ function renderReading(){
   const t=rec('reading')[today()]||{done:false,extra:0,note:''};
   const dur=t.extra||0;
   const dots=last7('reading').map(d=>`<div class="d ${d.on?'on':''} ${d.today?'today':''}"></div>`).join('');
-  const books=state.readingBooks.map((b,i)=>`
-    <a class="bcard" href="${escapeAttr(b.url)}" target="_blank" rel="noopener">
-      ${bookCover(b,i)}
-      <span class="bname">${escapeHtml(b.name)}</span>
-    </a>`).join('');
+  const books=state.readingBooks.map((b,i)=>{
+    const total=b.total||0, cur=b.current||0;
+    const pct= total>0 ? Math.min(100, Math.round(cur/total*100)) : 0;
+    const remain= total>0 ? Math.max(0, total-cur) : 0;
+    const prog = total>0
+      ? `<div class="bprog"><div class="bprog-bar" style="width:${pct}%"></div></div>
+         <div class="bprog-txt">${cur}/${total} 页 · 还剩 ${remain} 页${b.finished?' · ✅ 已读完':''}</div>`
+      : `<div class="bprog-txt hint">未设总页数（点「更新进度」）</div>`;
+    return `
+    <div class="bcard-wrap">
+      <a class="bcard" href="${escapeAttr(b.url)}" target="_blank" rel="noopener">
+        ${bookCover(b,i)}
+        <span class="bname">${escapeHtml(b.name)}</span>
+      </a>
+      ${prog}
+      <button class="mini line" onclick="openBookProgress(${i})">📈 更新进度</button>
+    </div>`;
+  }).join('');
+  const week=readingWeekStats();
   const hist=readingHistoryHtml();
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -2556,13 +2601,16 @@ function renderReading(){
       </div>
       <div class="ach-chips">${(state.readingAch||[]).map(id=>{const a=READ_ACH.find(x=>x.id===id);return a?`<span class="ach-chip">${a.emoji} ${a.name}</span>`:'';}).join('')||'<span class="hint" style="font-size:12px">打卡解锁成就 🏅</span>'}</div>
       <div class="dots">${dots}</div>
-      <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
+      <div class="week-mini">📅 本周已读 <b>${week.days}</b> 天 · ⏱️ <b>${week.mins}</b> 分钟 · 📚 读完 <b>${week.finished}</b> 本</div>
     </div>
     <div class="dcard">
       <div class="ltitle">📚 本期推荐 Top 3（点封面去微信读书）</div>
       <div class="books">${books}</div>
-      <p class="hint">点击任意书封面，直接跳转微信读书开始阅读；封面/书名/链接都可在上方编辑。</p>
+      <p class="hint">点击任意书封面开始阅读；封面/书名/链接/进度都可在「编辑书籍」里改。</p>
+      <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
     </div>
+    ${readingFinishedHtml()}
+    ${readingNotesTimelineHtml()}
     <div class="dcard">
       <div class="ltitle">📖 今日阅读打卡</div>
       <p class="hint">今日目标 ${state.settings.readGoal||5} 分钟${done?'（已完成 ✅）':''}</p>
@@ -2609,7 +2657,9 @@ const READ_ACH = [
   {id:'c30',   coins:30,  emoji:'📚', name:'月度书迷'},
   {id:'c100',  coins:100, emoji:'🏆', name:'百读不倦'},
   {id:'stk7',  streak:7,  emoji:'🔥', name:'七日不断'},
-  {id:'stk30', streak:30, emoji:'🌟', name:'月月相连'}
+  {id:'stk30', streak:30, emoji:'🌟', name:'月月相连'},
+  {id:'f1',    finished:1, emoji:'🏅', name:'开卷有成'},
+  {id:'f5',    finished:5, emoji:'📚', name:'博览群书'}
 ];
 // 完成一次阅读打卡：置 done、按目标下限、发阅读币(同一天不重复)、解锁成就、庆祝
 function readingComplete(minutes){
@@ -2626,11 +2676,11 @@ function readingComplete(minutes){
 }
 // 按「阅读币 / 连续天数」解锁成就，返回本次新解锁列表（写入 state.readingAch）
 function readingCheckAch(){
-  const coins=state.readingCoins||0, stk=streak('reading');
+  const coins=state.readingCoins||0, stk=streak('reading'), fc=(state.readingFinished||[]).length;
   const got=state.readingAch||(state.readingAch=[]);
   const fresh=[];
   READ_ACH.forEach(a=>{
-    const met=(a.coins!=null && coins>=a.coins) || (a.streak!=null && stk>=a.streak);
+    const met=(a.coins!=null && coins>=a.coins) || (a.streak!=null && stk>=a.streak) || (a.finished!=null && fc>=a.finished);
     if(met && !got.includes(a.id)){ got.push(a.id); fresh.push(a); }
   });
   return fresh;
@@ -2664,7 +2714,7 @@ function readingCelebrate(mins,newAch){
   </div>`;
   requestAnimationFrame(()=>ov.classList.add('show'));
 }
-function closeCelebrate(){ const ov=document.getElementById('readCelebrate'); if(ov) ov.classList.remove('show'); }
+function closeCelebrate(ovId){ const ov=document.getElementById(ovId||'readCelebrate'); if(ov) ov.classList.remove('show'); }
 // 首页一键打卡卡
 function readingHomeHtml(){
   const goal=state.settings.readGoal||5;
@@ -2705,6 +2755,10 @@ function openBookEditor(){
       <input id="bk${i}cover" value="${escapeAttr(b.cover)}" placeholder="https://...png/jpg" />
       <label>微信读书链接</label>
       <input id="bk${i}url" value="${escapeAttr(b.url)}" placeholder="https://weread.qq.com/..." />
+      <div class="bgrid">
+        <div class="field"><label>总页数</label><input id="bk${i}total" type="number" min="0" value="${b.total||0}"/></div>
+        <div class="field"><label>已读页</label><input id="bk${i}current" type="number" min="0" value="${b.current||0}"/></div>
+      </div>
     `).join('<hr style="border:none;border-top:1px solid var(--line);margin:10px 0">')}
     <div class="row">
       <button class="btn ghost" onclick="closeSheet()">取消</button>
@@ -2713,12 +2767,101 @@ function openBookEditor(){
   document.getElementById('sheetMask').classList.add('show');
 }
 function saveBookEditor(){
-  state.readingBooks=state.readingBooks.map((b,i)=>({
-    name: document.getElementById('bk'+i+'name').value.trim()||b.name,
-    cover: document.getElementById('bk'+i+'cover').value.trim(),
-    url: document.getElementById('bk'+i+'url').value.trim()||b.url
-  }));
+  state.readingBooks=state.readingBooks.map((b,i)=>{
+    const total=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'total').value)||0));
+    const cur=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'current').value)||0));
+    const nb={ name: document.getElementById('bk'+i+'name').value.trim()||b.name,
+      cover: document.getElementById('bk'+i+'cover').value.trim(),
+      url: document.getElementById('bk'+i+'url').value.trim()||b.url,
+      total, current:cur };
+    nb.finished = total>0 && cur>=total;
+    if(nb.finished){ nb.finishedDate = b.finishedDate||today(); pushFinished(nb); } else { nb.finishedDate=''; }
+    return nb;
+  });
   save(); closeSheet(); renderReading(); toast('已保存书单 ✅');
+}
+function pushFinished(b){
+  state.readingFinished=state.readingFinished||[];
+  if(!state.readingFinished.find(x=>x.name===b.name)) state.readingFinished.push({name:b.name, finishedDate:b.finishedDate, total:b.total});
+}
+function openBookProgress(i){
+  const b=state.readingBooks[i];
+  document.getElementById('sheet').innerHTML=`
+    <h3>📈 更新《${escapeHtml(b.name)}》进度</h3>
+    <div class="field"><label>总页数（0 表示未设定）</label><input id="bpTotal" type="number" min="0" value="${b.total||0}"/></div>
+    <div class="field"><label>已读到第几页</label><input id="bpCur" type="number" min="0" value="${b.current||0}"/></div>
+    <p class="hint">读到最后一页会自动弹「完读成就」并进「已读书架」📚</p>
+    <div class="row">
+      <button class="btn ghost" onclick="closeSheet()">取消</button>
+      <button class="btn primary" onclick="saveBookProgress(${i})">保存进度</button>
+    </div>`;
+  document.getElementById('sheetMask').classList.add('show');
+}
+function saveBookProgress(i){
+  const b=state.readingBooks[i];
+  b.total=Math.max(0,Math.floor(Number(document.getElementById('bpTotal').value)||0));
+  b.current=Math.max(0,Math.floor(Number(document.getElementById('bpCur').value)||0));
+  state.readingFinished=state.readingFinished||[];
+  if(b.total>0 && b.current>=b.total){
+    if(!b.finishedDate) b.finishedDate=today();
+    b.finished=true;
+    if(!state.readingFinished.find(x=>x.name===b.name)) state.readingFinished.push({name:b.name, finishedDate:b.finishedDate, total:b.total});
+  } else {
+    b.finished=false; b.finishedDate='';
+    state.readingFinished=state.readingFinished.filter(x=>x.name!==b.name);
+  }
+  const na=readingCheckAch();
+  save(); closeSheet(); renderReading();
+  if(b.finished) readingFinishCelebrate(b.name, state.readingFinished.length, na);
+  else toast('已更新进度 📈');
+}
+function readingFinishCelebrate(name, fc, newAch){
+  const achHtml=(newAch&&newAch.length)?`<div class="ach-pop">🎉 解锁成就 ${newAch.map(a=>a.emoji+a.name).join(' ')}</div>`:'';
+  let ov=document.getElementById('readFinish');
+  if(!ov){ ov=document.createElement('div'); ov.id='readFinish'; ov.className='celeb-overlay'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="celeb-box">
+    <div class="celeb-emoji">🎉</div>
+    <div class="celeb-title">读完啦！《${escapeHtml(name)}》</div>
+    <div class="celeb-sub">已加入「已读书架」· 累计读完 ${fc} 本 📚</div>
+    ${achHtml}
+    <button class="btn primary w100" onclick="closeCelebrate('readFinish')">收下成就感 ✨</button>
+  </div>`;
+  requestAnimationFrame(()=>ov.classList.add('show'));
+}
+function readingFinishedHtml(){
+  const f=state.readingFinished||[];
+  if(!f.length) return '';
+  return `<div class="secttitle">📚 已读书架（${f.length} 本）</div><div class="finished-shelf">${f.map(x=>`<div class="fbook">✅ <b>${escapeHtml(x.name)}</b> <span class="hint">· ${x.finishedDate||''}${x.total?(' · '+x.total+'页'):''}</span></div>`).join('')}</div>`;
+}
+function readingNotesTimelineHtml(){
+  const notes=Object.keys(rec('reading')).filter(d=>rec('reading')[d]&&rec('reading')[d].note).sort((a,b)=>b.localeCompare(a));
+  if(!notes.length) return '<div class="secttitle">📝 我的读书卡片</div><p class="hint">每次打卡写的「一句话感想」都会沉淀成卡片，可随时回来翻。</p>';
+  const body=notes.map(d=>{ const r=rec('reading')[d]; return `<div class="note-card"><div class="nc-date">${d}</div><div class="nc-body">${escapeHtml(r.note)}</div></div>`; }).join('');
+  return `<div class="secttitle">📝 我的读书卡片（${notes.length}）<button class="mini line" onclick="readingNoteReview()">🎲 随机回顾 3 张</button></div><div class="note-timeline">${body}</div>`;
+}
+function readingNoteReview(){
+  const notes=Object.keys(rec('reading')).filter(d=>rec('reading')[d]&&rec('reading')[d].note).map(d=>({d,note:rec('reading')[d].note}));
+  if(!notes.length){ toast('还没有读书笔记哦，先去打卡写感想吧'); return; }
+  const pick=[], pool=[...notes];
+  while(pick.length<Math.min(3,pool.length)&&pool.length){ pick.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]); }
+  document.getElementById('sheet').innerHTML=`<h3>🎲 随机读书卡片 · 3 张回顾</h3><div class="note-timeline">${pick.map(x=>`<div class="note-card"><div class="nc-date">${x.d}</div><div class="nc-body">${escapeHtml(x.note)}</div></div>`).join('')}</div><button class="btn primary w100" onclick="closeSheet()">收起</button>`;
+  document.getElementById('sheetMask').classList.add('show');
+}
+function readingWeekStats(){
+  const td=today(); let days=0, mins=0;
+  for(let i=6;i>=0;i--){ const d=addDays(td,-i); const r=rec('reading')[d]; if(r&&r.done){ days++; mins+=(r.extra||0); } }
+  const finished=(state.readingFinished||[]).filter(x=>x.finishedDate && new Date(x.finishedDate)>=startOfWeek(new Date())).length;
+  return {days, mins, finished, streak:streak('reading')};
+}
+function readingWeekGoal(rd,rm,fw){
+  if(rd>=7) return '本周全勤阅读 🔥 太稳了！下周小目标：再读完 1 本书 📚';
+  const gap=7-rd;
+  return `本周读了 ${rd} 天，离全勤还差 ${gap} 天。下周小目标：每天读 ${state.settings.readGoal||5} 分钟，争取 ${Math.min(7,rd+3)} 天打卡 💪${fw>0?'（本周已读完 '+fw+' 本，继续保持！）':''}`;
+}
+function mergeReadingFinished(local,remote){
+  const map={};
+  [...(local||[]),...(remote||[])].forEach(x=>{ if(x&&x.name){ const e=map[x.name]; if(!e) map[x.name]=Object.assign({},x); else { if(x.finishedDate && (!e.finishedDate||x.finishedDate>e.finishedDate)) e.finishedDate=x.finishedDate; if(x.total) e.total=x.total; } } });
+  return Object.values(map);
 }
 function closeSheet(){ document.getElementById('sheetMask').classList.remove('show'); }
 
@@ -3451,6 +3594,10 @@ function mergeState(remote){
   state.bili=Object.assign(d.bili,remote.bili||{});
   state.newsLinks=remote.newsLinks&&remote.newsLinks.length?remote.newsLinks:d.newsLinks;
   state.readingBooks=remote.readingBooks&&remote.readingBooks.length?remote.readingBooks:d.readingBooks;
+  state.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
+  state.readingFinished=mergeReadingFinished(state.readingFinished||[], remote.readingFinished||[]);
+  state.readingCoins=Math.max(state.readingCoins||0, remote.readingCoins||0);
+  state.readingAch=[...new Set([...(state.readingAch||[]), ...(remote.readingAch||[])])];
   // 术语掌握：按 ts 的 last-write-wins，避免「A 端答错移除、B 端还在」合并时被复活
   { const ts=Object.assign({}, state.aiMasteredTs||{}, remote.aiMasteredTs||{});
     const del=Object.assign({}, state.aiMasteredDel||{}, remote.aiMasteredDel||{});
