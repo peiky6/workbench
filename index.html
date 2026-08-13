@@ -434,7 +434,7 @@
       <div class="field"><label>目标体重(kg)</label><input id="setGoalWeight" type="number" step="0.1" placeholder="如 60" /></div>
       <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
       <div class="field"><label>每日阅读目标(分钟 · 微习惯，默认 5)</label><input id="setReadGoal" type="number" min="1" max="240" placeholder="如 5" /></div>
-      <p class="hint">阅读用「微习惯」思路：目标设很小（如 5 分钟），容易启动、容易坚持；连续打卡会累计 🔥 与 🪙 阅读币，并解锁成就。</p>
+      <p class="hint">阅读用「微习惯」思路：目标设很小（如 5 分钟），容易启动、容易坚持；连续打卡解锁成就，完成后记得去微信读书领书币 📖。</p>
     </div>
     <div class="sect">
       <h3>🔔 每日打卡提醒</h3>
@@ -586,7 +586,7 @@ function defaultState(){
     trainCancel:{total:0, log:{}},
     planSkip:{},
     planCollapsed:[],
-    readingCoins:0, readingAch:[], readingFinished:[],
+    readingAch:[], readingFinished:[],
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
@@ -629,7 +629,6 @@ function load(){
     s.trainCancel = (s.trainCancel && s.trainCancel.log) ? s.trainCancel : {total:0, log:{}};
     s.planSkip = s.planSkip || {};
     s.planCollapsed = Array.isArray(s.planCollapsed) ? s.planCollapsed : [];
-    s.readingCoins = s.readingCoins||0;
     s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
     s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
     s.settings.readGoal = s.settings.readGoal||5;
@@ -661,7 +660,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-13c';
+const APP_VERSION = '2026-08-13d';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -2548,7 +2547,7 @@ function renderReading(){
         <div class="stat"><b>${streak('reading')}</b><span>连续天数</span></div>
         <div class="stat"><b>${total('reading')}</b><span>累计打卡</span></div>
         <div class="stat"><b>${done?(dur?dur+'′':'已读'):'—'}</b><span>今日</span></div>
-        <div class="stat"><b>🪙${state.readingCoins||0}</b><span>阅读币</span></div>
+        <div class="stat"><b>${(state.readingFinished||[]).length}</b><span>读完本数</span></div>
       </div>
       <div class="ach-chips">${(state.readingAch||[]).map(id=>{const a=READ_ACH.find(x=>x.id===id);return a?`<span class="ach-chip">${a.emoji} ${a.name}</span>`:'';}).join('')||'<span class="hint" style="font-size:12px">打卡解锁成就 🏅</span>'}</div>
       <div class="dots">${dots}</div>
@@ -2571,7 +2570,7 @@ function renderReading(){
       </div>
       <input id="readingNote" class="full" placeholder="读了什么 / 一句话感想（可选）" value="${t.note?escapeAttr(t.note):''}" style="margin-top:8px"/>
       <button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('reading')" style="margin-top:10px">${done?'✏️ 取消今日完成':'✅ 标记今日完成'}</button>
-      <p class="hint">读完填写时长并打卡，连续天数会自动累计 💪</p>
+      <p class="hint">${done?'📖 已打卡！记得去微信读书领今日书币':'读完填写时长并打卡，连续天数会自动累计 💪'}</p>
     </div>
     ${hist}`;
 }
@@ -2604,34 +2603,34 @@ function saveReading(){
 
 /* ===================== 阅读激励（微目标 / 一键打卡 / 奖励 / 成就） ===================== */
 const READ_ACH = [
-  {id:'c7',    coins:7,   emoji:'🐛', name:'一周书虫'},
-  {id:'c30',   coins:30,  emoji:'📚', name:'月度书迷'},
-  {id:'c100',  coins:100, emoji:'🏆', name:'百读不倦'},
+  {id:'c7',    total:7,   emoji:'🐛', name:'一周书虫'},
+  {id:'c30',   total:30,  emoji:'📚', name:'月度书迷'},
+  {id:'c100',  total:100, emoji:'🏆', name:'百读不倦'},
   {id:'stk7',  streak:7,  emoji:'🔥', name:'七日不断'},
   {id:'stk30', streak:30, emoji:'🌟', name:'月月相连'},
   {id:'f1',    finished:1, emoji:'🏅', name:'开卷有成'},
   {id:'f5',    finished:5, emoji:'📚', name:'博览群书'}
 ];
-// 完成一次阅读打卡：置 done、按目标下限、发阅读币(同一天不重复)、解锁成就、庆祝
+// 完成一次阅读打卡：置 done、按目标下限、解锁成就、庆祝
 function readingComplete(minutes){
   const goal=state.settings.readGoal||5;
   const mins=Math.max(minutes||0,goal);
   const t=rec('reading')[today()]||{done:false,note:''};
   t.done=true; t.extra=mins;
-  let earned=0, newAch=[];
-  if(!t.awarded){ t.awarded=true; state.readingCoins=(state.readingCoins||0)+1; earned=1; }
+  const isFirst = !t.awarded;
+  const newAch = isFirst ? readingCheckAch() : [];
+  t.awarded = true;
   rec('reading')[today()]=t;
-  if(earned) newAch=readingCheckAch();
   save(); render();
-  if(earned) readingCelebrate(mins,newAch);
+  if(isFirst) readingCelebrate(mins,newAch);
 }
-// 按「阅读币 / 连续天数」解锁成就，返回本次新解锁列表（写入 state.readingAch）
+// 按「累计天数 / 连续天数 / 读完本数」解锁成就，返回本次新解锁列表（写入 state.readingAch）
 function readingCheckAch(){
-  const coins=state.readingCoins||0, stk=streak('reading'), fc=(state.readingFinished||[]).length;
+  const tot=total('reading'), stk=streak('reading'), fc=(state.readingFinished||[]).length;
   const got=state.readingAch||(state.readingAch=[]);
   const fresh=[];
   READ_ACH.forEach(a=>{
-    const met=(a.coins!=null && coins>=a.coins) || (a.streak!=null && stk>=a.streak) || (a.finished!=null && fc>=a.finished);
+    const met=(a.total!=null && tot>=a.total) || (a.streak!=null && stk>=a.streak) || (a.finished!=null && fc>=a.finished);
     if(met && !got.includes(a.id)){ got.push(a.id); fresh.push(a); }
   });
   return fresh;
@@ -2656,10 +2655,11 @@ function readingCelebrate(mins,newAch){
   ov.innerHTML=`${confetti}<div class="celeb-box">
     <div class="celeb-emoji">🎉</div>
     <div class="celeb-title">阅读打卡成功！</div>
-    <div class="celeb-sub">今日已读 ${mins} 分钟 · 🪙 +1 阅读币</div>
+    <div class="celeb-sub">今日已读 ${mins} 分钟 · 已连续 ${streak('reading')} 天 💪</div>
     <div class="quote-card"><div class="qc-t">${escapeHtml(card.title)}</div><div class="qc-b">${escapeHtml(card.body)}</div></div>
     ${achHtml}
-    <button class="btn primary w100" onclick="closeCelebrate()">收下 ✨</button>
+    <a class="btn primary w100" href="https://weread.qq.com/" target="_blank" rel="noopener">📖 去微信读书领今日书币</a>
+    <button class="btn ghost w100" onclick="closeCelebrate()">收下 ✨</button>
   </div>`;
   requestAnimationFrame(()=>ov.classList.add('show'));
 }
@@ -3522,7 +3522,6 @@ function mergeState(remote){
   state.readingBooks=remote.readingBooks&&remote.readingBooks.length?remote.readingBooks:d.readingBooks;
   state.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
   state.readingFinished=mergeReadingFinished(state.readingFinished||[], remote.readingFinished||[]);
-  state.readingCoins=Math.max(state.readingCoins||0, remote.readingCoins||0);
   state.readingAch=[...new Set([...(state.readingAch||[]), ...(remote.readingAch||[])])];
   // 术语掌握：按 ts 的 last-write-wins，避免「A 端答错移除、B 端还在」合并时被复活
   { const ts=Object.assign({}, state.aiMasteredTs||{}, remote.aiMasteredTs||{});
