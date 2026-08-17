@@ -3671,7 +3671,7 @@ function downloadBackup(){
   const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),2000);
   const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
-  toast(standalone ? '当前为 App 模式，若「下载」文件夹无文件，请用「复制内容」📋' : '已下载文件（在「下载」文件夹）📥');
+  toast(standalone ? '当前为 App 模式，若「下载」文件夹无文件，请用「复制内容」📋' : '已触发下载，请在「下载」文件夹查看 📥');
 }
 function importJSON(file){
   const reader=new FileReader();
