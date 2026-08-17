@@ -523,11 +523,10 @@
 <div class="modal" id="backupModal">
   <div class="modal-card">
     <div class="modal-h">📤 数据备份（JSON）</div>
-    <p class="hint">下面是你的全部数据。<b>换设备 / 清缓存前务必备份一份</b>。手机 App 内点「下载文件」会唤起系统保存面板，选「保存到文件」即可落盘；若未生效，请用「复制内容」粘贴到备忘录。</p>
+    <p class="hint">下面是你的全部数据。<b>换设备 / 清缓存前务必备份一份</b>。点「复制内容」即可把全部数据复制到剪贴板，粘贴到手机备忘录 / 电脑记事本并保存为 .json 文件，随时可导入恢复。</p>
     <textarea id="backupText" readonly></textarea>
     <div class="mini-row" style="margin-top:10px">
       <button class="mini accent" onclick="copyBackup()">复制内容</button>
-      <button class="mini line" onclick="downloadBackup()">下载文件</button>
       <button class="mini" onclick="closeBackup()">关闭</button>
     </div>
   </div>
@@ -660,7 +659,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-17d';
+const APP_VERSION = '2026-08-17e';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -3653,32 +3652,6 @@ function cleanGistId(v){
 function openBackup(){ document.getElementById('backupText').value=JSON.stringify(state,null,2); document.getElementById('backupModal').classList.add('show'); }
 function closeBackup(){ document.getElementById('backupModal').classList.remove('show'); }
 async function copyBackup(){ try{ await navigator.clipboard.writeText(document.getElementById('backupText').value); toast('已复制全部数据，可粘贴到备忘录 📋'); }catch(e){ const ta=document.getElementById('backupText'); ta.focus(); ta.select(); try{ document.execCommand('copy'); toast('已复制 📋'); }catch(_){ toast('复制失败，请手动长按选择'); } } }
-async function downloadBackup(){
-  const data=JSON.stringify(state,null,2);
-  const fname='qi-workbench-backup-'+today()+'.json';
-  // 1) 桌面 Chrome / Edge：File System Access API 直接弹「另存为」，文件 100% 落盘到用户选的位置（不再静默丢进找不到的目录）
-  if(window.showSaveFilePicker){
-    try{
-      const handle=await window.showSaveFilePicker({suggestedName:fname, types:[{description:'JSON 备份', accept:{'application/json':['.json']}}]});
-      const w=await handle.createWritable(); await w.write(data); await w.close();
-      toast('已保存到：'+fname+' ✅（就在你刚选的位置）');
-      return;
-    }catch(e){ if(e && e.name==='AbortError') return; /* 用户取消则静默返回；其他异常降级到下方 */ }
-  }
-  // 2) 移动端 / PWA：系统分享面板 → 选「保存到文件」
-  let canShareFile=false;
-  try{ canShareFile = !!(navigator.canShare && navigator.canShare({files:[new File([data], fname, {type:'application/json'})]})); }catch(e){ canShareFile=false; }
-  if(canShareFile){
-    try{ await navigator.share({files:[new File([data], fname, {type:'application/json'})], title:'工作台数据备份'}); toast('已唤起系统保存，请选择「保存到文件」📥'); }catch(_){ /* 用户取消，忽略 */ }
-    return;
-  }
-  // 3) 普通浏览器（Firefox / Safari / 不支持 FS API）：blob 下载，octet-stream 强制下载而非预览
-  const blob=new Blob([data],{type:'application/octet-stream'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=fname; a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),2000);
-  toast('已触发下载：'+fname+'。若「下载」文件夹找不到，请检查浏览器是否弹出保存对话框，或用「复制内容」📋');
-}
 function importJSON(file){
   const reader=new FileReader();
   reader.onload=()=>{ try{
