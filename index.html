@@ -373,14 +373,14 @@
   .ach-chip{background:#fff7e6;border:1px solid #ffd591;color:#ad6800;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
   .celeb-overlay{position:fixed;inset:0;background:rgba(20,20,30,.45);display:none;align-items:center;justify-content:center;z-index:90;padding:20px;overflow:hidden}
   .celeb-overlay.show{display:flex}
-  .celeb-box{position:relative;background:var(--card);border-radius:20px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:pop .35s cubic-bezier(.2,1.4,.5,1)}
+  .celeb-box{position:relative;background:var(--card);border-radius:20px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:pop .35s cubic-bezier(.2,1.4,.5,1);max-height:88vh;overflow:auto}
   @keyframes pop{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
   .celeb-emoji{font-size:46px}
   .celeb-title{font-size:20px;font-weight:800;margin-top:4px}
   .celeb-sub{color:var(--sub);font-size:13px;margin:4px 0 12px}
-  .quote-card{background:#f7f8ff;border:1px solid #e3e7ff;border-radius:14px;padding:12px 14px;text-align:left}
-  .qc-t{font-weight:700;font-size:14px;margin-bottom:4px;color:#3a3a6a}
-  .qc-b{font-size:13px;color:#555;line-height:1.5}
+  .quote-card{background:#f7f8ff;border:1px solid #e3e7ff;border-radius:14px;padding:12px 14px;text-align:left;max-height:38vh;overflow:auto;word-break:break-word;overflow-wrap:anywhere}
+  .qc-t{font-weight:700;font-size:14px;margin-bottom:4px;color:#3a3a6a;word-break:break-word;overflow-wrap:anywhere}
+  .qc-b{font-size:13px;color:#555;line-height:1.5;word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
   .ach-pop{margin-top:10px;background:#fff7e6;border:1px solid #ffd591;color:#ad6800;border-radius:12px;padding:8px;font-size:13px;font-weight:700}
   .cf{position:absolute;top:-20px;width:8px;height:14px;border-radius:2px;background:var(--c);left:calc(4% + (var(--i) * 6%));animation:fall 1.6s ease-in forwards;opacity:.9}
   @keyframes fall{to{transform:translateY(380px) rotate(360deg);opacity:0}}
@@ -660,7 +660,7 @@ function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-13f';
+const APP_VERSION = '2026-08-17a';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -2647,8 +2647,17 @@ function readingCheckAch(){
 // 随机金句/知识点卡池：AI 术语库 + 你的读书笔记
 function readingRandomCard(){
   const pool=[];
-  AI_TERMS.forEach(t=>{ if(t.example) pool.push({title:'💡 '+t.term, body:t.example}); });
+  // 阅读打卡随机卡：只取「阅读相关」内容（你的读书笔记 + 内置阅读金句），不混入 AI 术语卡
   Object.keys(rec('reading')).forEach(d=>{ const r=rec('reading')[d]; if(r&&r.note) pool.push({title:'📝 你的读书笔记 · '+d, body:r.note}); });
+  const quotes=[
+    {title:'🌱 微习惯', body:'今天读 5 分钟，就是胜利。坚持比强度更重要。'},
+    {title:'📚 复利', body:'每天读一点，知识会像复利一样悄悄长大。'},
+    {title:'🧠 给大脑有氧', body:'阅读是给大脑做有氧——越读越清醒，越读越专注。'},
+    {title:'💡 这 5 分钟只属于你', body:'放下手机，翻开书，把注意力还给自己一小会儿。'},
+    {title:'🔥 连续的意义', body:'连续打卡不是为了凑数，而是你对「更好的自己」的承诺。'},
+    {title:'🪶 慢即是快', body:'不追求一次读很多，但只要每天翻开，进度就在发生。'}
+  ];
+  quotes.forEach(q=>pool.push(q));
   if(!pool.length) return {title:'🌱 微习惯', body:'今天读 5 分钟，就是胜利。坚持比强度更重要。'};
   return pool[Math.floor(Math.random()*pool.length)];
 }
@@ -2881,7 +2890,7 @@ function trainPlanHtml(){
   const cancelled=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[today()])||[];
   const rows=tp.items.map(it=>{
     const isC=cancelled.includes(it.n);
-    const btns = isC ? '已取消 🚫' : `约${trainKcal(it.met,it.min)}kcal <button class="mini" onclick="addTrainItem('${escapeAttr(it.n)}',${it.met},${it.min})">+</button> <button class="mini line" onclick="cancelTrainItem('${escapeAttr(it.n)}')">取消</button>`;
+    const btns = isC ? `<span>已取消 🚫</span> <button class="mini line" onclick="restoreTrainItem('${escapeAttr(it.n)}')">↺ 恢复</button>` : `约${trainKcal(it.met,it.min)}kcal <button class="mini" onclick="addTrainItem('${escapeAttr(it.n)}',${it.met},${it.min})">+</button> <button class="mini line" onclick="cancelTrainItem('${escapeAttr(it.n)}')">取消</button>`;
     return `<div class="trow ${isC?'tcancel':''}"><span>${escapeHtml(it.n)} · ${it.min}分钟</span><span class="tk">${btns}</span></div>`;
   }).join('');
   const totalK=tp.items.reduce((s,it)=>s+trainKcal(it.met,it.min),0);
@@ -2901,6 +2910,15 @@ function cancelTrainItem(name){
   arr.push(name); log[d]=arr; state.trainCancel.total=(state.trainCancel.total||0)+1;
   const t=manaToday(); t.exercises=t.exercises.filter(e=>e.n!==name);
   save(); renderMana(); toast('已取消：'+name+' 🚫');
+}
+function restoreTrainItem(name){
+  const d=today(); const log=(state.trainCancel&&state.trainCancel.log)||{}; const arr=log[d]||[];
+  const i=arr.indexOf(name); if(i<0) return toast('该项未被取消');
+  arr.splice(i,1); if(!arr.length) delete log[d];
+  const tp=trainPlanToday(); const it=tp.items.find(x=>x.n===name);
+  const t=manaToday();
+  if(!t.exercises.some(e=>e.n===name)) t.exercises.push({n:name, met:it?it.met:0, min:it?it.min:0, kcal:it?trainKcal(it.met,it.min):0});
+  save(); renderMana(); toast('已恢复：'+name+' ↺');
 }
 function trainTime(){ return (state.settings&&state.settings.trainTime)||{start:'19:00',end:'20:30'}; }
 function trainTimeStart(){ return trainTime().start; }
