@@ -121,6 +121,7 @@
   .term-ex b{color:#b8860b;}
   .term-src{font-size:11px;color:var(--sub);margin-top:6px;border-top:1px dashed var(--line);padding-top:6px;}
   .hint{color:var(--sub);font-size:12px;line-height:1.6;margin:6px 2px;}
+  .empty{color:var(--sub);font-size:13px;padding:8px 2px;}
   .notice{background:#fff8ec;border:1px solid #f6e2bf;color:#9a6b1e;font-size:12px;border-radius:12px;padding:9px 12px;margin:8px 0;line-height:1.5;}
 
   .ielts-goal{background:linear-gradient(135deg,#eef6ff,#f3f0ff);border:1px solid #dbe6ff;}
@@ -586,6 +587,7 @@ function defaultState(){
     planSkip:{},
     planCollapsed:[],
     readingAch:[], readingFinished:[],
+    readPages:{}, monthReminded:'',
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
@@ -630,6 +632,8 @@ function load(){
     s.planCollapsed = Array.isArray(s.planCollapsed) ? s.planCollapsed : [];
     s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
     s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
+    s.readPages = s.readPages||{};
+    s.monthReminded = s.monthReminded||'';
     s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ return defaultState(); }
@@ -658,8 +662,33 @@ function total(m){ return Object.values(rec(m)).filter(r=>r.done).length; }
 function streak(m){ let c=0,cur=new Date(); if(!isDone(m,fmt(cur))) cur.setDate(cur.getDate()-1); while(isDone(m,fmt(cur))){ c++; cur.setDate(cur.getDate()-1);} return c; }
 function last7(m){ const a=[],t=fmt(new Date()); for(let i=6;i>=0;i--){ const ds=addDays(t,-i); a.push({ds,on:isDone(m,ds),today:(i===0)});} return a; }
 
+/* ===================== 每月统计 / 月末提醒 ===================== */
+function currentMonthKey(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function prevMonthKey(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function isLastDayOfMonth(){ const d=new Date(); return d.getDate()===new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
+function sumReadingPages(){ return (state.readingBooks||[]).reduce((s,b)=>s+(Number(b.current)||0),0); }
+// 页数快照：月初首开捕获 start；跨月时把上月 end 设为当月 start；当前月 end 实时累计
+function ensurePageBaseline(){
+  state.readPages = state.readPages||{};
+  const ym = currentMonthKey();
+  const sum = sumReadingPages();
+  const pm = prevMonthKey(ym);
+  if(pm && state.readPages[pm] && state.readPages[pm].start!=null && state.readPages[pm].end==null){
+    state.readPages[pm].end = sum;
+  }
+  if(!state.readPages[ym]) state.readPages[ym] = { start: sum };
+  state.readPages[ym].end = sum;
+  save();
+}
+function monthReminderActive(){ return isLastDayOfMonth() && state.monthReminded !== currentMonthKey(); }
+function monthReminderBanner(){
+  return monthReminderActive()
+    ? `<div class="reminder warn" style="cursor:default"><div class="ri">📅</div><div><div class="rt">今天是本月最后一天</div><div class="rs">记得更新阅读书目的最新进度（已读页数）→ 去「每日阅读」点「📈 更新进度」</div></div></div>`
+    : '';
+}
+
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-17e';
+const APP_VERSION = '2026-08-18a';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1674,12 +1703,12 @@ const IELTS_READING = [
 ];
 
 /* ===================== 渲染 ===================== */
-function render(){ renderSidebar(); currentView==='home' ? renderHome() : renderModule(currentView); }
+function render(){ renderSidebar(); if(currentView==='home') renderHome(); else if(currentView==='__monthly') renderMonthly(); else renderModule(currentView); }
 
 function renderSidebar(){
   const items = [{view:'home', emi:'🏠', label:'总览'}]
     .concat(MODULES.map(m=>({view:m.key, emi:m.emoji, label:m.name})))
-    .concat([{view:'__sync', emi:'☁️', label:'同步', dot:true},{view:'__settings', emi:'⚙️', label:'设置'}]);
+    .concat([{view:'__monthly', emi:'📊', label:'每月统计'},{view:'__sync', emi:'☁️', label:'同步', dot:true},{view:'__settings', emi:'⚙️', label:'设置'}]);
   const sb = document.getElementById('sidebar');
   sb.innerHTML = items.map(it=>{
     const dot = it.dot ? `<span class="dot ${syncConn.state}"></span>` : '';
@@ -1747,6 +1776,7 @@ function renderHome(){
     ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
     ${weeklyReviewHtml()}
+    ${monthReminderBanner()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
     ${monthlyOpen?monthlyReviewHtml():''}
     ${habitHeatmapHtml()}
@@ -1932,6 +1962,76 @@ function renderModule(key){
     </div>
     ${learn}
     ${recentCheckinsHtml(key)}`;
+}
+
+/* ---- 每月统计 ---- */
+function renderMonthly(){
+  const msel = document.getElementById('msel');
+  const ym = (msel && msel.value) ? msel.value : currentMonthKey();
+  const [y,mo] = ym.split('-').map(Number);
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  const dates = [];
+  for(let d=1; d<=daysInMonth; d++) dates.push(ym + '-' + String(d).padStart(2,'0'));
+
+  // 1) 体重最高 / 最低
+  let wMax=null,wMaxD='',wMin=null,wMinD='';
+  dates.forEach(d=>{ const r=rec('mana')[d]; if(r&&r.weight!=null){ const w=Number(r.weight); if(wMax==null||w>wMax){wMax=w;wMaxD=d;} if(wMin==null||w<wMin){wMin=w;wMinD=d;} } });
+
+  // 2) 训练达成次数（当天 trainDone 为 true 即计 1 次）
+  let trainCnt=0;
+  dates.forEach(d=>{ const r=rec('mana')[d]; if(r&&r.trainDone) trainCnt++; });
+
+  // 3) 雅思 听/说/读/写 打卡天数
+  const tags=['听','说','读','写']; const tagDays={听:0,说:0,读:0,写:0};
+  dates.forEach(d=>{ const r=rec('ielts')[d]; if(r&&r.menu&&r.menu.picks){ const hit=new Set(); r.menu.picks.forEach(id=>{ const it=IELTS_MENU.find(x=>x.id===id); if(it&&it.tag&&tags.indexOf(it.tag)>=0&&r.menu.done&&r.menu.done[id]) hit.add(it.tag); }); hit.forEach(t=>tagDays[t]++); } });
+
+  // 4) 阅读页数（月末 - 月初）
+  const rp = state.readPages[ym] || {};
+  const startV = (rp.start!=null)? rp.start : null;
+  const liveSum = sumReadingPages();
+  const isCur = (ym===currentMonthKey());
+  const endV = (rp.end!=null)? rp.end : (isCur? liveSum : startV);
+  const pages = (startV!=null && endV!=null)? Math.max(0, endV-startV) : null;
+
+  const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
+  const weightHtml = (wMax==null)
+    ? '<div class="empty">本月暂无体重记录</div>'
+    : `<div class="stats">${stat(wMax+' kg','最高体重')}${stat(wMaxD,'达成日期')}${stat(wMin+' kg','最低体重')}${stat(wMinD,'达成日期')}</div>`;
+  const ieltsHtml = `<div class="stats">${tags.map(t=>stat(tagDays[t],t+' 打卡天数')).join('')}</div>`;
+  const pageHtml = (pages==null)
+    ? `<div class="empty">本月页数快照尚未生成（需在月初首次打开 App 后才会记录；当前实时累计 ${liveSum} 页）</div>`
+    : `<div class="stats">${stat(startV+' 页','月初页数')}${stat(endV+' 页','月末(至今)页数')}${stat('+'+pages+' 页','本月阅读页数')}</div>`;
+
+  document.getElementById('main').innerHTML = `
+    <div class="mhead">
+      <button class="back" onclick="setView('home')">‹ 总览</button>
+      <h2>📊 每月统计</h2>
+    </div>
+    <div class="dcard">
+      <div class="inline" style="align-items:center;gap:10px">
+        <label style="margin:0;font-size:13px;color:var(--sub)">统计月份</label>
+        <input type="month" id="msel" value="${ym}" onchange="renderMonthly()" style="flex:1;max-width:200px"/>
+      </div>
+      <p class="hint">统计范围：当月 1 日 ~ 月末（含今日）。</p>
+    </div>
+    <div class="dcard">
+      <div class="secttitle">⚖️ 体重</div>
+      ${weightHtml}
+    </div>
+    <div class="dcard">
+      <div class="secttitle">🏋️ 训练计划达成</div>
+      <div class="stats">${stat(trainCnt+' 次','达成次数（当天完成训练即计 1 次）')}</div>
+    </div>
+    <div class="dcard">
+      <div class="secttitle">🇬🇧 雅思打卡（按听/说/读/写）</div>
+      ${ieltsHtml}
+      <p class="hint">统计「当天有任一该技能项完成」的天数。</p>
+    </div>
+    <div class="dcard">
+      <div class="secttitle">📖 阅读页数</div>
+      ${pageHtml}
+      <p class="hint">= 月末页数 − 月初页数（月初页数在每月首次打开 App 时自动记录）。</p>
+    </div>`;
 }
 
 /* ---- 学习计划（2026年8月 · AI 转型）---- */
@@ -2550,6 +2650,7 @@ function renderReading(){
       <button class="back" onclick="setView('home')">‹ 总览</button>
       <h2>📖 每日阅读</h2>
     </div>
+    ${monthReminderBanner()}
     <div class="dcard">
       <div class="stats">
         <div class="stat"><b>${streak('reading')}</b><span>连续天数</span></div>
@@ -2754,7 +2855,9 @@ function saveBookProgress(i){
     state.readingFinished=state.readingFinished.filter(x=>x.name!==b.name);
   }
   const na=readingCheckAch();
-  save(); closeSheet(); renderReading();
+  if(isLastDayOfMonth()){ state.monthReminded = currentMonthKey(); }
+  ensurePageBaseline();
+  closeSheet(); renderReading();
   if(b.finished) readingFinishCelebrate(b.name, state.readingFinished.length, na);
   else toast('已更新进度 📈');
 }
@@ -3717,8 +3820,12 @@ function showUpdateBar(){ const b=document.getElementById('updateBar'); if(b) b.
   try{ await pullData(true); }catch(e){}
   _syncing=false;
   await doAutoPush();
+  ensurePageBaseline();
+  render();
 })();
 
+ensurePageBaseline();
+if(isLastDayOfMonth() && state.monthReminded !== currentMonthKey()){ toast('📅 本月最后一天，记得更新阅读书目的最新进度'); }
 render();
 </script>
 </body>
