@@ -82,6 +82,8 @@
   .stat{flex:1;min-width:64px;background:#f3f9fe;border-radius:14px;padding:10px 6px;text-align:center;}
   .stat b{display:block;font-size:18px;font-weight:800;color:var(--accent);}
   .stat span{font-size:10px;color:var(--sub);}
+  .stats2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stats2 .stat{flex:initial;min-width:0;}
   .dots{display:flex;gap:6px;margin:14px 0;}
   .dots .d{flex:1;aspect-ratio:1/1;border-radius:8px;background:var(--line);}
   .dots .d.on{background:linear-gradient(135deg,var(--accent),var(--accent3));}
@@ -688,7 +690,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-18a';
+const APP_VERSION = '2026-08-18b';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1996,11 +1998,11 @@ function renderMonthly(){
   const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
   const weightHtml = (wMax==null)
     ? '<div class="empty">本月暂无体重记录</div>'
-    : `<div class="stats">${stat(wMax+' kg','最高体重')}${stat(wMaxD,'达成日期')}${stat(wMin+' kg','最低体重')}${stat(wMinD,'达成日期')}</div>`;
-  const ieltsHtml = `<div class="stats">${tags.map(t=>stat(tagDays[t],t+' 打卡天数')).join('')}</div>`;
+    : `<div class="stats stats2">${stat(wMax+' kg','最高体重')}${stat(wMaxD,'达成日期')}${stat(wMin+' kg','最低体重')}${stat(wMinD,'达成日期')}</div>`;
+  const ieltsHtml = `<div class="stats stats2">${tags.map(t=>stat(tagDays[t],t+' 打卡天数')).join('')}</div>`;
   const pageHtml = (pages==null)
     ? `<div class="empty">本月页数快照尚未生成（需在月初首次打开 App 后才会记录；当前实时累计 ${liveSum} 页）</div>`
-    : `<div class="stats">${stat(startV+' 页','月初页数')}${stat(endV+' 页','月末(至今)页数')}${stat('+'+pages+' 页','本月阅读页数')}</div>`;
+    : `<div class="stats stats2">${stat(startV+' 页','月初页数')}${stat(endV+' 页','月末(至今)页数')}${stat('+'+pages+' 页','本月阅读页数')}</div>`;
 
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -3072,7 +3074,7 @@ function renderMana(){
       <h2>⚖️ 体重管理</h2>
     </div>
     <div class="dcard">
-      <div class="stats">${losses}</div>
+      <div class="stats stats2">${losses}</div>
       <div class="motivate">💡 ${manaMotivation()}</div>
     </div>
     <div class="dcard">
