@@ -690,7 +690,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-18b';
+const APP_VERSION = '2026-08-18c';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -2986,6 +2986,40 @@ function trainKcal(met,min){ return Math.round(met*effectiveWeight()*min/60); }
 function addTrainItem(n,met,min){ const t=manaToday(); t.exercises.push({n,met,min,kcal:trainKcal(met,min)}); save(); renderMana(); toast('已添加：'+n+' 🏃'); }
 function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return toast('今日休息，无需训练 😌'); const t=manaToday(); tp.items.forEach(it=>{ t.exercises.push({n:it.n,met:it.met,min:it.min,kcal:trainKcal(it.met,it.min)}); }); save(); renderMana(); toast('已套用今日计划到运动列表 📋'); }
 function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
+function openBatchTrain(){
+  const todayStr=today();
+  document.getElementById('sheet').innerHTML = `
+    <h3>🗓️ 批量补训练达成</h3>
+    <p class="desc">选择一段日期范围，系统会把范围内<b>每一天</b>的「训练达成」标记为已完成（仅补 trainDone，不改动体重/运动/饮食）。用于补记历史漏打卡。</p>
+    <div class="mrow"><span>起始日期</span><input type="date" id="btStart" value="2026-08-03" style="width:150px;border:1px solid #cfe3f7;background:#fff;border-radius:7px;padding:4px 6px;font-size:13px;color:var(--ink);font-family:inherit;"></div>
+    <div class="mrow"><span>结束日期</span><input type="date" id="btEnd" value="${todayStr}" style="width:150px;border:1px solid #cfe3f7;background:#fff;border-radius:7px;padding:4px 6px;font-size:13px;color:var(--ink);font-family:inherit;"></div>
+    <p class="hint">结束日期默认今天；若今天还没去练，请把结束日改到昨天。</p>
+    <div class="row">
+      <button class="btn ghost" onclick="closeSheet()">取消</button>
+      <button class="btn primary" onclick="doBatchTrain()">确认补卡</button>
+    </div>`;
+  document.getElementById('sheetMask').classList.add('show');
+}
+function doBatchTrain(){
+  const sv=document.getElementById('btStart').value;
+  const ev=document.getElementById('btEnd').value;
+  if(!sv||!ev){ toast('请先选择起止日期'); return; }
+  const sd=new Date(sv+'T00:00:00'); const ed=new Date(ev+'T00:00:00');
+  if(isNaN(sd)||isNaN(ed)){ toast('日期格式有误'); return; }
+  if(sd>ed){ toast('起始日期不能晚于结束日期'); return; }
+  const recM=rec('mana'); let n=0; const d=new Date(sd.getTime());
+  while(d<=ed){
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(!recM[ds]) recM[ds]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    if(!recM[ds].trainDone){ recM[ds].trainDone=true; recM[ds].ts=recM[ds].ts||Date.now(); n++; }
+    d.setDate(d.getDate()+1);
+  }
+  save(); closeSheet();
+  if(typeof renderMana==='function') renderMana();
+  if(typeof renderMonthly==='function') renderMonthly();
+  if(typeof renderHome==='function') renderHome();
+  toast('✅ 已补训练达成 '+n+' 天（'+sv+' ~ '+ev+'）');
+}
 function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
@@ -3097,6 +3131,7 @@ function renderMana(){
     <div class="dcard">
       <div class="ltitle">🏋️ 训练计划（下班后）</div>
       ${trainPlanHtml()}
+      <button class="btn line w100" style="margin-top:10px" onclick="openBatchTrain()">🗓️ 批量补训练达成（补历史漏打卡）</button>
     </div>
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
