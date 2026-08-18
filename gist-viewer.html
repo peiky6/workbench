@@ -8,7 +8,7 @@
   :root{ --bg:#f5f7fb; --card:#fff; --ink:#1f2733; --sub:#6b7689; --accent:#3b6fe0; --good:#27a567; --warn:#e0861e; --line:#e6ebf2; }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;padding:18px}
-  .wrap{max-width:860px;margin:0 auto}
+  .wrap{max-width:920px;margin:0 auto}
   h1{font-size:21px;margin:6px 0 2px}
   .sub{color:var(--sub);font-size:13px;margin:0 0 16px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(20,30,50,.04)}
@@ -22,18 +22,30 @@
   #status{margin-top:12px;font-size:13px;min-height:18px}
   .ok{color:var(--good)} .err{color:#d64b4b} .muted{color:var(--sub)}
   #output{display:none}
-  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 14px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:4px 0 6px}
   .stat{background:#f3f9fe;border-radius:14px;padding:12px;text-align:center}
-  .stat b{display:block;font-size:22px;color:var(--accent)}
+  .stat b{display:block;font-size:20px;color:var(--accent);line-height:1.25}
   .stat span{font-size:12px;color:var(--sub)}
-  .secttl{font-weight:700;margin:14px 0 6px;font-size:15px}
-  pre{background:#0f1726;color:#d6e2f5;padding:14px;border-radius:12px;max-height:420px;overflow:auto;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
+  .secttl{font-weight:700;margin:18px 0 8px;font-size:16px;display:flex;align-items:center;gap:6px}
+  .secttl .cnt{font-size:12px;color:var(--sub);font-weight:600}
+  pre{background:#0f1726;color:#d6e2f5;padding:14px;border-radius:12px;max-height:460px;overflow:auto;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
   details{margin-top:8px}
-  summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px}
-  .row{display:flex;gap:10px;margin-top:12px}
-  .row button{margin-top:0}
-  .note{font-size:12.5px;color:var(--sub);margin-top:8px}
-  .pill{display:inline-block;background:#eafaf0;color:var(--good);border-radius:20px;padding:2px 10px;font-size:12px;margin:2px}
+  summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:4px 0}
+  .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .row button{margin-top:0;flex:1;min-width:140px}
+  .note{font-size:12.5px;color:var(--sub);margin-top:6px}
+  .pill{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;margin:2px;background:#eef1f6;color:var(--sub)}
+  .pill.on{background:#eafaf0;color:var(--good)}
+  .rec{display:flex;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;margin-top:6px;align-items:flex-start;flex-wrap:wrap}
+  .rec b{flex:0 0 auto;color:var(--ink);font-size:13.5px}
+  .rec span{color:var(--sub);font-size:13px;word-break:break-word}
+  .tbl{width:100%;border-collapse:collapse;margin-top:4px;font-size:13px}
+  .tbl th,.tbl td{border:1px solid var(--line);padding:7px 8px;text-align:center}
+  .tbl th{background:#f3f9fe;color:var(--sub);font-weight:600}
+  .tbl td.l{text-align:left}
+  .empty{color:var(--sub);font-size:13px;padding:8px 0}
+  .search{margin:8px 0 0;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;font-size:14px}
+  .hidden{display:none}
 </style>
 </head>
 <body>
@@ -64,8 +76,14 @@
     </div>
 
     <div class="card">
+      <input class="search" id="search" placeholder="🔎 搜索记录（日期 / 书名 / 术语 / 关键词，实时过滤下方）">
+    </div>
+
+    <div class="card" id="sections"></div>
+
+    <div class="card">
       <details>
-        <summary>🔍 查看完整解密数据（JSON）</summary>
+        <summary>🔍 查看完整解密数据（原始 JSON · 全量）</summary>
         <pre id="raw"></pre>
       </details>
     </div>
@@ -90,6 +108,7 @@ async function decryptText(b64, pass){
 
 const $ = id => document.getElementById(id);
 const setStatus = (msg, cls) => { $('status').innerHTML = `<span class="${cls||'muted'}">${msg}</span>`; };
+const esc = s => String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
 async function fetchGist(id, token){
   const url = 'https://api.github.com/gists/' + id;
@@ -100,38 +119,157 @@ async function fetchGist(id, token){
   return res.json();
 }
 
-function summarize(st){
+/* ---------- 概览统计 ---------- */
+function buildStats(st){
   const recs = (st && st.records) || {};
-  const stats = [];
-  // 各模块打卡条数
-  for(const mod of Object.keys(recs)){
-    const obj = recs[mod] || {};
-    const n = Object.keys(obj).length;
-    if(n) stats.push({ b:n, s:({weight:'体重/身体记录',plan:'学习计划',ielts:'雅思打卡',reading:'阅读打卡',mana:'训练记录',train:'训练记录'}[mod]||mod) });
-  }
-  // 顶层数组类
-  if(Array.isArray(st.aiMastered)) stats.push({ b:st.aiMastered.length, s:'已掌握术语' });
-  if(Array.isArray(st.readingFinished)) stats.push({ b:st.readingFinished.length, s:'读完本数' });
-  if(Array.isArray(st.readingAch)) stats.push({ b:st.readingAch.length, s:'阅读成就' });
-  if(Array.isArray(st.books)) stats.push({ b:st.books.length, s:'书架藏书' });
-  if(Array.isArray(st.aiExt)) stats.push({ b:st.aiExt.length, s:'外部术语' });
-  // plan 完成项（state.plan 按序号存 {done}）
+  const w = recs.weight || {};
+  const wDates = Object.keys(w);
+  let wMin=null,wMax=null,wSum=0;
+  wDates.forEach(d=>{ const v=w[d].weight; if(typeof v==='number'){ wMin=wMin==null?v:Math.min(wMin,v); wMax=wMax==null?v:Math.max(wMax,v); wSum+=v; } });
   const plan = st.plan || {};
-  const planTotal = Object.keys(plan).length;
-  const planDone = Object.values(plan).filter(x => x && x.done).length;
-  if(planTotal) stats.push({ b:planDone + '/' + planTotal, s:'学习计划完成' });
-  return stats;
+  const planKeys = Object.keys(plan);
+  const planDone = planKeys.filter(k=>plan[k]&&plan[k].done).length;
+  const reading = recs.reading || {};
+  const readDays = Object.keys(reading);
+  const readMin = readDays.reduce((s,d)=>s+(+reading[d].minutes||0),0);
+  const ielts = recs.ielts || {};
+  const trainDays = Object.keys(recs.train || recs.mana || {}).length;
+  const books = Array.isArray(st.readingFinished)? st.readingFinished.length : 0;
+  const mastered = Array.isArray(st.aiMastered)? st.aiMastered.length : 0;
+  const extN = st.aiExt && typeof st.aiExt==='object'? Object.keys(st.aiExt).length : 0;
+
+  const stats = [];
+  if(wDates.length) stats.push({b:wDates.length, s:'体重记录'});
+  if(wMin!=null) stats.push({b:wMin+'~'+wMax, s:'体重区间(kg)'});
+  if(wDates.length) stats.push({b:Math.round(wSum/wDates.length*10)/10, s:'体重均值(kg)'});
+  if(planKeys.length) stats.push({b:planDone+'/'+planKeys.length, s:'学习计划完成'});
+  if(readDays.length) stats.push({b:readDays.length, s:'阅读打卡(天)'});
+  if(readMin) stats.push({b:readMin, s:'累计阅读(分)'});
+  if(Object.keys(ielts).length) stats.push({b:Object.keys(ielts).length, s:'雅思打卡'});
+  if(trainDays) stats.push({b:trainDays, s:'训练记录'});
+  if(books) stats.push({b:books, s:'读完本数'});
+  if(mastered) stats.push({b:mastered, s:'已掌握术语'});
+  if(extN) stats.push({b:extN, s:'外部术语'});
+  return { stats, wMin, wMax, wDates, w };
 }
 
-function latestWeight(st){
+function latestWeightLine(st){
   const w = (st.records && st.records.weight) || {};
   const dates = Object.keys(w).sort();
   if(!dates.length) return '';
   const last = w[dates[dates.length-1]];
-  return `最新体重记录：${dates[dates.length-1]} · ${last.weight??'-'} kg` + (last.bmi!=null?` · BMI ${last.bmi}`:'') + (last.bmr!=null?` · 基础代谢 ${last.bmr}`:'');
+  return `最新体重记录（${dates[dates.length-1]}）：体重 ${last.weight??'-'} kg` + (last.bmi!=null?` · BMI ${last.bmi}`:'') + (last.bodyFat!=null?` · 体脂 ${last.bodyFat}%`:'') + (last.bmr!=null?` · 基础代谢 ${last.bmr}`:'');
 }
 
+/* ---------- 行内展示值 ---------- */
+function inline(v){
+  if(v==null) return '-';
+  if(typeof v==='object') return esc(JSON.stringify(v));
+  return esc(v);
+}
+
+/* ---------- 体重表格 ---------- */
+function weightTable(w){
+  const dates = Object.keys(w).sort().reverse();
+  if(!dates.length) return '<div class="empty">暂无体重记录</div>';
+  const rows = dates.map(d=>{
+    const r=w[d];
+    return `<tr><td>${esc(d)}</td><td>${r.weight!=null?r.weight:'-'}</td><td>${r.bodyFat!=null?r.bodyFat+'%':'-'}</td><td>${r.bmi!=null?r.bmi:'-'}</td><td>${r.bmr!=null?r.bmr:'-'}</td></tr>`;
+  }).join('');
+  return `<table class="tbl"><thead><tr><th>日期</th><th>体重(kg)</th><th>体脂</th><th>BMI</th><th>基础代谢</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ---------- 通用记录模块（按日期/序号倒序，超出折叠） ---------- */
+function recordModule(obj, cap){
+  const keys = Object.keys(obj).sort().reverse();
+  if(!keys.length) return '<div class="empty">暂无记录</div>';
+  const N=40;
+  const shown = keys.slice(0,N).map(k=>`<div class="rec" data-k="${esc(k)}" data-v="${esc(inline(obj[k]))}"><b>${esc(k)}</b><span>${inline(obj[k])}</span></div>`).join('');
+  let more='';
+  if(keys.length>N){
+    const rest = keys.slice(N).map(k=>`<div class="rec" data-k="${esc(k)}" data-v="${esc(inline(obj[k]))}"><b>${esc(k)}</b><span>${inline(obj[k])}</span></div>`).join('');
+    more = `<details><summary>展开剩余 ${keys.length-N} 条</summary>${rest}</details>`;
+  }
+  return shown+more;
+}
+
+/* ---------- 学习计划（state.plan 按序号 {done,date}） ---------- */
+function planSec(st){
+  const plan = st.plan || {};
+  const keys = Object.keys(plan).sort((a,b)=>(+a)-(+b));
+  if(!keys.length) return '<div class="empty">暂无学习计划打卡</div>';
+  return keys.map(k=>{
+    const p=plan[k]; const done=p&&p.done;
+    return `<div class="rec"><b>#${esc(k)}</b><span class="pill ${done?'on':''}">${done?'✅已完成':'⬜未做'}</span>${p&&p.date?`<span>${esc(p.date)}</span>`:''}</div>`;
+  }).join('');
+}
+
+/* ---------- AI 术语 ---------- */
+function aiSec(st){
+  let h='';
+  if(Array.isArray(st.aiMastered) && st.aiMastered.length) h+=`<div class="note">已掌握 ${st.aiMastered.length} 条（序号：${st.aiMastered.join(', ')}）</div>`;
+  const ext = st.aiExt;
+  if(ext && typeof ext==='object'){
+    const ks=Object.keys(ext);
+    h+=`<div class="note">外部术语 ${ks.length} 条</div>`;
+    h+=ks.map(k=>`<div class="rec" data-k="${esc(k)}" data-v="${esc((ext[k]&&(ext[k].term||ext[k].mean))||'')}"><b>${esc(k)}</b><span>${esc((ext[k]&&(ext[k].term||ext[k].mean))||'')}</span></div>`).join('');
+  }
+  return h||'<div class="empty">暂无术语数据</div>';
+}
+
+/* ---------- 读完书目 ---------- */
+function booksSec(st){
+  const arr = Array.isArray(st.readingFinished)? st.readingFinished : [];
+  if(!arr.length) return '<div class="empty">暂无读完记录</div>';
+  return arr.map(b=>`<div class="rec" data-k="${esc(b.name||'')}" data-v="${esc(b.finishedDate||'')}"><b>${esc(b.name||'(未命名)')}</b>${b.finishedDate?`<span>读完于 ${esc(b.finishedDate)}</span>`:''}</div>`).join('');
+}
+
+/* ---------- 渲染全部 ---------- */
 let decrypted = null;
+function renderAll(st){
+  const { stats, wDates, w } = buildStats(st);
+  $('stats').innerHTML = stats.map(s=>`<div class="stat"><b>${esc(s.b)}</b><span>${esc(s.s)}</span></div>`).join('') || '<div class="empty">没有可统计的记录</div>';
+  $('latestWeight').textContent = latestWeightLine(st);
+
+  const recs = st.records || {};
+  const mods = {
+    '🏋️ 训练记录': recs.train || recs.mana || null,
+    '🇬🇧 雅思打卡': recs.ielts || null,
+    '📖 每日阅读': recs.reading || null,
+    '💡 其他记录': (()=>{ const o={}; Object.keys(recs).forEach(k=>{ if(!['weight','plan','train','mana','ielts','reading'].includes(k)) o[k]=recs[k]; }); return Object.keys(o).length?o:null; })()
+  };
+
+  let html='';
+  html += `<div class="secttl">⚖️ 体重记录 <span class="cnt">${wDates.length} 条</span></div>` + weightTable(w);
+  html += `<div class="secttl">🎯 学习计划 <span class="cnt">${Object.keys(st.plan||{}).length} 项</span></div>` + planSec(st);
+  for(const name of Object.keys(mods)){
+    const obj = mods[name];
+    if(!obj) continue;
+    const n = Object.keys(obj).length;
+    if(!n) continue;
+    html += `<div class="secttl">${name} <span class="cnt">${n} 条</span></div>` + recordModule(obj, name);
+  }
+  html += `<div class="secttl">🧠 AI 术语进度</div>` + aiSec(st);
+  html += `<div class="secttl">📚 读完书目 <span class="cnt">${Array.isArray(st.readingFinished)?st.readingFinished.length:0} 本</span></div>` + booksSec(st);
+
+  $('sections').innerHTML = html;
+  $('raw').textContent = JSON.stringify(st, null, 2);
+}
+
+/* ---------- 搜索过滤 ---------- */
+$('search').addEventListener('input', e=>{
+  const q = e.target.value.trim().toLowerCase();
+  const items = $('sections').querySelectorAll('.rec, .tbl tr');
+  items.forEach(el=>{
+    const hay = (el.getAttribute('data-k')||'') + ' ' + (el.getAttribute('data-v')||'') + ' ' + el.textContent;
+    el.classList.toggle('hidden', q && !hay.toLowerCase().includes(q));
+  });
+  // 折叠/展开处理小结：仅隐藏匹配项，无匹配时提示
+  if(q){
+    const visible = [...$('sections').querySelectorAll('.rec')].filter(el=>!el.classList.contains('hidden')).length;
+    setStatus('🔎 匹配到 '+visible+' 条记录（已在下方高亮过滤）', 'muted');
+  }
+});
 
 $('go').addEventListener('click', async () => {
   const id = $('gistId').value.trim();
@@ -145,18 +283,14 @@ $('go').addEventListener('click', async () => {
     const gist = await fetchGist(id, token);
     const content = gist.files && gist.files['workbench.json'] && gist.files['workbench.json'].content;
     if(!content){ setStatus('该 Gist 里没有 workbench.json 文件', 'err'); return; }
-    setStatus('⏳ 已取到密文，正在本地解密…', 'muted');
+    setStatus('⏳ 已取到密文，正在本机解密…', 'muted');
     let json;
     try{ json = await decryptText(content, pass); }
     catch(e){ setStatus('❌ 解密失败：口令可能不对，或这份备份不是用该口令加密的。请确认口令。', 'err'); return; }
     decrypted = JSON.parse(json);
-    // 渲染
-    const stats = summarize(decrypted);
-    $('stats').innerHTML = stats.map(s=>`<div class="stat"><b>${s.b}</b><span>${s.s}</span></div>`).join('') || '<div class="muted">没有可统计的记录</div>';
-    $('latestWeight').textContent = latestWeight(decrypted);
-    $('raw').textContent = JSON.stringify(decrypted, null, 2);
+    renderAll(decrypted);
     $('output').style.display = 'block';
-    setStatus('✅ 解密成功！以下是你的数据（全部在本机完成，未上传任何信息）', 'ok');
+    setStatus('✅ 解密成功！已展开全部模块记录（全程在本机完成，未上传任何信息）', 'ok');
   }catch(e){
     setStatus('❌ ' + e.message, 'err');
   }
