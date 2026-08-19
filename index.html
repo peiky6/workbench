@@ -709,7 +709,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-19d';
+const APP_VERSION = '2026-08-19e';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -2448,7 +2448,7 @@ function aiExtEntries(){ return Object.keys(state.aiExt||{}).map(k=>({key:k,t:st
 function allAiTerms(){ return [...AI_TERMS.map((t,i)=>({key:i,t})), ...aiExtEntries().map(e=>({key:e.key,t:e.t}))]; }
 function aiTermIdxList(){ return allAiTerms().map(x=>x.key); }
 function aiTermByIdx(key){ if(typeof key==='number'){ return AI_TERMS[key]; } return (state.aiExt&&state.aiExt[key])||null; }
-function jsKey(k){ return (typeof k==='number')? k : JSON.stringify(k); }
+function jsKey(k){ return (typeof k==='number')? k : "'"+String(k).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'"; }
 function aiSlugOf(term){ return 'ext:'+ (term||'').trim().toLowerCase().replace(/[^a-z0-9一-龥]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48) || ('ext_'+Date.now()); }
 function aiAddTerm(obj){ const s=state.aiExt=state.aiExt||{}; const k=obj.id||aiSlugOf(obj.term); if(s[k]) return false; const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); s[k]=Object.assign({},obj,{idx:maxIdx+1}); save(); return k; }
 function aiTodayPicks(){
