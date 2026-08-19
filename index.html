@@ -293,8 +293,6 @@
   .term-chip{display:inline-block;background:var(--accent2);color:#1b6ca8;border-radius:999px;padding:4px 11px;font-size:12px;cursor:pointer;border:1px solid #bfe3f5;line-height:1.4;}
   .term-chip:active{transform:scale(.96);}
   .pday-noterm{font-size:12px;color:var(--sub);margin:0 0 9px;}
-  .bili-btn{display:inline-block;background:#fb7299;color:#fff;border-radius:10px;padding:7px 13px;font-size:13px;text-decoration:none;font-weight:600;}
-  .bili-btn:active{opacity:.85;}
   .term.focus-term{border:2px solid var(--accent)!important;box-shadow:0 0 0 3px rgba(92,179,230,.18);}
 
   /* AI 每周测试 */
@@ -673,7 +671,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-19h';
+const APP_VERSION = '2026-08-19i';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -973,30 +971,30 @@ function planSeqDate(n){ const r=rec('plan')[String(n)]; return r&&r.date; }
 
 // 每日学习计划关联：kws=与 AI_TERMS 术语名匹配的关键词；bili=B站搜索词
 const PLAN_TAGS = {
-  '0801':{kws:['人工智能','机器学习','深度学习','大语言模型','生成式 AI','强化学习','监督学习','无监督学习'],bili:'AI 机器学习 深度学习 大模型 入门 区别'},
-  '0802':{kws:['预训练','监督微调','人类反馈强化学习','生成式 AI'],bili:'大模型 预训练 SFT RLHF 训练流程'},
-  '0803':{kws:['提示词','大语言模型','检索增强生成'],bili:'AI PM 产品经理 LangChain RAG 入门'},
-  '0804':{kws:['数据标注','联邦学习','生成式 AI 合规'],bili:'数据标注 数据清洗 数据质检 AI'},
-  '0805':{kws:['算力','加速器','张量处理单元','边缘计算','云端推理'],bili:'GPU TPU 算力 选型 AI 成本估算'},
-  '0806':{kws:['准确率','过拟合','验证集','欠拟合'],bili:'准确率 召回率 模型评估指标'},
-  '0807':{kws:['微调','预训练','迁移学习','基础模型'],bili:'模型微调 预训练 区别 成本'},
-  '0808':{kws:['模型轻量化','模型量化','模型剪枝','容器化部署','模型推理'],bili:'模型部署 轻量化 容器化 Docker'},
-  '0809':{kws:['模型幻觉','模型推理','对齐'],bili:'AI 模型 线上监控 运维 迭代'},
-  '0810':{kws:['生成式 AI','人工智能生成内容','提示词'],bili:'AI 电商文案生成 实战 项目拆解'},
-  '0811':{kws:['人工智能','多模态','数字孪生'],bili:'AI 行业应用 金融 制造 教育 场景'},
-  '0812':{kws:['检索增强生成','多模态','大语言模型'],bili:'AI 解决方案 技术选型 ROI POC'},
-  '0813':{kws:['提示词','提示词工程','思维链提示'],bili:'提示词工程 入门 Prompt'},
-  '0814':{kws:['检索增强生成','模型幻觉','向量数据库'],bili:'RAG 检索增强生成 搭建 教程'},
-  '0815':{kws:['生成式 AI 合规','可解释的人工智能','联邦学习'],bili:'AI 伦理 合规 隐私 偏见'},
-  '0816':{kws:['生成式 AI 合规','对齐'],bili:'AI 项目 合规 风险防控'},
-  '0817':{kws:['检索增强生成','向量数据库','知识图谱'],bili:'企业 文档问答 系统 方案 RAG'},
-  '0818':{kws:[],bili:'AI 项目管理 敏捷 短迭代 验证'},
-  '0819':{kws:[],bili:'AI 项目 跨团队沟通 算法 数据'},
-  '0820':{kws:[],bili:'AI 项目 启动会 主持 议程 模板'},
-  '0821':{kws:['模型幻觉','对齐','过拟合'],bili:'AI 项目经理 面试 管理不确定性'},
-  '0822':{kws:[],bili:'PMI-ACP AWS AI 认证 区别 选证'},
-  '0823':{kws:[],bili:'AWS AI 认证 学习路径 备考计划'},
-  '0824':{kws:['智能体','检索增强生成'],bili:'AI 项目 复盘 实践 智能体 落地'}
+  '0801':{kws:['人工智能','机器学习','深度学习','大语言模型','生成式 AI','强化学习','监督学习','无监督学习']},
+  '0802':{kws:['预训练','监督微调','人类反馈强化学习','生成式 AI']},
+  '0803':{kws:['提示词','大语言模型','检索增强生成']},
+  '0804':{kws:['数据标注','联邦学习','生成式 AI 合规']},
+  '0805':{kws:['算力','加速器','张量处理单元','边缘计算','云端推理']},
+  '0806':{kws:['准确率','过拟合','验证集','欠拟合']},
+  '0807':{kws:['微调','预训练','迁移学习','基础模型']},
+  '0808':{kws:['模型轻量化','模型量化','模型剪枝','容器化部署','模型推理']},
+  '0809':{kws:['模型幻觉','模型推理','对齐']},
+  '0810':{kws:['生成式 AI','人工智能生成内容','提示词']},
+  '0811':{kws:['人工智能','多模态','数字孪生']},
+  '0812':{kws:['检索增强生成','多模态','大语言模型']},
+  '0813':{kws:['提示词','提示词工程','思维链提示']},
+  '0814':{kws:['检索增强生成','模型幻觉','向量数据库']},
+  '0815':{kws:['生成式 AI 合规','可解释的人工智能','联邦学习']},
+  '0816':{kws:['生成式 AI 合规','对齐']},
+  '0817':{kws:['检索增强生成','向量数据库','知识图谱']},
+  '0818':{kws:[]},
+  '0819':{kws:[]},
+  '0820':{kws:[]},
+  '0821':{kws:['模型幻觉','对齐','过拟合']},
+  '0822':{kws:[]},
+  '0823':{kws:[]},
+  '0824':{kws:['智能体','检索增强生成']}
 };
 function planTerms(mmdd){
   const t=PLAN_TAGS[mmdd]; if(!t||!t.kws||!t.kws.length) return [];
@@ -1008,19 +1006,14 @@ function planTerms(mmdd){
   });
   return out;
 }
-function planVideoUrl(mmdd){
-  const t=PLAN_TAGS[mmdd]; if(!t) return null;
-  return 'https://search.bilibili.com/all?keyword='+encodeURIComponent(t.bili||'AI 学习');
-}
 function planDayExtra(mmdd){
-  const terms=planTerms(mmdd), vurl=planVideoUrl(mmdd);
-  let h='<div class="pday-extra"><div class="pday-extra-h">📚 今日关联术语 · 🎬 课程视频</div>';
+  const terms=planTerms(mmdd);
+  let h='<div class="pday-extra"><div class="pday-extra-h">📚 今日关联术语</div>';
   if(terms.length){
     h+='<div class="pday-terms">'+terms.map(o=>`<span class="term-chip" onclick="openTerm(${o.idx})">${escapeHtml(o.term.term.split('（')[0])}</span>`).join('')+'</div>';
   } else {
-    h+='<p class="pday-noterm">本日偏项目管理方法，无强关联术语，可直接看下方视频。</p>';
+    h+='<p class="pday-noterm">本日偏项目管理方法，无强关联术语。</p>';
   }
-  if(vurl){ h+=`<a class="bili-btn" href="${escapeAttr(vurl)}" target="_blank" rel="noopener">▶ 在 B站看相关课程</a>`; }
   h+='</div>';
   return h;
 }
