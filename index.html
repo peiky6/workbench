@@ -708,7 +708,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-19b';
+const APP_VERSION = '2026-08-19c';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -3401,7 +3401,9 @@ function matchFood(text){
   const rest=text.replace(food.n,'').trim();
   const numRest=rest.match(/^(\d+(?:\.\d+)?|\.\d+)\s*(?:kcal|大卡|卡)?$/i);
   if(numRest){
-    const n=Number(numRest[1]);
+    let n=Number(numRest[1]);
+    const raw=numRest[1];
+    if(raw.indexOf('.')<0 && raw.length>1 && raw[0]==='0') n=Number('0.'+raw.slice(1)); // "05"→0.5：防手机键盘/输入法吞掉小数点
     if(n>0 && n<10){ const kcal=Math.round(food.k*n); return {food,qty:n,kcal,label:food.n}; } // 小数/个位数=份量（酸奶0.5=半份、鸡蛋2=2个）
     const kcal=Math.round(n); return {food,qty:1,kcal,label:food.n,kcalOverride:true}; // ≥10=直接热量（米饭 300=300kcal）
   }
@@ -3673,6 +3675,21 @@ async function decodeState(content,pass){
 }
 
 /* ===================== 同步（Gist / Supabase） ===================== */
+/* 输入保护：自动同步(pull)触发整页重渲染时，保留正在输入的内容，避免打字被清空 */
+let _inputGuard={active:'',vals:{}};
+function snapshotInputs(){
+  _inputGuard={active:'',vals:{}};
+  try{
+    const ae=document.activeElement; if(ae&&ae.id) _inputGuard.active=ae.id;
+    document.querySelectorAll('input,textarea,select').forEach(el=>{ if(el.id) _inputGuard.vals[el.id]=el.value; });
+  }catch(e){}
+}
+function restoreInputs(){
+  try{
+    document.querySelectorAll('input,textarea,select').forEach(el=>{ if(el.id&&_inputGuard.vals[el.id]!=null) el.value=_inputGuard.vals[el.id]; });
+    if(_inputGuard.active){ const el=document.getElementById(_inputGuard.active); if(el){ el.focus(); try{ const len=el.value.length; el.setSelectionRange(len,len); }catch(_){} } }
+  }catch(e){}
+}
 async function pushData(silent){
   const s=state.settings; const method=s.syncMethod||'gist';
   if(method==='gist'){
@@ -3717,7 +3734,7 @@ async function pullData(silent){
       if(!content) throw new Error('Gist 里没有 workbench.json');
       const remote=await decodeState(content,pass);
       try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
-      mergeState(remote); _pulledThisSession=true; save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
+      mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
     }catch(e){ _pullFail(e,silent); }
   } else {
     if(!s.supaUrl||!s.supaKey){ if(!silent) toast('请先填写 Supabase URL 和 anon key'); return; }
@@ -3728,7 +3745,7 @@ async function pullData(silent){
       const rows=await res.json();
       if(!rows.length) throw new Error('云端还没有数据，请先上传');
       const remote=await decodeState(rows[0].data,pass);
-      mergeState(remote); _pulledThisSession=true; save(); render(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
+      mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
     }catch(e){ _pullFail(e,silent); }
   }
 }
