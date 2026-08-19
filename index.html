@@ -673,7 +673,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-19g';
+const APP_VERSION = '2026-08-19h';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -2302,8 +2302,8 @@ function ieltsLearn(){
     ${ieltsPhaseNotice()}
     ${ieltsGoalHtml()}
     ${ieltsStatsHtml()}
-    <div class="dcard" style="margin-top:10px"><div class="ltitle">📚 雅思打卡周视图（近 8 周）</div>
-      ${weekGridHtml(ds=>ieltsMenuWeekDone(ds), 8)}
+    <div class="dcard" style="margin-top:10px"><div class="ltitle">📚 雅思打卡周视图（近 4 周）</div>
+      ${weekGridHtml(ds=>ieltsMenuWeekDone(ds), 4)}
       <p class="hint">每格=一天（周一~周日），绿=当天完成了菜单制任务（1-2 项）；今天之后为虚线占位。</p>
     </div>
     <div class="ltitle" style="margin-top:16px">🍽️ 今日任务（已选 ${t.picks.length}/2）</div>
@@ -3122,8 +3122,8 @@ function renderMana(){
       ${goalTip}
     </div>
     <div class="dcard">
-      <div class="ltitle">⚖️ 体重周环比（近 8 周）</div>
-      <div class="wgrid">${weightWeekRows(8)}</div>
+      <div class="ltitle">⚖️ 体重周环比（近 4 周）</div>
+      <div class="wgrid">${weightWeekRows(4)}</div>
       <p class="hint">周均体重 = 该周有记录的体重取平均；▼ 下降（绿）· ▲ 上升（橙）· — 无对比。</p>
     </div>
     <div class="dcard">
@@ -3132,8 +3132,8 @@ function renderMana(){
       <button class="btn line w100" style="margin-top:10px" onclick="openBatchTrain()">🗓️ 批量补训练达成（补历史漏打卡）</button>
     </div>
     <div class="dcard">
-      <div class="ltitle">🏋️ 训练打卡周视图（近 8 周）</div>
-      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; return !!(r&&r.trainDone); }, 8)}
+      <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
+      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; return !!(r&&r.trainDone); }, 4)}
       <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；今天之后为虚线占位。</p>
     </div>
     <div class="dcard">
