@@ -139,16 +139,14 @@
   .goal-main b{font-size:20px;}
   .goal-sub{font-size:11px;color:var(--sub);line-height:1.5;}
 
-  .hm-wrap{display:flex;gap:3px;overflow-x:auto;padding:4px 0;}
-  .hm-col{display:flex;flex-direction:column;gap:3px;}
-  .hm-cell{width:11px;height:11px;border-radius:3px;background:#ebedf0;}
-  .hm-cell.l0{background:#ebedf0;}
-  .hm-cell.l1{background:#9be9a8;}
-  .hm-cell.l2{background:#40c463;}
-  .hm-cell.l3{background:#30a14e;}
-  .hm-cell.l4{background:#216e39;}
-  .hm-legend{display:flex;align-items:center;gap:3px;margin-top:6px;font-size:10px;color:var(--sub);}
-  .hm-legend .hm-cell{width:10px;height:10px;}
+  .wgrid{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+  .wrow{display:flex;align-items:center;gap:5px;}
+  .wl{width:44px;font-size:11px;color:var(--sub);flex:none;}
+  .wcell{width:13px;height:13px;border-radius:3px;background:var(--line);flex:none;}
+  .wcell.on{background:var(--accent);}
+  .wcell.f{background:transparent;border:1px dashed var(--line);}
+  .wc{font-size:11px;color:var(--good);flex:none;min-width:34px;text-align:right;}
+  .wv{flex:1;text-align:center;font-size:13px;font-weight:700;}
   .update-bar{position:fixed;left:0;right:0;bottom:0;background:var(--accent);color:#fff;font-size:13px;font-weight:700;text-align:center;padding:11px;cursor:pointer;z-index:90;box-shadow:0 -4px 16px rgba(0,0,0,.18);}
   .bartip{position:fixed;transform:translate(-50%,-100%);margin-top:-8px;background:#2b3a45;color:#fff;padding:5px 11px;border-radius:8px;font-size:12px;z-index:95;pointer-events:none;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.22);line-height:1.5;}
   .bartip::after{content:'';position:absolute;left:50%;bottom:-4px;transform:translateX(-50%) rotate(45deg);width:8px;height:8px;background:#2b3a45;}
@@ -674,43 +672,45 @@ function monthReminderBanner(){
     : '';
 }
 
-/* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-19f';
-function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
-function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
-function bestStreak(){
-  let minD=null; MODULES.forEach(m=>{ Object.keys(rec(m)).forEach(d=>{ if(rec(m)[d]&&rec(m)[d].done && (!minD||d<minD)) minD=d; }); });
-  if(!minD) return 0;
-  let best=0,run=0,d=minD,td=today();
-  while(d<=td){ if(dayDoneAny(d)){ run++; if(run>best) best=run; } else run=0; d=addDays(d,1); }
-  return best;
-}
-function habitHeatmapHtml(){
-  const td=today();
-  const end=new Date(td+'T00:00:00');
-  const start=new Date(end); start.setDate(start.getDate()-125); start.setDate(start.getDate()-start.getDay());
-  const cells=[];
-  for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
-    const ds=fmt(d); let c=0; MODULES.forEach(m=>{ if(dayDone(m.key,ds)) c++; });
-    cells.push({ds,c,future:ds>td});
+/* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
+const APP_VERSION = '2026-08-19g';
+// 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
+function weekGridHtml(getDone, weeks){
+  const td=new Date(); const dow=(td.getDay()+6)%7;
+  const curStart=new Date(td); curStart.setDate(td.getDate()-dow);
+  const rows=[];
+  for(let w=weeks-1; w>=0; w--){
+    const start=new Date(curStart); start.setDate(curStart.getDate()-w*7);
+    let cnt=0; const cells=[];
+    for(let i=0;i<7;i++){
+      const d=new Date(start); d.setDate(start.getDate()+i);
+      const ds=fmt(d); const future=d>td;
+      const on=!future && !!getDone(ds);
+      if(on) cnt++;
+      cells.push(`<span class="wcell ${on?'on':''} ${future?'f':''}" title="${ds}"></span>`);
+    }
+    const label=(w===0)?'本周':((start.getMonth()+1)+'/'+start.getDate());
+    rows.push(`<div class="wrow"><span class="wl">${label}</span>${cells.join('')}<span class="wc">${cnt} 天</span></div>`);
   }
-  const weeks=[]; for(let i=0;i<cells.length;i+=7) weeks.push(cells.slice(i,i+7));
-  const lvl=c=> c===0?0:(c<=1?1:(c<=2?2:(c<=4?3:4)));
-  const colors=['#ebedf0','#9be9a8','#40c463','#30a14e','#216e39'];
-  const cols=weeks.map(w=>'<div class="hm-col">'+w.map(cell=>{ const l=cell.future?0:lvl(cell.c); const t=cell.future?'':(cell.ds+' · 完成 '+cell.c+'/'+MODULES.length+' 项'); return `<div class="hm-cell l${l}" ${t?'title="'+t+'"':''}></div>`; }).join('')+'</div>').join('');
-  const activeDays=cells.filter(c=>!c.future && c.c>0).length;
-  const legend='<div class="hm-legend"><span>少</span>'+colors.map((c,i)=>'<span class="hm-cell l'+i+'"></span>').join('')+'<span>多</span></div>';
-  return `<div class="dcard">
-    <div class="ltitle">📅 打卡热力图（近 18 周）</div>
-    <div class="hm-wrap">${cols}</div>
-    ${legend}
-    <div class="stats" style="margin-top:8px">
-      <div class="stat"><b>${overallStreak()}</b><span>🔥 当前连续</span></div>
-      <div class="stat"><b>${bestStreak()}</b><span>历史最长连续</span></div>
-      <div class="stat"><b>${activeDays}</b><span>活跃天数</span></div>
-    </div>
-    <p class="hint">每格=一天，颜色越深=当天完成模块越多（最多 ${MODULES.length} 项）。</p>
-  </div>`;
+  return `<div class="wgrid">${rows.join('')}</div>`;
+}
+// 体重周环比：近 weeks 周，每行「周起 · 周均体重 · 较上周变化」
+function weightWeekRows(weeks){
+  const td=new Date(); const dow=(td.getDay()+6)%7;
+  const curStart=new Date(td); curStart.setDate(td.getDate()-dow);
+  const weekAvg=(start)=>{ let sum=0,n=0; for(let i=0;i<7;i++){ const r=rec('mana')[fmt(start)]; if(r&&r.weight!=null){ sum+=r.weight; n++; } start.setDate(start.getDate()+1); } return n? sum/n : null; };
+  const avgs=[];
+  for(let w=0; w<weeks; w++){
+    const start=new Date(curStart); start.setDate(curStart.getDate()-(weeks-1-w)*7);
+    avgs.push({label:(w===weeks-1)?'本周':((start.getMonth()+1)+'/'+start.getDate()), v:weekAvg(new Date(start))});
+  }
+  return avgs.map((a,i)=>{
+    const prev=(i>0)?avgs[i-1].v:null;
+    const d=(a.v!=null&&prev!=null)?(a.v-prev):null;
+    const delta=(d==null)?'—':(Math.abs(d)<0.05?'±0':(d>0?'▲ +'+d.toFixed(1):'▼ '+d.toFixed(1)));
+    const color=(d==null)?'var(--sub)':(d<=0?'var(--good)':'var(--warn)');
+    return `<div class="wrow"><span class="wl">${a.label}</span><span class="wv">${a.v!=null? a.v.toFixed(1)+' kg':'—'}</span><span class="wc" style="color:${color}">${delta}</span></div>`;
+  }).join('');
 }
 
 /* ===================== 学习计划（2026年8月 · AI 转型）数据 ===================== */
@@ -1766,7 +1766,6 @@ function renderHome(){
     ${monthReminderBanner()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
     ${monthlyOpen?monthlyReviewHtml():''}
-    ${habitHeatmapHtml()}
     <div class="secttitle">我的栏目（点击进入）</div>
     ${cards}
     ${hist}`;
@@ -2303,6 +2302,10 @@ function ieltsLearn(){
     ${ieltsPhaseNotice()}
     ${ieltsGoalHtml()}
     ${ieltsStatsHtml()}
+    <div class="dcard" style="margin-top:10px"><div class="ltitle">📚 雅思打卡周视图（近 8 周）</div>
+      ${weekGridHtml(ds=>ieltsMenuWeekDone(ds), 8)}
+      <p class="hint">每格=一天（周一~周日），绿=当天完成了菜单制任务（1-2 项）；今天之后为虚线占位。</p>
+    </div>
     <div class="ltitle" style="margin-top:16px">🍽️ 今日任务（已选 ${t.picks.length}/2）</div>
     ${todayCards}
     ${cats}
@@ -3119,9 +3122,19 @@ function renderMana(){
       ${goalTip}
     </div>
     <div class="dcard">
+      <div class="ltitle">⚖️ 体重周环比（近 8 周）</div>
+      <div class="wgrid">${weightWeekRows(8)}</div>
+      <p class="hint">周均体重 = 该周有记录的体重取平均；▼ 下降（绿）· ▲ 上升（橙）· — 无对比。</p>
+    </div>
+    <div class="dcard">
       <div class="ltitle">🏋️ 训练计划（下班后）</div>
       ${trainPlanHtml()}
       <button class="btn line w100" style="margin-top:10px" onclick="openBatchTrain()">🗓️ 批量补训练达成（补历史漏打卡）</button>
+    </div>
+    <div class="dcard">
+      <div class="ltitle">🏋️ 训练打卡周视图（近 8 周）</div>
+      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; return !!(r&&r.trainDone); }, 8)}
+      <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；今天之后为虚线占位。</p>
     </div>
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
