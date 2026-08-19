@@ -597,6 +597,7 @@ function defaultState(){
     planCollapsed:[],
     readingAch:[], readingFinished:[],
     readPages:{}, monthReminded:'',
+    customFoods:[],
     settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
@@ -643,6 +644,7 @@ function load(){
     s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
     s.readPages = s.readPages||{};
     s.monthReminded = s.monthReminded||'';
+    s.customFoods = Array.isArray(s.customFoods)? s.customFoods : [];
     s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ return defaultState(); }
@@ -706,7 +708,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-18d';
+const APP_VERSION = '2026-08-19a';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -3112,9 +3114,9 @@ function renderMana(){
     const arr=t.meals[meal];
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
-      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 鸡蛋2个（输入任意字联想食物）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
+      <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 蛋白粉 120（名字+热量=自定义）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
       <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用${dietPlanToday().tag||''}计划</button>`}</div>
-      <div class="inline kcal-row"><span class="kcal-label">🔢 自定义热量</span><input id="kcal_${meal}" type="number" inputmode="numeric" min="0" step="1" placeholder="如 156" style="width:92px" /> <button class="mini" onclick="addCustomKcal('${meal}')">添加</button></div>
+      <div class="inline kcal-row" style="flex-wrap:wrap"><span class="kcal-label">✨ 自定义食物</span><input id="cfName_${meal}" type="text" placeholder="食物名（可留空）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:120px" /><input id="kcal_${meal}" type="number" inputmode="numeric" min="0" step="1" placeholder="热量" style="width:88px" /> <button class="mini" onclick="addCustomFood('${meal}')">添加</button></div>
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
@@ -3381,11 +3383,24 @@ function fillExercise(name){
   const box=document.getElementById('exSug'); if(box) box.innerHTML='';
   previewEx();
 }
+function allFoods(){ return FOODS.concat(state.customFoods||[]); }
+function saveCustomFood(name,k){
+  const cf=state.customFoods||(state.customFoods=[]);
+  const i=cf.findIndex(x=>x.n===name);
+  if(i>=0){ cf[i].k=Math.round(k); cf[i].u=cf[i].u||''; } else { cf.push({n:name,k:Math.round(k),u:''}); }
+}
 function matchFood(text){
   text=(text||'').trim(); if(!text) return null;
-  const matches=FOODS.filter(f=> text.includes(f.n)).sort((a,b)=>b.n.length-a.n.length);
+  const matches=allFoods().filter(f=> text.includes(f.n)).sort((a,b)=>b.n.length-a.n.length);
   const food=matches[0];
-  if(!food){ const num=text.match(/(\d+(?:\.\d+)?)/); if(num) return {food:null,kcal:Number(num[1]),custom:true,label:'自定义'+Number(num[1])+'kcal'}; return null; }
+  if(!food){
+    const num=text.match(/(\d+(?:\.\d+)?)/);
+    if(num){ const name=text.replace(num[0],'').trim(); return {food:null,kcal:Number(num[1]),custom:true,name,label:name||('自定义'+Number(num[1])+'kcal')}; }
+    return null;
+  }
+  const rest=text.replace(food.n,'').trim();
+  const kcalOverride=rest.match(/^(\d+(?:\.\d+)?)\s*(?:kcal|大卡|卡)?$/i);
+  if(kcalOverride){ const kcal=Math.round(Number(kcalOverride[1])); return {food,qty:1,kcal,label:food.n,kcalOverride:true}; }
   let qty=parseQty(text);
   const kcal=Math.round(food.k*qty);
   return {food,qty,kcal,label:food.n};
@@ -3394,9 +3409,9 @@ function previewFood(meal){
   const inp=document.getElementById('food_'+meal); const v=inp?inp.value:'';
   const box=document.getElementById('foodPrev_'+meal); if(!box) return;
   const mt=matchFood(v);
-  if(mt && mt.food){ box.innerHTML=`🔥 ${mt.food.n} ×${mt.qty} · 约 <b>${mt.kcal} kcal</b>`; box.className='prev ok'; }
-  else if(mt && mt.custom){ box.innerHTML=`🔥 自定义热量 <b>${mt.kcal} kcal</b>`; box.className='prev ok'; }
-  else if(v.trim()){ box.innerHTML='⚠️ 未识别食物，试试：米饭/鸡蛋/鸡胸肉… 或直接填数字当热量'; box.className='prev warn'; }
+  if(mt && mt.food){ box.innerHTML= mt.kcalOverride ? `🔥 ${escapeHtml(mt.food.n)} · <b>${mt.kcal} kcal</b>` : `🔥 ${escapeHtml(mt.food.n)} ×${mt.qty} · 约 <b>${mt.kcal} kcal</b>`; box.className='prev ok'; }
+  else if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>（自定义食物，会自动存入联想库）`; box.className='prev ok'; }
+  else if(v.trim()){ box.innerHTML='⚠️ 未识别食物，试试：米饭/鸡蛋/鸡胸肉… 或「食物名 热量」如：蛋白粉 120'; box.className='prev warn'; }
   else { box.innerHTML=''; }
 }
 /* ---- 输入联想：输入任意字（含1个字）即列出匹配食物+热量 ---- */
@@ -3406,7 +3421,7 @@ function suggestFood(meal){
   previewFood(meal);
   if(!v){ box.innerHTML=''; return; }
   const q=v.toLowerCase();
-  const list=FOODS.filter(f=>f.n.toLowerCase().includes(q)||(f.alias&&f.alias.some(a=>a.toLowerCase().includes(q)))).slice(0,12);
+  const list=allFoods().filter(f=>f.n.toLowerCase().includes(q)||(f.alias&&f.alias.some(a=>a.toLowerCase().includes(q)))).slice(0,12);
   if(!list.length){ box.innerHTML=''; return; }
   box.innerHTML=list.map(f=>`<button onclick="fillFood('${meal}','${escapeAttr(f.n)}')">${escapeHtml(f.n)}<span class="k">${f.k} kcal · ${escapeHtml(f.u||'')}</span></button>`).join('');
 }
@@ -3418,9 +3433,23 @@ function fillFood(meal,name){
 function addFoodTyped(meal){
   const inp=document.getElementById('food_'+meal); const v=inp.value;
   const mt=matchFood(v); const t=manaToday();
-  if(mt){ t.meals[meal].push({n:mt.custom?('自定义'+mt.kcal+'kcal'):mt.food.n, k:mt.kcal}); }
+  if(mt){
+    if(mt.custom){ const dn=mt.name||('自定义'+mt.kcal+'kcal'); t.meals[meal].push({n:dn, k:mt.kcal}); if(mt.name) saveCustomFood(mt.name,mt.kcal); }
+    else { t.meals[meal].push({n:mt.food.n, k:mt.kcal}); if(mt.kcalOverride && (state.customFoods||[]).some(x=>x.n===mt.food.n)) saveCustomFood(mt.food.n, mt.kcal); }
+  }
   else { if(!v.trim()) return toast('请输入食物'); t.meals[meal].push({n:v.trim(),k:0}); }
   t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已记录 '+(mealNameCn(meal))+' 🍽️');
+}
+function addCustomFood(meal){
+  const ni=document.getElementById('cfName_'+meal); const ki=document.getElementById('kcal_'+meal);
+  const name=(ni?ni.value.trim():'');
+  const k=Math.round(Number(ki?ki.value.trim():''));
+  if(!k||k<=0) return toast('请输入大于 0 的热量数值');
+  const display=name||('自定义'+k+'kcal');
+  const t=manaToday(); t.meals[meal].push({n:display,k}); t.done=true; t.ts=Date.now();
+  if(name) saveCustomFood(name,k);
+  if(ni) ni.value=''; if(ki) ki.value='';
+  save(); renderMana(); toast('已记录 '+display+' '+k+' kcal 🍽️');
 }
 function addCustomKcal(meal){
   const inp=document.getElementById('kcal_'+meal); const v=inp?inp.value.trim():'';
@@ -3435,7 +3464,7 @@ function addFood(meal,name,k){ manaToday().meals[meal].push({n:name,k}); manaTod
 function delFood(meal,i){ manaToday().meals[meal].splice(i,1); save(); renderMana(); }
 function pickFood(meal,val){
   if(!val) return;
-  const f=FOODS.find(x=>x.n===val);
+  const f=allFoods().find(x=>x.n===val);
   if(!f) return;
   const t=manaToday(); t.meals[meal].push({n:f.n,k:f.k}); t.done=true; t.ts=Date.now(); save(); renderMana(); toast('已添加 '+f.n+' 🍽️');
 }
@@ -3737,6 +3766,10 @@ function mergeState(remote){
     state.aiReviewCycle=Math.max(state.aiReviewCycle||0, remote.aiReviewCycle||0); }
   state.ieltsListened=[...new Set([...(state.ieltsListened||[]),...(remote.ieltsListened||[])])];
   state.settings=Object.assign({}, d.settings, state.settings); // 设备配置(Token/密钥)不跨端同步：保留本机设置，云端绝不覆盖
+  // 自定义食物库：按名字并集，冲突保留本机热量（跨端不互相覆盖、不删除本地已有）
+  { const lf=state.customFoods||[], rf=remote.customFoods||[]; const out=lf.slice();
+    rf.forEach(r=>{ const i=out.findIndex(x=>x.n===r.n); if(i<0) out.push({n:r.n,k:Number(r.k)||0,u:r.u||''}); });
+    state.customFoods=out; }
   // 真合并：按模块、按日期并集，冲突时远端优先（避免任一端记录丢失）
   const merged={};
   MODULES.forEach(m=>{
