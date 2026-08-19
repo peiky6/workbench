@@ -455,13 +455,6 @@
       <div class="field"><label>提醒时间(小时 0–23)</label><input id="setRemindHour" type="number" min="0" max="23" placeholder="21" /></div>
     </div>
     <div class="sect">
-      <h3>📚 雅思 B站 链接</h3>
-      <p class="hint">直接填入你想要的 B站 视频/合集链接，栏目里点开即跳。</p>
-      <div class="field"><label>杨帅口语课程</label><input id="biliYs" placeholder="https://b23.tv/..." /></div>
-      <div class="field"><label>杨帅99句</label><input id="bili99" placeholder="https://b23.tv/..." /></div>
-      <div class="field"><label>Simon 写作课程</label><input id="biliSimon" placeholder="https://b23.tv/..." /></div>
-    </div>
-    <div class="sect">
       <h3>📰 新闻源管理（新闻阅读栏目用）</h3>
       <p class="hint">添加你常看的新闻 / 资讯链接，新闻栏目里会展示，点开即读。</p>
       <div id="linkEdits"></div>
@@ -473,38 +466,15 @@
     </div>
     <div class="sect" id="syncSection">
       <h3>☁️ 云端同步</h3>
-      <p class="hint">数据可跨设备同步。支持 <b>GitHub Gist</b>（最简）或 <b>Supabase</b>（更专业/私密）。两者都可选「本地口令加密」，数据上传前先用 AES 加密，只有你知道口令才能解开。</p>
-      <div class="field"><label>同步方式</label>
-        <select id="setSyncMethod">
-          <option value="gist">GitHub Gist（简单）</option>
-          <option value="supabase">Supabase（专业）</option>
-        </select></div>
+      <p class="hint">数据可跨设备同步（GitHub Gist）。可选「本地口令加密」，数据上传前先用 AES 加密，只有你知道口令才能解开。</p>
       <div id="gistBox">
         <div class="field"><label>GitHub Token</label><input id="setToken" type="password" placeholder="ghp_xxxxxxxxxxxx" /></div>
         <div class="field"><label>Gist ID</label><input id="setGistId" placeholder="Gist 地址末尾那串字符" /></div>
         <p class="hint">① GitHub 新建一个 Gist（任意文件名，如 workbench.json）<br>② 生成带 <b>gist</b> 权限的 Personal Access Token<br>③ 粘贴上方即可——<b>保存后自动上传</b>、<b>打开 App 自动下载合并</b>（也可随时手动点「上传 / 下载」）。</p>
       </div>
-      <div id="supaBox" style="display:none">
-        <div class="field"><label>Supabase 项目 URL</label><input id="setSupaUrl" placeholder="https://xxxx.supabase.co" /></div>
-        <div class="field"><label>Supabase anon key</label><input id="setSupaKey" type="password" placeholder="eyJ..." /></div>
-        <p class="hint"><b>首次使用 4 步（约 2 分钟）：</b><br>
-          ① 到 <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> 免费新建一个项目<br>
-          ② 项目里 → SQL Editor → 粘贴下面 SQL 执行（建表 + 开放匿名读写）<br>
-          ③ 项目 Settings → API 复制 <b>URL</b> 与 <b>anon key</b>，填到上方<br>
-          ④ 回来点「⬆️ 上传本机」即完成首次同步 ✅</p>
-        <div class="mini-row">
-          <button class="mini accent" id="btnCopySql" onclick="copyText(SUPABASE_SQL)">📋 复制建表 SQL</button>
-          <button class="mini line" id="btnCopySql2" onclick="copyText(SUPABASE_SQL)">再复制一次</button>
-        </div>
-        <p class="hint" style="margin-top:8px">建表 SQL：<br>
-          <code>create table workbench_sync(id text primary key, data text, updated_at timestamptz default now());</code><br>
-          <code>alter table workbench_sync enable row level security;</code><br>
-          <code>create policy "pub" on workbench_sync for all using (true) with check (true);</code><br>
-          这样本机用 anon key 就能读写这一行（id 固定为 me，数据按你设置的口令加密）。</p>
-      </div>
       <div class="field" style="margin-top:6px"><label><input type="checkbox" id="setAutoEncrypt" onchange="encWarnUpdate()" style="width:auto;margin-right:6px"/>启用本地口令加密（默认开启 · 强烈推荐）</label></div>
       <div class="field"><label>加密口令</label><input id="setEncPass" type="password" placeholder="设一个只有你知道的口令" oninput="encWarnUpdate()" /></div>
-      <p class="hint">⚠️ 口令丢失将无法解密云端数据，请牢记。加密后云端（GitHub Gist / Supabase）只存密文，即使链接或仓库泄露也解不开。</p>
+      <p class="hint">⚠️ 口令丢失将无法解密云端数据，请牢记。加密后云端（GitHub Gist）只存密文，即使链接或仓库泄露也解不开。</p>
       <p id="encWarn" style="display:none;color:#e0533d;font-size:13px;margin:4px 2px 0">🔒 加密已开启，但还没设口令——请在上方「加密口令」填写并保存，否则云端仍是明文。</p>
       <div class="mini-row">
         <button class="mini accent" id="btnPush">⬆️ 上传本机</button>
@@ -565,9 +535,6 @@ const MODULES = [
   {key:'reading',name:'每日阅读', emoji:'📖', iconCls:'i-reading',desc:'书籍·微信读书'}
 ];
 function wereadUrl(name){ return 'https://weread.qq.com/web/search/books?keyword='+encodeURIComponent(name); }
-const SUPABASE_SQL = `create table if not exists workbench_sync(id text primary key, data text, updated_at timestamptz default now());
-alter table workbench_sync enable row level security;
-create policy if not exists "pub" on workbench_sync for all using (true) with check (true);`;
 function copyText(t){ if(navigator.clipboard) navigator.clipboard.writeText(t); else { const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } }
 const QUOTES = ['今天也要认真生活呀 ✨','坚持，是给未来最好的礼物 🌱','日拱一卒，功不唐捐 💪',
   '小小的打卡，大大的改变 🌟','你现在的努力，是未来的底气 🌈','慢慢来，比较快 🍃','自律给我自由 🕊️'];
@@ -583,7 +550,6 @@ function defaultState(){
   return {
     user:{name:'我'},
     profile:{sex:'male', age:30, height:170, weight:''},
-    bili:{ ysSpeak:'https://b23.tv/QyDo3cz', ys99:'https://b23.tv/NgeMe1z', simon:'https://b23.tv/d4Itox3' },
     newsLinks: JSON.parse(JSON.stringify(DEFAULT_LINKS)),
     readingBooks:[
       {name:'深奥的简洁', cover:'', url:wereadUrl('深奥的简洁'), total:0, current:0, finished:false, finishedDate:''},
@@ -599,7 +565,7 @@ function defaultState(){
     readingAch:[], readingFinished:[],
     readPages:{}, monthReminded:'',
     customFoods:[],
-    settings:{ gistToken:'', gistId:'', supaUrl:'', supaKey:'', syncMethod:'gist', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21 }
   };
 }
 let state = load();
@@ -631,11 +597,11 @@ function load(){
     }
     s.ieltsListened = Array.isArray(s.ieltsListened) ? s.ieltsListened : [];
     s.profile = Object.assign(d.profile, s.profile||{});
-    s.bili = Object.assign(d.bili, s.bili||{});
     s.newsLinks = s.newsLinks && s.newsLinks.length ? s.newsLinks : d.newsLinks;
     s.readingBooks = s.readingBooks && s.readingBooks.length ? s.readingBooks : d.readingBooks;
     s.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
     s.settings = Object.assign(d.settings, s.settings||{});
+    delete s.settings.supaUrl; delete s.settings.supaKey; delete s.settings.syncMethod; // 清理旧版 Supabase/同步方式残留
     s.modules = s.modules || {};
     MODULES.forEach(m=>{ if(!s.modules[m.key]) s.modules[m.key] = {records:{}}; });
     s.trainCancel = (s.trainCancel && s.trainCancel.log) ? s.trainCancel : {total:0, log:{}};
@@ -709,7 +675,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-19e';
+const APP_VERSION = '2026-08-19f';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -1066,7 +1032,7 @@ function planSkipped(n){ return !!(state.planSkip && state.planSkip[String(n)]);
 function planCurrentSeq(){ for(let i=0;i<STUDY_PLAN.length;i++){ const n=i+1; if(!planSeqDone(n) && !planSkipped(n)) return n; } return 0; }
 function planDelayDays(n){ if(planSeqDone(n)) return 0; const real=planRealDate(STUDY_PLAN[n-1].mmdd); const td=today(); if(td<=real) return 0; return Math.floor((new Date(td)-new Date(real))/86400000); }
 /* ===================== 内容库 ===================== */
-// 雅思：用户提供的 B站 链接直接跳转（存于 state.bili）
+// 雅思：B站 链接直接跳转
 // 雅思真题听力库（按日期轮换，均为剑桥雅思真实考题场景；练习场为爱听写真题音频）
 const IELTS_LISTENING = [
   {tag:'C11 T1 S1', scene:'租房咨询（Renting accommodation）', type:'完成笔记 + 填空题', tip:'注意日期、电话、价格的拼写与数字', url:'https://www.idictation.cn/',
@@ -2208,12 +2174,10 @@ const IELTS_PARTS=[
    subs:null,noteLabel:'不会的单词 / 笔记'},
   {key:'speaking',emoji:'💬',name:'口语',
    desc:'完成 B站 杨帅口语课程 1 节并记录笔记；熟读杨帅99句至少 3 句；周末完成 1 个 Part1 + 1 个 Part2 话题。',
-   links:[{label:'▶ 杨帅口语课程（B站）',bili:'ysSpeak'},{label:'▶ 杨帅99句（B站）',bili:'ys99'}],
    subs:[{key:'lec',label:'完成杨帅口语课程 1 节 + 记笔记'},{key:'recite',label:'熟读杨帅99句至少 3 句'},{key:'weekend',label:'周末：完成 1 个 Part1 + 1 个 Part2 话题'}],
    noteLabel:'口语笔记'},
   {key:'writing',emoji:'✍️',name:'写作',
    desc:'完成 B站 Simon 写作课程 / Vince 9120 1 节并记录笔记；周末完成 1 篇小作文 + 1 篇大作文。',
-   links:[{label:'▶ Simon 写作课程（B站）',bili:'simon'},{label:'▶ Vince 9120（B站）',url:'https://space.bilibili.com/9120'}],
    subs:[{key:'lec',label:'完成 Simon / Vince 写作课 1 节 + 记笔记'},{key:'weekend',label:'周末：完成 1 篇小作文 + 1 篇大作文'}],
    noteLabel:'写作笔记'}
 ];
@@ -3582,26 +3546,14 @@ function openSettings(){
   document.getElementById('setReadGoal').value=(state.settings.readGoal!=null)?state.settings.readGoal:5;
   document.getElementById('setRemind').value=state.settings.reminderEnabled?'on':'off';
   document.getElementById('setRemindHour').value=(state.settings.reminderHour!=null)?state.settings.reminderHour:21;
-  document.getElementById('biliYs').value=state.bili.ysSpeak||'';
-  document.getElementById('bili99').value=state.bili.ys99||'';
-  document.getElementById('biliSimon').value=state.bili.simon||'';
   document.getElementById('setToken').value=state.settings.gistToken||'';
   document.getElementById('setGistId').value=state.settings.gistId||'';
-  document.getElementById('setSupaUrl').value=state.settings.supaUrl||'';
-  document.getElementById('setSupaKey').value=state.settings.supaKey||'';
-  document.getElementById('setSyncMethod').value=state.settings.syncMethod||'gist';
   document.getElementById('setAutoEncrypt').checked=!!state.settings.autoEncrypt;
   document.getElementById('setEncPass').value=state.settings.encPass||'';
   encWarnUpdate();
-  toggleSyncBox();
   renderLinkEdits();
   updateConnBox();
   document.getElementById('settingsPanel').classList.add('show');
-}
-function toggleSyncBox(){
-  const m=document.getElementById('setSyncMethod').value;
-  document.getElementById('gistBox').style.display = m==='gist'?'block':'none';
-  document.getElementById('supaBox').style.display = m==='supabase'?'block':'none';
 }
 function updateConnBox(){
   const el=document.getElementById('connInline');
@@ -3624,15 +3576,9 @@ function closeSettings(){
   p.age=document.getElementById('setAge').value.trim();
   p.height=document.getElementById('setHeight').value.trim();
   p.weight=document.getElementById('setWeight').value.trim();
-  state.bili.ysSpeak=document.getElementById('biliYs').value.trim();
-  state.bili.ys99=document.getElementById('bili99').value.trim();
-  state.bili.simon=document.getElementById('biliSimon').value.trim();
   const s=state.settings;
   s.gistToken=document.getElementById('setToken').value.trim();
   s.gistId=cleanGistId(document.getElementById('setGistId').value);
-  s.supaUrl=document.getElementById('setSupaUrl').value.trim().replace(/\/$/,'');
-  s.supaKey=document.getElementById('setSupaKey').value.trim();
-  s.syncMethod=document.getElementById('setSyncMethod').value;
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
   s.encPass=document.getElementById('setEncPass').value;
   if(s.autoEncrypt && !s.encPass){ toast('⚠️ 加密已开启但未设口令，云端仍是明文，请填口令后重存'); }
@@ -3675,7 +3621,7 @@ async function decodeState(content,pass){
   return JSON.parse(content);
 }
 
-/* ===================== 同步（Gist / Supabase） ===================== */
+/* ===================== 同步（GitHub Gist） ===================== */
 /* 输入保护：自动同步(pull)触发整页重渲染时，保留正在输入的内容，避免打字被清空 */
 let _inputGuard={active:'',vals:{}};
 function snapshotInputs(){
@@ -3692,63 +3638,37 @@ function restoreInputs(){
   }catch(e){}
 }
 async function pushData(silent){
-  const s=state.settings; const method=s.syncMethod||'gist';
-  if(method==='gist'){
-    if(!s.gistToken||!s.gistId){ if(!silent) toast('请先在设置填写 GitHub Token 和 Gist ID'); return; }
-    setSyncStatus('⬆️ 上传中…');
-    try{
-      const content=await encodeState();
-      const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{method:'PATCH',
-        headers:{'Authorization':`token ${s.gistToken}`,'Content-Type':'application/json'},
-        body:JSON.stringify({files:{'workbench.json':{content}}})});
-      if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
-      if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      setSyncStatus('✅ 已上传 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已同步到云端 ☁️');
-    }catch(e){ setSyncStatus('❌ 上传失败：'+e.message); markConn('fail'); if(!silent) toast('同步失败'); }
-  } else {
-    if(!s.supaUrl||!s.supaKey){ if(!silent) toast('请先在设置填写 Supabase URL 和 anon key'); return; }
-    setSyncStatus('⬆️ 上传中…');
-    try{
-      const content=await encodeState();
-      const res=await fetch(`${s.supaUrl}/rest/v1/workbench_sync`,{method:'POST',
-        headers:{'apikey':s.supaKey,'Authorization':'Bearer '+s.supaKey,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'},
-        body:JSON.stringify([{id:'me',data:content,updated_at:new Date().toISOString()}])});
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      setSyncStatus('✅ 已上传到 Supabase '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已同步到云端 ☁️');
-    }catch(e){ setSyncStatus('❌ 上传失败：'+e.message); markConn('fail'); if(!silent) toast('同步失败'); }
-  }
+  const s=state.settings;
+  if(!s.gistToken||!s.gistId){ if(!silent) toast('请先在设置填写 GitHub Token 和 Gist ID'); return; }
+  setSyncStatus('⬆️ 上传中…');
+  try{
+    const content=await encodeState();
+    const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{method:'PATCH',
+      headers:{'Authorization':`token ${s.gistToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({files:{'workbench.json':{content}}})});
+    if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
+    if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    setSyncStatus('✅ 已上传 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已同步到云端 ☁️');
+  }catch(e){ setSyncStatus('❌ 上传失败：'+e.message); markConn('fail'); if(!silent) toast('同步失败'); }
 }
 async function pullData(silent){
-  const s=state.settings; const method=s.syncMethod||'gist';
+  const s=state.settings;
   const pass = needEncrypt()? state.settings.encPass : (silent? '' : (prompt('如云端数据已加密，请输入口令（未加密直接确定）：')||''));
-  if(method==='gist'){
-    if(!s.gistToken||!s.gistId){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return; }
-    setSyncStatus('⬇️ 下载中…');
-    try{
-      const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
-      if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
-      if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      const data=await res.json();
-      const content=data.files['workbench.json'] && data.files['workbench.json'].content;
-      if(!content) throw new Error('Gist 里没有 workbench.json');
-      const remote=await decodeState(content,pass);
-      try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
-      mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
-    }catch(e){ _pullFail(e,silent); }
-  } else {
-    if(!s.supaUrl||!s.supaKey){ if(!silent) toast('请先填写 Supabase URL 和 anon key'); return; }
-    setSyncStatus('⬇️ 下载中…');
-    try{
-      const res=await fetch(`${s.supaUrl}/rest/v1/workbench_sync?id=eq.me&select=data,updated_at`,{headers:{'apikey':s.supaKey,'Authorization':'Bearer '+s.supaKey}});
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      const rows=await res.json();
-      if(!rows.length) throw new Error('云端还没有数据，请先上传');
-      const remote=await decodeState(rows[0].data,pass);
-      mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
-    }catch(e){ _pullFail(e,silent); }
-  }
+  if(!s.gistToken||!s.gistId){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return; }
+  setSyncStatus('⬇️ 下载中…');
+  try{
+    const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
+    if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
+    if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const content=data.files['workbench.json'] && data.files['workbench.json'].content;
+    if(!content) throw new Error('Gist 里没有 workbench.json');
+    const remote=await decodeState(content,pass);
+    try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
+    mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
+  }catch(e){ _pullFail(e,silent); }
 }
 function _pullFail(e,silent){
   if(silent){
@@ -3760,7 +3680,6 @@ function mergeState(remote){
   const d=defaultState();
   state.user=remote.user||d.user;
   state.profile=Object.assign(d.profile,remote.profile||{});
-  state.bili=Object.assign(d.bili,remote.bili||{});
   state.newsLinks=remote.newsLinks&&remote.newsLinks.length?remote.newsLinks:d.newsLinks;
   state.readingBooks=remote.readingBooks&&remote.readingBooks.length?remote.readingBooks:d.readingBooks;
   state.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
@@ -3809,28 +3728,20 @@ function mergeState(remote){
   state.modules=merged;
 }
 async function testConn(){
-  const s=state.settings; const method=s.syncMethod||'gist';
+  const s=state.settings;
   setSyncStatus('🔌 测试中…');
   try{
-    let ok=false;
-    if(method==='gist'){
-      if(!s.gistToken||!s.gistId) throw new Error('未填写 Token/ID');
-      const r=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
-      if(r.status===401){
-        // 进一步自检：Token 本身是否有效（与 gist 无关）
-        const u=await fetch(`https://api.github.com/user`,{headers:{'Authorization':`token ${s.gistToken}`}});
-        if(u.status===401) throw new Error('Token 本身无效(401)：复制时可能被截断/带换行，或已过期/被吊销。请重新生成 classic PAT（勾 gist），并整段复制、别带空格');
-        throw new Error('Gist 访问被拒(401)：Token 有效，但该 Token 无 gist 权限或 Gist 不可访问');
-      }
-      if(r.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符、不是整条 URL，且 Token 勾选了 gist 权限');
-      ok=r.ok;
-    } else {
-      if(!s.supaUrl||!s.supaKey) throw new Error('未填写 URL/key');
-      const r=await fetch(`${s.supaUrl}/rest/v1/workbench_sync?id=eq.me&select=id`,{headers:{'apikey':s.supaKey,'Authorization':'Bearer '+s.supaKey}});
-      ok=r.ok;
+    if(!s.gistToken||!s.gistId) throw new Error('未填写 Token/ID');
+    const r=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
+    if(r.status===401){
+      // 进一步自检：Token 本身是否有效（与 gist 无关）
+      const u=await fetch(`https://api.github.com/user`,{headers:{'Authorization':`token ${s.gistToken}`}});
+      if(u.status===401) throw new Error('Token 本身无效(401)：复制时可能被截断/带换行，或已过期/被吊销。请重新生成 classic PAT（勾 gist），并整段复制、别带空格');
+      throw new Error('Gist 访问被拒(401)：Token 有效，但该 Token 无 gist 权限或 Gist 不可访问');
     }
-    if(!ok) throw new Error('连接返回错误（HTTP 非 200）');
-    markConn('ok'); setSyncStatus('✅ 连接成功（'+ (method==='gist'?'GitHub':'Supabase') +'）'); toast('连接成功 ✅');
+    if(r.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符、不是整条 URL，且 Token 勾选了 gist 权限');
+    if(!r.ok) throw new Error('连接返回错误（HTTP 非 200）');
+    markConn('ok'); setSyncStatus('✅ 连接成功（GitHub）'); toast('连接成功 ✅');
   }catch(e){ markConn('fail'); setSyncStatus('❌ 连接失败：'+e.message); toast('连接失败：'+e.message); }
 }
 function markConn(st){ syncConn={state:st,ts:Date.now()}; renderSidebar(); }
@@ -3841,8 +3752,8 @@ let _syncing=false;
 let _pushTimer=null;
 let _pulledThisSession=false;   // 本会话是否已从云端拉取过：未拉取前绝不先上传，防「空本地覆盖云端」
 function _cfgOK(){
-  const s=state.settings; const m=s.syncMethod||'gist';
-  return (m==='gist'&&s.gistToken&&s.gistId)||(m==='supabase'&&s.supaUrl&&s.supaKey);
+  const s=state.settings;
+  return !!(s.gistToken && s.gistId);
 }
 function scheduleAutoPush(){
   if(_syncing||!_cfgOK()) return;
@@ -3892,7 +3803,6 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 /* ===================== 事件绑定 ===================== */
 document.getElementById('closeSettings').onclick=closeSettings;
 document.getElementById('sheetMask').onclick=e=>{ if(e.target.id==='sheetMask') document.getElementById('sheetMask').classList.remove('show'); };
-document.getElementById('setSyncMethod').onchange=toggleSyncBox;
 document.getElementById('addLink').onclick=()=>{
   const t=document.getElementById('newLinkTitle').value.trim(), u=document.getElementById('newLinkUrl').value.trim();
   if(!t||!u) return toast('名称和链接都要填');
@@ -3900,7 +3810,7 @@ document.getElementById('addLink').onclick=()=>{
   document.getElementById('newLinkTitle').value=''; document.getElementById('newLinkUrl').value='';
 };
 // 设置内的输入自动保存
-['setName','setSex','setAge','setHeight','setWeight','biliYs','bili99','biliSimon','setToken','setGistId','setSupaUrl','setSupaKey','setEncPass'].forEach(id=>{
+['setName','setSex','setAge','setHeight','setWeight','setToken','setGistId','setEncPass'].forEach(id=>{
   const el=document.getElementById(id); if(el) el.oninput=()=>{ /* 关闭设置时统一保存 */ };
 });
 document.getElementById('setAutoEncrypt').onchange=()=>{};
