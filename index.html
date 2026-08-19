@@ -193,6 +193,7 @@
   .foodpick{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px;font-size:14px;outline:none;background:#fff;margin-bottom:8px;color:var(--ink);}
   .foodpick:focus{border-color:var(--accent);}
   .mini{font-size:13px;font-weight:700;border:none;border-radius:12px;padding:10px 14px;cursor:pointer;white-space:nowrap;}
+  .mini.sm{padding:5px 8px;font-size:12px;border-radius:8px;}
   .mini.accent{background:linear-gradient(135deg,var(--accent),var(--accent3));color:#fff;}
   .mini.line{background:#f3f9fe;color:var(--sub);}
 
@@ -708,7 +709,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 热力图） ===================== */
-const APP_VERSION = '2026-08-19c';
+const APP_VERSION = '2026-08-19d';
 function dayDoneAny(ds){ return MODULES.some(m=>dayDone(m.key,ds)); }
 function overallStreak(){ let c=0; const cur=new Date(); if(!dayDoneAny(fmt(cur))) cur.setDate(cur.getDate()-1); while(dayDoneAny(fmt(cur))){ c++; cur.setDate(cur.getDate()-1); } return c; }
 function bestStreak(){
@@ -3115,8 +3116,8 @@ function renderMana(){
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)}${f.qty&&f.qty!==1?(' ×'+f.qty):''} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 蛋白粉 120（名字+热量=自定义）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
-      <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line" onclick="addDietMeal('${meal}')">📋 套用${dietPlanToday().tag||''}计划</button>`}</div>
-      <div class="inline kcal-row" style="flex-wrap:wrap"><span class="kcal-label">✨ 自定义食物</span><input id="cfName_${meal}" type="text" placeholder="食物名（可留空）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:120px" /><input id="kcal_${meal}" type="number" inputmode="numeric" min="0" step="1" placeholder="热量" style="width:88px" /> <button class="mini" onclick="addCustomFood('${meal}')">添加</button></div>
+      <button class="mini accent" onclick="addFoodTyped('${meal}')">添加</button>${dietPlanToday().free?'':`<button class="mini line sm" onclick="addDietMeal('${meal}')" title="一键套用今日训练日饮食计划">📋 套用</button>`}</div>
+      <div class="inline kcal-row" style="margin-top:2px"><span class="kcal-label">✨</span><input id="cfName_${meal}" type="text" placeholder="自定义食物名（可留空）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0" /><input id="kcal_${meal}" type="number" inputmode="numeric" min="0" step="1" placeholder="热量" style="width:80px" /> <button class="mini" onclick="addCustomFood('${meal}')">添加</button></div>
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
