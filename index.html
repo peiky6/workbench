@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21h';
+const APP_VERSION = '2026-08-21i';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -3819,15 +3819,15 @@ async function pullData(silent){
   if(!s.gistToken||!s.gistId){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return; }
   setSyncStatus('⬇️ 下载中…');
   try{
-    const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
+    const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}});
     if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
     if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     let content=data.files['workbench.json'] && data.files['workbench.json'].content;
-    // Gist API 对超过 ~1MB 的文件会截断 content 字段（truncated:true），改走 raw_url 直链取全文
+    // Gist API 对超过 ~1MB 的文件会截断 content 字段（truncated:true），改走 raw_url 直链取全文；fetch 一律 no-store 防浏览器缓存旧响应导致解码失败
     if(data.files['workbench.json'] && data.files['workbench.json'].truncated && data.files['workbench.json'].raw_url){
-      try{ const rr=await fetch(data.files['workbench.json'].raw_url,{headers:{'Authorization':`token ${s.gistToken}`}}); if(rr.ok) content=await rr.text(); }catch(e){ console.warn('gist raw fetch fail',e); }
+      try{ const rr=await fetch(data.files['workbench.json'].raw_url,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}}); if(rr.ok) content=await rr.text(); }catch(e){ console.warn('gist raw fetch fail',e); }
     }
     if(!content) throw new Error('Gist 里没有 workbench.json');
     const remote=await decodeState(content,pass);
@@ -3915,10 +3915,10 @@ async function testConn(){
   setSyncStatus('🔌 测试中…');
   try{
     if(!s.gistToken||!s.gistId) throw new Error('未填写 Token/ID');
-    const r=await fetch(`https://api.github.com/gists/${s.gistId}`,{headers:{'Authorization':`token ${s.gistToken}`}});
+    const r=await fetch(`https://api.github.com/gists/${s.gistId}`,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}});
     if(r.status===401){
       // 进一步自检：Token 本身是否有效（与 gist 无关）
-      const u=await fetch(`https://api.github.com/user`,{headers:{'Authorization':`token ${s.gistToken}`}});
+      const u=await fetch(`https://api.github.com/user`,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}});
       if(u.status===401) throw new Error('Token 本身无效(401)：复制时可能被截断/带换行，或已过期/被吊销。请重新生成 classic PAT（勾 gist），并整段复制、别带空格');
       throw new Error('Gist 访问被拒(401)：Token 有效，但该 Token 无 gist 权限或 Gist 不可访问');
     }
