@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21f';
+const APP_VERSION = '2026-08-21g';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -2741,7 +2741,7 @@ function renderNotes(){
   document.getElementById('main').innerHTML = `
     <div class="mhead">
       <button class="back" onclick="setView('home')">‹ 总览</button>
-      <h2>📒 笔记问答</h2>
+      <h2>📒 笔记问答 <span style="font-size:12px;color:var(--sub);font-weight:400">本地：${notes.length} 篇 · ${allQa.length} 条</span></h2>
     </div>
     <div class="dcard">
       <div class="ltitle">🎯 今日问答自测（每日 5 条）</div>
