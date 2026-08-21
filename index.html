@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21e';
+const APP_VERSION = '2026-08-21f';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -2677,50 +2677,6 @@ function qaBulk(nid){
   save(); renderNotes(); toast('批量导入 '+added+' 条问答 ✅');
 }
 function qaDel(id){ state.qa=(state.qa||[]).filter(x=>x.id!==id); delete (state.qaProg||{})[id]; save(); renderNotes(); toast('已删除问答'); }
-function qaToggleImport(){ const b=document.getElementById('qaImportBox'); if(b) b.style.display=(b.style.display==='none'||!b.style.display)?'block':'none'; }
-// 批量导入核心：JSON 数组 [{title,content,qa:[{q,a}]}]；按标题去重，重复标题跳过
-function qaImportData(data){
-  state.notes=state.notes||[]; state.qa=state.qa||[];
-  const existing=new Set(state.notes.map(n=>n.title));
-  let nAdd=0, qAdd=0, skip=0;
-  data.forEach(item=>{
-    if(!item||!item.title){ skip++; return; }
-    const title=String(item.title).trim();
-    if(!title||existing.has(title)){ skip++; return; }
-    existing.add(title);
-    const nid='n'+Date.now()+Math.random().toString(36).slice(2,7);
-    state.notes.push({id:nid, title, content:String(item.content||''), ts:Date.now()});
-    nAdd++;
-    (Array.isArray(item.qa)?item.qa:[]).forEach(pair=>{
-      if(!pair) return;
-      const q=String(pair.q||'').trim(), a=String(pair.a||'').trim();
-      if(q&&a){ state.qa.push({id:qaId(), nid, q, a}); qAdd++; }
-    });
-  });
-  save(); renderNotes();
-  toast('导入完成：'+nAdd+' 篇笔记 / '+qAdd+' 条问答'+(skip?'（跳过 '+skip+' 条重复/无效）':'')+' 🎉');
-}
-function qaImport(){
-  const v=(document.getElementById('qaImportText').value||'').trim();
-  if(!v){ toast('请粘贴 JSON 文本'); return; }
-  let data;
-  try{ data=JSON.parse(v); }catch(e){ toast('JSON 解析失败：'+e.message); return; }
-  if(!Array.isArray(data)){ toast('请提供数组格式：[{...},{...}]'); return; }
-  document.getElementById('qaImportText').value='';
-  qaImportData(data);
-}
-// 直接选文件导入（.json）——手机端免复制粘贴
-function qaImportFile(input){
-  const f=input&&input.files&&input.files[0]; if(!f) return;
-  const reader=new FileReader();
-  reader.onload=()=>{ try{
-    const data=JSON.parse(reader.result);
-    if(!Array.isArray(data)) throw new Error('不是数组格式：[{...},{...}]');
-    qaImportData(data);
-  }catch(e){ toast('文件解析失败：'+e.message); } };
-  reader.readAsText(f,'utf-8');
-  if(input) input.value='';
-}
 function qaReveal(){ const b=document.getElementById('qaAnsBox'); if(b) b.style.display='block'; }
 function qaAnswer(ok){
   const entry=qaDayList();
@@ -2738,7 +2694,8 @@ function renderNotes(){
   const entry=allQa.length? qaDayList() : {list:[],cur:0,done:false};
   let quizHtml;
   if(!allQa.length){
-    quizHtml=`<div class="notice">📒 还没有问答卡：先在下方「📚 笔记库」添加一篇笔记，再给笔记加问答（可批量粘贴「问题?|答案」，每行一条）。之后这里每天自动抽 5 条自测。</div>`;
+    quizHtml=`<div class="notice">📒 还没有问答卡。如果笔记已在云端（其他设备添加过），点下面按钮同步过来；否则在下方的「📚 笔记库」添加笔记并加问答。</div>
+      <div class="inline" style="justify-content:center;margin-top:8px"><button class="mini accent" onclick="pullData(false)">⬇️ 从云端同步</button></div>`;
   } else if(entry.done){
     const miss=entry.list.filter(id=>qaProgOf(id).miss>0).length;
     quizHtml=`<div class="stats stats2">
@@ -2795,13 +2752,6 @@ function renderNotes(){
       <div class="field"><input id="noteTitle" placeholder="笔记标题（如：RAG 落地实践）" /></div>
       <div class="field"><textarea id="noteContent" rows="4" placeholder="粘贴笔记全文（长文直接贴，几千字也行）" style="width:100%;box-sizing:border-box"></textarea></div>
       <button class="btn primary w100" onclick="notesAdd()">📥 保存笔记</button>
-      <div class="inline" style="margin-top:8px"><button class="mini line" onclick="qaToggleImport()">📥 批量导入笔记+问答（JSON）</button></div>
-      <div id="qaImportBox" style="display:none;margin-top:8px">
-        <textarea id="qaImportText" rows="5" placeholder='格式：[{"title":"笔记标题","content":"笔记全文","qa":[{"q":"问题?","a":"答案"}]}, ...]（按标题去重，可重复导入）' style="width:100%;box-sizing:border-box"></textarea>
-        <button class="btn primary w100" onclick="qaImport()">🚀 导入全部</button>
-        <p class="hint" style="text-align:center;margin:6px 0">或直接选文件（.json）导入：</p>
-        <input type="file" id="qaImportFile" accept=".json,application/json" onchange="qaImportFile(this)" style="width:100%;font-size:13px" />
-      </div>
       <div style="margin-top:10px">${notesHtml}</div>
     </div>
     <div class="dcard">
