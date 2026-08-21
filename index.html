@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21c';
+const APP_VERSION = '2026-08-21d';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -3922,6 +3922,24 @@ function mergeState(remote){
   { const lf=state.customFoods||[], rf=remote.customFoods||[]; const out=lf.slice();
     rf.forEach(r=>{ const i=out.findIndex(x=>x.n===r.n); if(i<0) out.push({n:r.n,k:Number(r.k)||0,u:r.u||''}); });
     state.customFoods=out; }
+  // 笔记问答：跨端合并——远端笔记按标题补入本地没有的；问答按「问题|答案」去重，nid 经标题映射到本地笔记 id
+  { const lf=state.notes||[], rf=remote.notes||[];
+    const have=new Set(lf.map(n=>n.title));
+    const rTitleById={}; rf.forEach(n=>{ if(n) rTitleById[n.id]=n.title; });
+    rf.forEach(n=>{ if(n&&n.title&&!have.has(n.title)){
+      const nid='n'+Date.now()+Math.random().toString(36).slice(2,7);
+      lf.push({id:nid,title:n.title,content:n.content||'',ts:n.ts||Date.now()}); have.add(n.title); rTitleById[n.id]=n.title;
+    } });
+    const lTitleId={}; lf.forEach(n=>{ lTitleId[n.title]=n.id; });
+    const seen=new Set((state.qa||[]).map(q=>q.q+'|'+q.a));
+    (remote.qa||[]).forEach(q=>{
+      if(!q||!q.q||!q.a) return;
+      if(seen.has(q.q+'|'+q.a)) return;
+      const title=rTitleById[q.nid]; const nid=title?lTitleId[title]:null;
+      if(!nid) return;
+      state.qa.push({id:qaId(), nid, q:q.q, a:q.a}); seen.add(q.q+'|'+q.a);
+    });
+  }
   // 真合并：按模块、按日期并集，冲突时远端优先（避免任一端记录丢失）
   const merged={};
   MODULES.forEach(m=>{
