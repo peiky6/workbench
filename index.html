@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21d';
+const APP_VERSION = '2026-08-21e';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -3874,7 +3874,11 @@ async function pullData(silent){
     if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    const content=data.files['workbench.json'] && data.files['workbench.json'].content;
+    let content=data.files['workbench.json'] && data.files['workbench.json'].content;
+    // Gist API 对超过 ~1MB 的文件会截断 content 字段（truncated:true），改走 raw_url 直链取全文
+    if(data.files['workbench.json'] && data.files['workbench.json'].truncated && data.files['workbench.json'].raw_url){
+      try{ const rr=await fetch(data.files['workbench.json'].raw_url,{headers:{'Authorization':`token ${s.gistToken}`}}); if(rr.ok) content=await rr.text(); }catch(e){ console.warn('gist raw fetch fail',e); }
+    }
     if(!content) throw new Error('Gist 里没有 workbench.json');
     const remote=await decodeState(content,pass);
     try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
