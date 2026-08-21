@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21b';
+const APP_VERSION = '2026-08-21c';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -2678,13 +2678,8 @@ function qaBulk(nid){
 }
 function qaDel(id){ state.qa=(state.qa||[]).filter(x=>x.id!==id); delete (state.qaProg||{})[id]; save(); renderNotes(); toast('已删除问答'); }
 function qaToggleImport(){ const b=document.getElementById('qaImportBox'); if(b) b.style.display=(b.style.display==='none'||!b.style.display)?'block':'none'; }
-// 批量导入：JSON 数组 [{title,content,qa:[{q,a}]}]；按标题去重，重复标题跳过
-function qaImport(){
-  const v=(document.getElementById('qaImportText').value||'').trim();
-  if(!v){ toast('请粘贴 JSON 文本'); return; }
-  let data;
-  try{ data=JSON.parse(v); }catch(e){ toast('JSON 解析失败：'+e.message); return; }
-  if(!Array.isArray(data)){ toast('请提供数组格式：[{...},{...}]'); return; }
+// 批量导入核心：JSON 数组 [{title,content,qa:[{q,a}]}]；按标题去重，重复标题跳过
+function qaImportData(data){
   state.notes=state.notes||[]; state.qa=state.qa||[];
   const existing=new Set(state.notes.map(n=>n.title));
   let nAdd=0, qAdd=0, skip=0;
@@ -2702,9 +2697,29 @@ function qaImport(){
       if(q&&a){ state.qa.push({id:qaId(), nid, q, a}); qAdd++; }
     });
   });
-  document.getElementById('qaImportText').value='';
   save(); renderNotes();
   toast('导入完成：'+nAdd+' 篇笔记 / '+qAdd+' 条问答'+(skip?'（跳过 '+skip+' 条重复/无效）':'')+' 🎉');
+}
+function qaImport(){
+  const v=(document.getElementById('qaImportText').value||'').trim();
+  if(!v){ toast('请粘贴 JSON 文本'); return; }
+  let data;
+  try{ data=JSON.parse(v); }catch(e){ toast('JSON 解析失败：'+e.message); return; }
+  if(!Array.isArray(data)){ toast('请提供数组格式：[{...},{...}]'); return; }
+  document.getElementById('qaImportText').value='';
+  qaImportData(data);
+}
+// 直接选文件导入（.json）——手机端免复制粘贴
+function qaImportFile(input){
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{ try{
+    const data=JSON.parse(reader.result);
+    if(!Array.isArray(data)) throw new Error('不是数组格式：[{...},{...}]');
+    qaImportData(data);
+  }catch(e){ toast('文件解析失败：'+e.message); } };
+  reader.readAsText(f,'utf-8');
+  if(input) input.value='';
 }
 function qaReveal(){ const b=document.getElementById('qaAnsBox'); if(b) b.style.display='block'; }
 function qaAnswer(ok){
@@ -2784,6 +2799,8 @@ function renderNotes(){
       <div id="qaImportBox" style="display:none;margin-top:8px">
         <textarea id="qaImportText" rows="5" placeholder='格式：[{"title":"笔记标题","content":"笔记全文","qa":[{"q":"问题?","a":"答案"}]}, ...]（按标题去重，可重复导入）' style="width:100%;box-sizing:border-box"></textarea>
         <button class="btn primary w100" onclick="qaImport()">🚀 导入全部</button>
+        <p class="hint" style="text-align:center;margin:6px 0">或直接选文件（.json）导入：</p>
+        <input type="file" id="qaImportFile" accept=".json,application/json" onchange="qaImportFile(this)" style="width:100%;font-size:13px" />
       </div>
       <div style="margin-top:10px">${notesHtml}</div>
     </div>
