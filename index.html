@@ -679,7 +679,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-08-21g';
+const APP_VERSION = '2026-08-21h';
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
 function weekGridHtml(getDone, weeks){
   const td=new Date(); const dow=(td.getDay()+6)%7;
@@ -3832,14 +3832,14 @@ async function pullData(silent){
     if(!content) throw new Error('Gist 里没有 workbench.json');
     const remote=await decodeState(content,pass);
     try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
-    mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据 📥');
-  }catch(e){ _pullFail(e,silent); }
+    mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据（笔记 '+(remote.notes||[]).length+' 篇 / 问答 '+(remote.qa||[]).length+' 条）📥'); return true;
+  }catch(e){ return _pullFail(e,silent); }
 }
 function _pullFail(e,silent){
   if(silent){
-    if(/workbench\.json|还没有数据/.test(e.message)) setSyncStatus('ℹ️ 云端暂无数据，本地已就绪（保存时将自动上传）');
-    else { markConn('fail'); setSyncStatus('❌ 下载失败：'+e.message); }
-  } else { setSyncStatus('❌ 下载失败：'+e.message); markConn('fail'); toast('同步失败'); }
+    if(/workbench\.json|还没有数据/.test(e.message)){ setSyncStatus('ℹ️ 云端暂无数据，本地已就绪（保存时将自动上传）'); return true; } // 云端本来就没数据 → 允许上传
+    else { markConn('fail'); setSyncStatus('❌ 下载失败：'+e.message); return false; }
+  } else { setSyncStatus('❌ 下载失败：'+e.message); markConn('fail'); toast('同步失败'); return false; }
 }
 function mergeState(remote){
   const d=defaultState();
@@ -3947,8 +3947,8 @@ async function doAutoPush(){
   if(_syncing||!_cfgOK()) return;
   _syncing=true;
   try{
-    // 防呆：本会话还没拉过云端数据时，先 pull 再 push，绝不让「空/未同步的本地」覆盖云端
-    if(!_pulledThisSession){ try{ await pullData(true); }catch(e){} }
+    // 防呆：本会话还没拉过云端数据时，先 pull 再 push；若 pull 失败（网络/解密）绝不 push，防「空本地覆盖云端」
+    if(!_pulledThisSession){ const _ok=await pullData(true); if(!_ok) return; }
     await pushData(true);
   } finally { _syncing=false; }
 }
