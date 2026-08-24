@@ -11,3 +11,6 @@ Thumbs.db
 # 凭证兜底（双保险）
 *SECRET*
 *token*
+
+# 本地记忆/工作目录
+.workbuddy/
