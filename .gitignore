@@ -1,0 +1,13 @@
+# 项目治理目录（原始需求 / Agent 工作区 / 私有文档，不进 git）
+1-input/
+2-agent-room/
+3-build/private/
+
+# 系统与工具
+.DS_Store
+Thumbs.db
+*.log
+
+# 凭证兜底（双保险）
+*SECRET*
+*token*
