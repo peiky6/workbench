@@ -190,8 +190,8 @@ if(htmlJs){
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
   if(verMatch && verMatch[1]==='2026-08-26a') ok('APP_VERSION = 2026-08-26a');
   else bad('APP_VERSION 未更新为 2026-08-26a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v66') ok('SW 缓存名 = qi-workbench-v66');
-  else bad('SW 缓存名未递增为 v66');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v67') ok('SW 缓存名 = qi-workbench-v67');
+  else bad('SW 缓存名未递增为 v67');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

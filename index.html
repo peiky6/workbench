@@ -95,6 +95,7 @@
   .iv-meta span{margin-right:12px;}
   .iv-note{font-size:12px;color:var(--ink);background:#f3f9fe;border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.5;}
   .iv-actions{display:flex;gap:8px;margin-top:10px;}
+  .iv-actions .mini{flex:1;min-width:0;}
   .iv-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;flex:0 0 auto;}
   .iv-badge.upcoming{background:#eaf5fd;color:var(--accent);}
   .iv-badge.done{background:#e6f7ee;color:var(--good);}
@@ -260,10 +261,13 @@
   .sheet h3{margin:0 0 4px;font-size:18px;font-weight:800;}
   .sheet .desc{color:var(--sub);font-size:13px;margin-bottom:14px;}
   .sheet label{font-size:13px;font-weight:700;display:block;margin:12px 0 6px;}
-  .sheet textarea,.sheet input{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:11px;font-size:14px;font-family:inherit;resize:none;outline:none;}
-  .sheet textarea:focus,.sheet input:focus{border-color:var(--accent);}
+  .sheet textarea,.sheet input,.sheet select{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:11px;font-size:14px;font-family:inherit;resize:none;outline:none;background:#fff;color:var(--ink);}
+  .sheet textarea:focus,.sheet input:focus,.sheet select:focus{border-color:var(--accent);}
   .sheet .row{display:flex;gap:10px;margin-top:18px;}
-  .sheet .row .btn{flex:1;}
+  .sheet .row .btn{flex:1;min-width:0;}
+  .iv-time-row{display:flex;gap:8px;align-items:center;}
+  .iv-time-row select{flex:1;min-width:0;text-align:center;}
+  .iv-time-colon{font-size:18px;font-weight:800;color:var(--sub);}
   .danger{background:#fdecea;color:var(--bad);}
 
   .panel{position:fixed;inset:0;background:#fff;z-index:60;display:none;flex-direction:column;}
@@ -3346,6 +3350,16 @@ function interviewCardHtml(iv,td){
   </div>`;
 }
 
+function ivTimeSel(total, val, step){
+  step = step || 1;
+  let s = '<option value="">--</option>';
+  for(let i=0; i<total; i+=step){
+    const v = String(i).padStart(2,'0');
+    s += `<option value="${v}" ${v===val?'selected':''}>${v}</option>`;
+  }
+  return s;
+}
+
 function openInterviewEditor(id){
   const iv = id ? (state.interviews||[]).find(x=>x.id===id) : null;
   const isNew = !iv;
@@ -3360,7 +3374,11 @@ function openInterviewEditor(id){
     <label>面试日期 *</label>
     <input id="ivDate" type="date" value="${escapeAttr(data.date||'')}" />
     <label>面试时间</label>
-    <input id="ivTime" type="time" value="${escapeAttr(data.time||'')}" />
+    <div class="iv-time-row">
+      <select id="ivTimeH">${ivTimeSel(24,data.time?data.time.split(':')[0]:'')}</select>
+      <span class="iv-time-colon">:</span>
+      <select id="ivTimeM">${ivTimeSel(60,data.time?data.time.split(':')[1]:'',5)}</select>
+    </div>
     <label>面试地点</label>
     <input id="ivLocation" placeholder="如：深圳南山科技园 / 线上" value="${escapeAttr(data.location||'')}" />
     <label>联系人 / 方式</label>
@@ -3383,7 +3401,7 @@ function saveInterview(id){
     company,
     position:document.getElementById('ivPosition').value.trim(),
     date,
-    time:document.getElementById('ivTime').value.trim(),
+    time:(function(){ const h=document.getElementById('ivTimeH').value, m=document.getElementById('ivTimeM').value; return (h&&m)?h+':'+m:''; })(),
     location:document.getElementById('ivLocation').value.trim(),
     contact:document.getElementById('ivContact').value.trim(),
     note:document.getElementById('ivNote').value.trim()
