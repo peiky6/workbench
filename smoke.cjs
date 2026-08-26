@@ -107,6 +107,13 @@ const required = [
   ['f5', '完读成就-博览群书'],
   ['已读书架', '已读书架文案'],
   ['随机回顾 3 张', '读书卡片回顾入口'],
+  ['function renderInterview', '求职面试渲染函数'],
+  ['function openInterviewEditor', '面试编辑器'],
+  ['function saveInterview', '面试保存'],
+  ['ivMarkDone', '面试标记完成'],
+  ['ivDelete', '面试删除'],
+  ['interviewHomeCardHtml', '首页面试卡片'],
+  ['state.interviews', '面试数据字段'],
 ];
 if(htmlJs){
   for(const [token, desc] of required){
@@ -181,10 +188,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-08-25d') ok('APP_VERSION = 2026-08-25d');
-  else bad('APP_VERSION 未更新为 2026-08-25d（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v65') ok('SW 缓存名 = qi-workbench-v65');
-  else bad('SW 缓存名未递增为 v65');
+  if(verMatch && verMatch[1]==='2026-08-26a') ok('APP_VERSION = 2026-08-26a');
+  else bad('APP_VERSION 未更新为 2026-08-26a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v66') ok('SW 缓存名 = qi-workbench-v66');
+  else bad('SW 缓存名未递增为 v66');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
