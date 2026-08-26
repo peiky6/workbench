@@ -91,11 +91,11 @@
   .iv-info{flex:1;min-width:0;}
   .iv-company{font-weight:800;font-size:15px;}
   .iv-pos{color:var(--accent);font-size:13px;font-weight:700;margin-top:2px;}
-  .iv-meta{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.7;}
-  .iv-meta span{margin-right:12px;}
+  .iv-meta{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.7;display:flex;flex-wrap:wrap;gap:2px 12px;}
+  .iv-meta span{white-space:nowrap;}
   .iv-note{font-size:12px;color:var(--ink);background:#f3f9fe;border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.5;}
   .iv-actions{display:flex;gap:8px;margin-top:10px;}
-  .iv-actions .mini{flex:1;min-width:0;}
+  .iv-actions .mini{flex:1;min-width:0;padding:9px 4px;font-size:12px;}
   .iv-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;flex:0 0 auto;}
   .iv-badge.upcoming{background:#eaf5fd;color:var(--accent);}
   .iv-badge.done{background:#e6f7ee;color:var(--good);}
@@ -3328,13 +3328,13 @@ function interviewCardHtml(iv,td){
   const isUpcoming = iv.status!=='cancelled' && iv.status!=='done' && (iv.date||'')>=td;
   const actionBtns = isUpcoming
     ? `<div class="iv-actions">
-        <button class="mini accent" onclick="openInterviewEditor('${iv.id}')">✏️ 编辑</button>
-        <button class="mini line" onclick="ivMarkDone('${iv.id}')">✅ 标记完成</button>
-        <button class="mini line" onclick="ivCancel('${iv.id}')">🚫 取消</button>
+        <button class="mini accent" onclick="openInterviewEditor('${iv.id}')">编辑</button>
+        <button class="mini line" onclick="ivMarkDone('${iv.id}')">标记完成</button>
+        <button class="mini line" onclick="ivCancel('${iv.id}')">取消</button>
       </div>`
     : `<div class="iv-actions">
-        <button class="mini line" onclick="openInterviewEditor('${iv.id}')">✏️ 编辑</button>
-        <button class="mini line" onclick="ivDelete('${iv.id}')">🗑️ 删除</button>
+        <button class="mini line" onclick="openInterviewEditor('${iv.id}')">编辑</button>
+        <button class="mini line" onclick="ivDelete('${iv.id}')">删除</button>
       </div>`;
   return `<div class="${ivCardClass(iv)}">
     <div class="iv-top">
