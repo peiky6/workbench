@@ -114,6 +114,15 @@ const required = [
   ['ivDelete', '面试删除'],
   ['interviewHomeCardHtml', '首页面试卡片'],
   ['state.interviews', '面试数据字段'],
+  ['histOpen', 'IndexedDB 历史快照打开'],
+  ['histTakeSnapshotIfToday', '每日自动快照'],
+  ['histListSnapshots', '快照列表'],
+  ['histCleanupOld', '快照自动清理'],
+  ['renderSnapshotList', '快照面板渲染'],
+  ['exportModuleCSV', '按模块导出 CSV'],
+  ['downloadCSV', 'CSV 下载'],
+  ['历史快照', '历史快照面板文案'],
+  ['按模块导出', 'CSV 导出面板文案'],
 ];
 if(htmlJs){
   for(const [token, desc] of required){
@@ -188,10 +197,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-08-26a') ok('APP_VERSION = 2026-08-26a');
-  else bad('APP_VERSION 未更新为 2026-08-26a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v67') ok('SW 缓存名 = qi-workbench-v67');
-  else bad('SW 缓存名未递增为 v67');
+  if(verMatch && verMatch[1]==='2026-08-28a') ok('APP_VERSION = 2026-08-28a');
+  else bad('APP_VERSION 未更新为 2026-08-28a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v68') ok('SW 缓存名 = qi-workbench-v68');
+  else bad('SW 缓存名未递增为 v68');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
