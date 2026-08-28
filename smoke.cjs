@@ -121,6 +121,8 @@ const required = [
   ['renderSnapshotList', '快照面板渲染'],
   ['exportModuleCSV', '按模块导出 CSV'],
   ['downloadCSV', 'CSV 下载'],
+  ['showCSVModal', 'CSV 模态框（手机兼容）'],
+  ['copyCSV', 'CSV 复制按钮'],
   ['历史快照', '历史快照面板文案'],
   ['按模块导出', 'CSV 导出面板文案'],
 ];
@@ -197,10 +199,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-08-28a') ok('APP_VERSION = 2026-08-28a');
-  else bad('APP_VERSION 未更新为 2026-08-28a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v68') ok('SW 缓存名 = qi-workbench-v68');
-  else bad('SW 缓存名未递增为 v68');
+  if(verMatch && verMatch[1]==='2026-08-28b') ok('APP_VERSION = 2026-08-28b');
+  else bad('APP_VERSION 未更新为 2026-08-28b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v69') ok('SW 缓存名 = qi-workbench-v69');
+  else bad('SW 缓存名未递增为 v69');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
