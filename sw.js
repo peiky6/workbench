@@ -3,8 +3,8 @@
 // 当网络失败 或 返回非 200（403/504/5xx 等服务器错误）时，回退到已缓存的 index.html，
 // 保证即使部署服务临时宕机，App 也一定能打开（用缓存版本，本地数据不丢）。
 // 每次部署改缓存名 → 强制重新预缓存最新 index.html；activate 时通知页面「已更新」。
-const CACHE = 'qi-workbench-v75';
-const FILES = ['index.html','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','icon-maskable-512.png'];
+const CACHE = 'qi-workbench-v76';
+const FILES = ['index.html','data-notes.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','icon-maskable-512.png'];
 
 self.addEventListener('install', e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()));
@@ -43,7 +43,7 @@ self.addEventListener('fetch', e=>{
       const net = fetch(e.request).then(res=>{
         if(res && res.status===200){
           const u = e.request.url;
-          if(u.endsWith('index.html')||u.endsWith('/')||u.includes('manifest')||u.includes('icon')){
+          if(u.endsWith('index.html')||u.endsWith('data-notes.js')||u.endsWith('/')||u.includes('manifest')||u.includes('icon')){
             const copy = res.clone(); caches.open(CACHE).then(c=>c.put(e.request, copy));
           }
         }

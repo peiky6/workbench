@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process');
 const root = __dirname;
 const htmlPath = path.join(root, 'index.html');
 const swPath = path.join(root, 'sw.js');
+const dataNotesPath = path.join(root, 'data-notes.js');
 
 let pass = 0, fail = 0;
 function ok(name){ pass++; console.log('  ✅ ' + name); }
@@ -34,10 +35,13 @@ function checkScriptSyntax(label, filePath, extract){
   return js;
 }
 
-const htmlJs = checkScriptSyntax('index.html', htmlPath, (raw)=>{
+let htmlJs = checkScriptSyntax('index.html', htmlPath, (raw)=>{
   const m = raw.match(/<script>([\s\S]*?)<\/script>/g) || [];
   return m.length ? m[m.length-1].replace(/^<script>/, '').replace(/<\/script>$/, '') : '';
 });
+// 校验拆出的内置数据文件，并合并进 htmlJs 以便 token 检查
+const dataNotesJs = checkScriptSyntax('data-notes.js', dataNotesPath, null);
+if(dataNotesJs) htmlJs = htmlJs + '\n' + dataNotesJs;
 checkScriptSyntax('sw.js', swPath);
 
 // 2) 关键函数 / 字符串存在性（防止重构误删）
@@ -199,10 +203,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-02b') ok('APP_VERSION = 2026-09-02b');
-  else bad('APP_VERSION 未更新为 2026-09-02b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v75') ok('SW 缓存名 = qi-workbench-v75');
-  else bad('SW 缓存名未递增为 v75');
+  if(verMatch && verMatch[1]==='2026-09-04a') ok('APP_VERSION = 2026-09-04a');
+  else bad('APP_VERSION 未更新为 2026-09-04a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v76') ok('SW 缓存名 = qi-workbench-v76');
+  else bad('SW 缓存名未递增为 v76');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
