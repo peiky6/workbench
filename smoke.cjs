@@ -192,6 +192,13 @@ if(htmlJs){
     ['sb-collapsed', '侧边栏收起样式(v52)'],
     ['📊 学习统计', '笔记问答顶部统计激励卡(v54)'],
     ['连续自测', '统计-连续天数(v54)'],
+    ['function allExercises', '合并运动库(自定义+内置)'],
+    ['function saveCustomExercise', '自定义运动入库'],
+    ['function addCustomExercise', '自定义运动+消耗热量添加'],
+    ['customExercises', '自定义运动库字段'],
+    ['自定义运动名', '运动自定义输入行'],
+    ['ceKcal', '自定义运动消耗输入框'],
+    ["e.min?(' · '+e.min+'分钟'):''", '自定义运动行省略时长'],
   ];
   for(const [token, desc] of monthlyTokens){
     if(htmlJs.includes(token)) ok('存在：' + token + '（' + desc + '）');
@@ -203,10 +210,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-04a') ok('APP_VERSION = 2026-09-04a');
-  else bad('APP_VERSION 未更新为 2026-09-04a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v76') ok('SW 缓存名 = qi-workbench-v76');
-  else bad('SW 缓存名未递增为 v76');
+  if(verMatch && verMatch[1]==='2026-09-17a') ok('APP_VERSION = 2026-09-17a');
+  else bad('APP_VERSION 未更新为 2026-09-17a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v77') ok('SW 缓存名 = qi-workbench-v77');
+  else bad('SW 缓存名未递增为 v77');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

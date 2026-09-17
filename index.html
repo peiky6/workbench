@@ -675,6 +675,7 @@ function defaultState(){
     readingAch:[], readingFinished:[],
     readPages:{}, monthReminded:'',
     customFoods:[],
+    customExercises:[],
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
     settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin' }
@@ -724,6 +725,7 @@ function load(){
     s.readPages = s.readPages||{};
     s.monthReminded = s.monthReminded||'';
     s.customFoods = Array.isArray(s.customFoods)? s.customFoods : [];
+    s.customExercises = Array.isArray(s.customExercises)? s.customExercises : [];
     s.notes = Array.isArray(s.notes)? s.notes : [];
     s.interviews = Array.isArray(s.interviews)? s.interviews : [];
     s.qa = Array.isArray(s.qa)? s.qa : [];
@@ -907,7 +909,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-04a';
+const APP_VERSION = '2026-09-17a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -3890,7 +3892,7 @@ function renderMana(){
     return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。${pstr?(' · '+pstr):''}</p>`; })();
 
   // 运动
-  const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)} · ${e.min}分钟 · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
+  const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)}${e.min?(' · '+e.min+'分钟'):''} · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
   const exTotal = t.exercises.reduce((s,e)=>s+e.kcal,0);
 
   // 饮食
@@ -3956,9 +3958,10 @@ function renderMana(){
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
       <div class="inline">
-        <input id="exText" type="text" placeholder="如：跑步 30分钟 / 深蹲 20 / 爬坡走" oninput="suggestExercise()" oncompositionend="suggestExercise()" onfocus="suggestExercise()" />
+        <input id="exText" type="text" placeholder="如：跑步 30分钟 / 椭圆机 250大卡" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestExercise()" oncompositionend="suggestExercise()" onfocus="suggestExercise()" />
         <button class="mini accent" onclick="addExTyped()">添加</button>
       </div>
+      <div class="inline kcal-row" style="margin-top:2px"><span class="kcal-label">✨</span><input id="ceName" type="text" placeholder="自定义运动名（可留空）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0" /><input id="ceKcal" type="number" inputmode="numeric" min="0" step="1" placeholder="消耗" style="width:80px" /> <button class="mini" onclick="addCustomExercise()">添加</button></div>
       <div id="exSug" class="sug"></div>
       <div id="exPrev" class="prev"></div>
       ${exHtml}
@@ -4142,33 +4145,61 @@ function importAntafu(text){
   });
   save(); renderMana(); toast(`已导入 ${added} 条记录（含体脂率） ⚖️`);
 }
+function allExercises(){ return (state.customExercises||[]).concat(EXERCISES); }
+function saveCustomExercise(name,kcal){
+  const ce=state.customExercises||(state.customExercises=[]);
+  const i=ce.findIndex(x=>x.n===name);
+  if(i>=0){ ce[i].k=Math.round(kcal); } else { ce.push({n:name,k:Math.round(kcal)}); }
+}
 function matchExercise(text){
   text=(text||'').trim(); if(!text) return null;
   const lower=text.toLowerCase();
+  // 显式热量写法：椭圆机 250kcal / 爬坡 300大卡 → 直接按自定义热量记录
+  const kc=text.match(/(\d+(?:\.\d+)?)\s*(?:kcal|千卡|大卡|卡)/i);
+  if(kc){ const name=text.replace(kc[0],'').trim(); const k=Math.round(Number(kc[1]));
+    return {ex:null,custom:true,name,kcal:k,min:0,label:name||('自定义运动'+k+'kcal')}; }
   let min=null;
   const m=text.match(/(\d+(?:\.\d+)?)\s*(分钟|min|分)/i);
   if(m){ min=Number(m[1]); }
   else { const any=text.match(/(\d+(?:\.\d+)?)/); if(any){ const n=Number(any[1]); if(n>=1&&n<=600) min=n; } }
   if(min==null) min=30;
-  const ex=EXERCISES.find(e=> lower.includes(e.n.toLowerCase()));
+  const ex=allExercises().find(e=> lower.includes(e.n.toLowerCase()));
   if(!ex){ return {ex:null, min, kcal:0, unmatched:true, label:text.trim()}; }
-  const kcal=Math.round(ex.met*effectiveWeight()*min/60);
-  return {ex, min, kcal, label:ex.n};
+  if(ex.met!=null){ // 内置：MET × 体重 × 时长
+    const kcal=Math.round(ex.met*effectiveWeight()*min/60);
+    return {ex, min, kcal, label:ex.n};
+  }
+  // 自定义运动：直接用记录的热量（不随时长缩放）
+  return {ex, min, kcal:ex.k||0, custom:true, name:ex.n, label:ex.n};
 }
 function previewEx(){
   const v=(document.getElementById('exText')||{}).value||'';
   const box=document.getElementById('exPrev'); if(!box) return;
   const mt=matchExercise(v);
-  if(mt && mt.ex){ box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>（按体重${effectiveWeight()}kg估算）`; box.className='prev ok'; }
-  else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练/核心雕塑/燃脂搏击'; box.className='prev warn'; }
+  if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>（自定义消耗，自动存入联想库）`; box.className='prev ok'; }
+  else if(mt && mt.ex){ box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>（按体重${effectiveWeight()}kg估算）`; box.className='prev ok'; }
+  else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练/核心雕塑/燃脂搏击，或写「运动名 热量」如：椭圆机 250大卡'; box.className='prev warn'; }
   else { box.innerHTML=''; }
 }
 function addExTyped(){
   const inp=document.getElementById('exText'); const v=inp.value;
   const mt=matchExercise(v); const t=manaToday();
-  if(mt && mt.ex){ t.exercises.push({n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}); }
+  if(mt && mt.custom){ const dn=mt.name||('自定义运动'+mt.kcal+'kcal'); t.exercises.push({n:dn,min:0,kcal:mt.kcal}); if(mt.name) saveCustomExercise(mt.name,mt.kcal); }
+  else if(mt && mt.ex){ t.exercises.push({n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}); }
   else { if(!v.trim()) return toast('请输入运动内容'); t.exercises.push({n:v.trim(),min:0,kcal:0}); }
   t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已添加运动 🏃');
+}
+/* 自定义运动：名称（可留空）+ 消耗热量，与饮食「自定义食物」样式一致 */
+function addCustomExercise(){
+  const ni=document.getElementById('ceName'); const ki=document.getElementById('ceKcal');
+  const name=(ni?ni.value.trim():'');
+  const k=Math.round(Number(ki?ki.value.trim():''));
+  if(!k||k<=0) return toast('请输入大于 0 的消耗热量');
+  const display=name||('自定义运动'+k+'kcal');
+  const t=manaToday(); t.exercises.push({n:display,min:0,kcal:k}); t.done=true; t.ts=Date.now();
+  if(name) saveCustomExercise(name,k);
+  if(ni) ni.value=''; if(ki) ki.value='';
+  save(); renderMana(); toast('已记录 '+display+' 消耗 '+k+' kcal 🏃');
 }
 function suggestExercise(){
   const inp=document.getElementById('exText'); const v=inp?inp.value.trim():'';
@@ -4176,9 +4207,9 @@ function suggestExercise(){
   previewEx();
   if(!v){ box.innerHTML=''; return; }
   const q=v.toLowerCase();
-  const list=EXERCISES.filter(e=>e.n.toLowerCase().includes(q)).slice(0,12);
+  const list=allExercises().filter(e=>e.n.toLowerCase().includes(q)).slice(0,12);
   if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML=list.map(e=>`<button onclick="fillExercise('${escapeAttr(e.n)}')">${escapeHtml(e.n)}<span class="k">MET ${e.met}</span></button>`).join('');
+  box.innerHTML=list.map(e=>`<button onclick="fillExercise('${escapeAttr(e.n)}')">${escapeHtml(e.n)}<span class="k">${e.met!=null?('MET '+e.met):(e.k+' kcal')}</span></button>`).join('');
 }
 function fillExercise(name){
   const inp=document.getElementById('exText'); if(inp){ inp.value=name; inp.focus(); }
@@ -4570,6 +4601,10 @@ function mergeState(remote){
   { const lf=state.customFoods||[], rf=remote.customFoods||[]; const out=lf.slice();
     rf.forEach(r=>{ const i=out.findIndex(x=>x.n===r.n); if(i<0) out.push({n:r.n,k:Number(r.k)||0,u:r.u||''}); });
     state.customFoods=out; }
+  // 自定义运动库：按名字并集，冲突保留本机消耗热量（跨端不互相覆盖、不删除本地已有）
+  { const le=state.customExercises||[], re=remote.customExercises||[], out=le.slice();
+    re.forEach(r=>{ if(!r||!r.n) return; const i=out.findIndex(x=>x.n===r.n); if(i<0) out.push({n:r.n,k:Number(r.k)||0}); });
+    state.customExercises=out; }
   // 笔记问答：跨端合并——远端笔记按标题补入本地没有的；问答按「问题|答案」去重，nid 经标题映射到本地笔记 id
   { const lf=state.notes||[], rf=remote.notes||[];
     const have=new Set(lf.map(n=>n.title));
