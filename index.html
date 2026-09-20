@@ -876,26 +876,45 @@ function currentMonthKey(){ const d=new Date(); return d.getFullYear()+'-'+Strin
 function prevMonthKey(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function isLastDayOfMonth(){ const d=new Date(); return d.getDate()===new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
 function sumReadingPages(){ return (state.readingBooks||[]).reduce((s,b)=>s+(Number(b.current)||0),0); }
-// 页数快照：月初首开捕获各书 bookStart；当前月 bookEnd 实时累计；跨月时上月 bookEnd 自然冻结为月末值
-function bookPagesMap(){ const m={}; (state.readingBooks||[]).forEach((b,i)=>{ m[i]=Number(b.current)||0; }); return m; }
+// 页数快照口径：以「已读到第几页」为基准，本月阅读页数 = 月末值 − 月初值（不是累计总页数）
+function bookKey(b,i){ return (b && (b.name||'').trim()) || ('#'+i); }
+function bookPagesMap(){ const m={}; (state.readingBooks||[]).forEach((b,i)=>{ m[bookKey(b,i)] = Number(b.current)||0; }); return m; }
+function bookSum(o){ return o ? Object.values(o).reduce((s,v)=>s+(Number(v)||0),0) : null; }
+// 旧版本按数组下标存快照，增删书会错位导致把别的书页数算进来 → 迁移为书名键
+function migrateReadPagesKey(){
+  const rp = state.readPages || {};
+  Object.keys(rp).forEach(ym=>{
+    const e = rp[ym]; if(!e) return;
+    ['bookStart','bookEnd'].forEach(f=>{
+      const o = e[f]; if(!o) return;
+      const ks = Object.keys(o);
+      if(ks.length && ks.every(k=>/^\d+$/.test(k))){
+        const n = {};
+        ks.forEach(k=>{ const b=(state.readingBooks||[])[Number(k)]; if(b) n[bookKey(b,Number(k))] = Number(o[k])||0; });
+        e[f] = n;
+      }
+    });
+  });
+}
 function ensurePageBaseline(){
   state.readPages = state.readPages||{};
+  migrateReadPagesKey();
   const ym = currentMonthKey();
   const bm = bookPagesMap();
   const pm = prevMonthKey(ym);
-  // 防御：上月若从未写过 bookEnd，按 bookStart 兜底冻结
-  if(pm && state.readPages[pm]){
-    if(!state.readPages[pm].bookEnd) state.readPages[pm].bookEnd = state.readPages[pm].bookStart ? Object.assign({}, state.readPages[pm].bookStart) : {};
+  if(pm && state.readPages[pm] && !state.readPages[pm].bookEnd){
+    state.readPages[pm].bookEnd = state.readPages[pm].bookStart ? Object.assign({}, state.readPages[pm].bookStart) : {};
   }
   if(!state.readPages[ym]){
     state.readPages[ym] = { bookStart: Object.assign({}, bm), bookEnd: Object.assign({}, bm) };
   } else {
-    state.readPages[ym].bookEnd = Object.assign({}, bm);
+    if(!state.readPages[ym].bookStart) state.readPages[ym].bookStart = Object.assign({}, bm);
+    // 合并而非重建：已读完移出书架的书保留最后一次记录的页数，其本月增量不会丢失
+    state.readPages[ym].bookEnd = Object.assign({}, state.readPages[ym].bookEnd, bm);
   }
-  if(!state.readPages[ym].bookStart) state.readPages[ym].bookStart = Object.assign({}, bm);
-  // 同步维护聚合 start/end（兼容旧逻辑与空态判断）
-  state.readPages[ym].start = Object.values(state.readPages[ym].bookStart).reduce((s,v)=>s+(Number(v)||0),0);
-  state.readPages[ym].end = Object.values(state.readPages[ym].bookEnd).reduce((s,v)=>s+(Number(v)||0),0);
+  const e = state.readPages[ym];
+  e.start = bookSum(e.bookStart) || 0;
+  e.end = bookSum(e.bookEnd) || 0;
   save();
 }
 function monthReminderActive(){ return isLastDayOfMonth() && state.monthReminded !== currentMonthKey(); }
@@ -906,7 +925,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-20c';
+const APP_VERSION = '2026-09-20d';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2227,12 +2246,16 @@ function renderMonthly(){
   const tags=['听','说','读','写']; const tagDays={听:0,说:0,读:0,写:0};
   dates.forEach(d=>{ const r=rec('ielts')[d]; if(r&&r.menu&&r.menu.picks){ const hit=new Set(); r.menu.picks.forEach(id=>{ const it=IELTS_MENU.find(x=>x.id===id); if(it&&it.tag&&tags.indexOf(it.tag)>=0&&r.menu.done&&r.menu.done[id]) hit.add(it.tag); }); hit.forEach(t=>tagDays[t]++); } });
 
-  // 4) 阅读页数（月末 - 月初）
+  // 4) 阅读页数 = 月末「已读到第几页」 − 月初「已读到第几页」
+  migrateReadPagesKey();
   const rp = state.readPages[ym] || {};
-  const startV = (rp.start!=null)? rp.start : null;
-  const liveSum = sumReadingPages();
+  const rpPrev = state.readPages[prevMonthKey(ym)] || {};
   const isCur = (ym===currentMonthKey());
-  const endV = (rp.end!=null)? rp.end : (isCur? liveSum : startV);
+  // 月初基准：优先本月快照；缺失时用「上月末」快照（上月末值即本月初值）
+  const rpStart = rp.bookStart || (rpPrev.bookEnd ? Object.assign({}, rpPrev.bookEnd) : null);
+  const rpEnd = isCur ? Object.assign({}, rp.bookEnd||{}, bookPagesMap()) : (rp.bookEnd || rpStart);
+  const startV = bookSum(rpStart);
+  const endV = bookSum(rpEnd);
   const pages = (startV!=null && endV!=null)? Math.max(0, endV-startV) : null;
 
   const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
@@ -2240,16 +2263,18 @@ function renderMonthly(){
     ? '<div class="empty">本月暂无体重记录</div>'
     : `<div class="stats stats2">${stat(wMax+' kg','最高体重')}${stat(wMaxD,'达成日期')}${stat(wMin+' kg','最低体重')}${stat(wMinD,'达成日期')}</div>`;
   const ieltsHtml = `<div class="stats stats2">${tags.map(t=>stat(tagDays[t],t+' 打卡天数')).join('')}</div>`;
-  const bookRowsHtml = (state.readingBooks||[]).map((b,i)=>{
-    const bs = (rp.bookStart && rp.bookStart[i]!=null)? Number(rp.bookStart[i]) : 0;
-    const be = (rp.bookEnd && rp.bookEnd[i]!=null)? Number(rp.bookEnd[i]) : (isCur? (Number(b.current)||0) : bs);
+  const bookKeys = Array.from(new Set([].concat(Object.keys(rpStart||{}), Object.keys(rpEnd||{}))));
+  const bookRowsHtml = bookKeys.map(k=>{
+    const bs = (rpStart && rpStart[k]!=null)? Number(rpStart[k]) : 0;
+    const be = (rpEnd && rpEnd[k]!=null)? Number(rpEnd[k]) : bs;
     const bp = Math.max(0, be-bs);
-    return `<div class="brow"><span class="bn">${escapeHtml(b.name||('书籍'+(i+1)))}</span><span class="bp">${bs} → ${be}</span><span class="bd">+${bp}</span></div>`;
+    const nm = (k.charAt(0)==='#') ? ('未命名' + k.slice(1)) : k;
+    return `<div class="brow"><span class="bn">${escapeHtml(nm)}</span><span class="bp">${bs} → ${be}</span><span class="bd">+${bp}</span></div>`;
   }).join('');
-  const pageHtml = (rp && (rp.bookStart || rp.start!=null))
-    ? `<div class="stats stats2">${stat(startV+' 页','月初总页数')}${stat(endV+' 页','月末(至今)总页数')}${stat('+'+pages+' 页','本月阅读总页数')}</div>
-       <div class="bookpages"><div class="bph">📚 各书目（月初 → 月末页数）</div>${bookRowsHtml}</div>`
-    : `<div class="empty">本月页数快照尚未生成（需在月初首次打开 App 后才会记录；当前实时累计 ${liveSum} 页）</div>`;
+  const pageHtml = (pages!=null)
+    ? `<div class="stats stats2">${stat(startV+' 页','月初已读到')}${stat(endV+' 页',(isCur?'月末(至今)已读到':'月末已读到'))}${stat('+'+pages+' 页','本月阅读页数')}</div>
+       ${bookRowsHtml?`<div class="bookpages"><div class="bph">📚 各书目（月初 → 月末「已读到第几页」）</div>${bookRowsHtml}</div>`:''}`
+    : `<div class="empty">本月还没有「已读到第几页」的月初基准，无法计算变化量<span class="hint">每月首次打开 App 会自动记录基准，下月起即可统计</span></div>`;
 
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -2279,7 +2304,7 @@ function renderMonthly(){
     <div class="dcard">
       <div class="secttitle">📖 阅读页数</div>
       ${pageHtml}
-      <p class="hint">= 月末页数 − 月初页数（月初页数在每月首次打开 App 时自动记录）。</p>
+      <p class="hint">= 月末「已读到第几页」 − 月初「已读到第几页」，按书目分别计算后汇总（月初基准在每月首次打开 App 时自动记录）。</p>
     </div>`;
 }
 

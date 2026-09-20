@@ -212,10 +212,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-20c') ok('APP_VERSION = 2026-09-20c');
-  else bad('APP_VERSION 未更新为 2026-09-20c（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v80') ok('SW 缓存名 = qi-workbench-v80');
-  else bad('SW 缓存名未递增为 v80');
+  if(verMatch && verMatch[1]==='2026-09-20d') ok('APP_VERSION = 2026-09-20d');
+  else bad('APP_VERSION 未更新为 2026-09-20d（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v81') ok('SW 缓存名 = qi-workbench-v81');
+  else bad('SW 缓存名未递增为 v81');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
