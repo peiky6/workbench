@@ -194,6 +194,7 @@
   .wcell{width:13px;height:13px;border-radius:3px;background:var(--line);flex:none;}
   .wcell.on{background:var(--accent);}
   .wcell.f{background:transparent;border:1px dashed var(--line);}
+  .wcell.skip{background:repeating-linear-gradient(45deg,#b9c6d2 0 2.5px,#e8eef4 2.5px 5px);}
   .wc{font-size:11px;color:var(--good);flex:none;min-width:34px;text-align:right;}
   .wv{flex:1;text-align:center;font-size:13px;font-weight:700;}
   .qa-q{font-size:15px;font-weight:700;line-height:1.5;padding:10px 12px;background:var(--bg2);border-radius:12px;border:1.5px solid var(--line);}
@@ -904,7 +905,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-20a';
+const APP_VERSION = '2026-09-20b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -940,9 +941,11 @@ function weekGridHtml(getDone, weeks){
     for(let i=0;i<7;i++){
       const d=new Date(start); d.setDate(start.getDate()+i);
       const ds=fmt(d); const future=d>td;
-      const on=!future && !!getDone(ds);
+      const v=future?'':(getDone(ds)||'');
+      const on=(v===true||v==='on');
+      const sk=(v==='skip');
       if(on) cnt++;
-      cells.push(`<span class="wcell ${on?'on':''} ${future?'f':''}" title="${ds}"></span>`);
+      cells.push(`<span class="wcell ${on?'on':''} ${sk?'skip':''} ${future?'f':''}" title="${ds}${sk?' 已跳过':''}"></span>`);
     }
     const label=(w===0)?'本周':((start.getMonth()+1)+'/'+start.getDate());
     rows.push(`<div class="wrow"><span class="wl">${label}</span>${cells.join('')}<span class="wc">${cnt} 天</span></div>`);
@@ -2050,9 +2053,10 @@ function todayChecklistHtml(){
   const readDone=isDone('reading',td);
   const newsDone=isDone('news',td);
   const qaDayDone=!!(state.qaDaily&&state.qaDaily[td]&&state.qaDaily[td].done);
-  const tp=trainPlanToday(); const trainDone=!!(m&&m.trainDone);
+  const tp=trainPlanToday(); const trainSkip=!!(m&&m.trainSkip); const trainDone=!!(m&&m.trainDone)||trainSkip;
   let trainText;
   if(!tp.items.length) trainText='今日休息日，轻松一下';
+  else if(trainSkip) trainText='今日不训练（已跳过）🚫';
   else { const names=tp.items.map(it=>it.n).join('、'); trainText = trainDone ? ('已完成「'+names+'」训练计划') : ('下班后训练：'+names); }
   const wd=weekdayToday(); const isWeekend=(wd===0||wd===6);
   const hasMeals = !!(m&&m.meals&&['breakfast','lunch','dinner'].some(k=>m.meals[k]&&m.meals[k].length));
@@ -3787,7 +3791,8 @@ function dietGuideHtml(){
   </div>`;
 }
 function trainKcal(met,min){ return Math.round(met*effectiveWeight()*min/60); }
-function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
+function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; if(t.trainDone) t.trainSkip=false; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
+function toggleTrainSkip(){ const t=manaToday(); t.trainSkip=!t.trainSkip; if(t.trainSkip) t.trainDone=false; t.ts=Date.now(); save(); renderMana(); toast(t.trainSkip?'今日已标记为不训练 🚫 可再次点击撤销':'已撤销「今日不训练」'); }
 function openBatchTrain(){
   const todayStr=today();
   document.getElementById('sheet').innerHTML = `
@@ -3825,11 +3830,12 @@ function doBatchTrain(){
 function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
-  const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone);
+  const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone); const tsk=!!(tr.trainSkip);
   if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
   const rows=tp.items.map(it=>`<div class="trow"><span>${escapeHtml(it.n)} · ${it.min}分钟</span></div>`).join('');
   return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div>${rows}
-    <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button></div>`;
+    <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button>
+    <button class="btn ${tsk?'ghost':'line'} w100" style="margin-top:8px" onclick="toggleTrainSkip()">${tsk?'🚫 今日不训练（点此撤销）':'🚫 今日不训练（跳过）'}</button></div>`;
 }
 function renderMana(){
   const t=manaToday();
@@ -3907,8 +3913,8 @@ function renderMana(){
     </div>
     <div class="dcard">
       <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
-      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; return !!(r&&r.trainDone); }, 4)}
-      <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；今天之后为虚线占位。</p>
+      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; if(r&&r.trainDone) return 'on'; if(r&&r.trainSkip) return 'skip'; return false; }, 4)}
+      <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；斜线灰=当天标记不训练；空白=未打卡；今天之后为虚线占位。</p>
     </div>
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
@@ -4796,12 +4802,12 @@ function exportModuleCSV(mod){
     });
     showCSVModal('diet-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'mana-train'){
-    rows.push(['日期', '训练完成']);
+    rows.push(['日期', '训练完成', '标记不训练']);
     const records = rec('mana');
     Object.keys(records).sort().forEach(d=>{
       const r = records[d];
-      if(!r.trainDone) return;
-      rows.push([d, r.trainDone?'是':'否']);
+      if(!r.trainDone && !r.trainSkip) return;
+      rows.push([d, r.trainDone?'是':'否', r.trainSkip?'是':'否']);
     });
     showCSVModal('training-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'ielts'){

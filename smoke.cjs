@@ -156,6 +156,8 @@ if(htmlJs){
     ['function openBatchTrain', '批量补训练弹窗'],
     ['function doBatchTrain', '批量补训练执行'],
     ['批量补训练达成', '训练卡批量补按钮'],
+    ['function toggleTrainSkip', '今日不训练标记'],
+    ['trainSkip', '训练跳过字段(JS 内)'],
     ['function bookPagesMap', '每书页数快照'],
     ['bookStart', '每书月初页数快照'],
     ['bookEnd', '每书月末页数快照'],
@@ -210,10 +212,10 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-20a') ok('APP_VERSION = 2026-09-20a');
-  else bad('APP_VERSION 未更新为 2026-09-20a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v78') ok('SW 缓存名 = qi-workbench-v78');
-  else bad('SW 缓存名未递增为 v78');
+  if(verMatch && verMatch[1]==='2026-09-20b') ok('APP_VERSION = 2026-09-20b');
+  else bad('APP_VERSION 未更新为 2026-09-20b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v79') ok('SW 缓存名 = qi-workbench-v79');
+  else bad('SW 缓存名未递增为 v79');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
