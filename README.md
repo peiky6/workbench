@@ -83,19 +83,30 @@
 ## 📦 技术栈
 
 - **语言**：HTML / CSS / JavaScript（全部内嵌于单文件，无框架）
-- **离线**：PWA（`manifest.webmanifest` + `sw.js`，缓存名 v8）
-- **部署**：GitHub Pages（静态托管，无后端）
-- **测试**：Node `smoke.cjs`（抽取脚本跑 `node --check` + 关键函数校验）
+- **离线**：PWA（`manifest.webmanifest` + `sw.js`，缓存名 `qi-workbench-v82`）
+- **部署**：GitHub Pages（静态托管，无后端）—— `git push` 到 `main` 即自动上线
+- **测试**：Node `smoke.cjs`（抽取脚本跑 `node --check` + 关键函数校验，当前 163 项）
+
+## 🚀 发布流程（每次改动上线）
+
+1. 升 `index.html` 的 `const APP_VERSION` 与 `sw.js` 的 `const CACHE`（**不升缓存名，手机端一直用旧缓存**）
+2. 同步 `smoke.cjs` 里的版本号与缓存名断言
+3. `node smoke.cjs` 全绿
+4. `git add <改动文件，含 smoke.cjs> && git commit -m "..." && git push origin main`
+
+> Pages 从 `main` 构建，push 成功即上线，历史不产生 `deploy` 提交、不分叉。
+> 仅当 push 被网络拦住时，才用 Contents API 兜底（`3-build/private/deploy-scripts/deploy.cjs`）——
+> 用过兜底后远端会多出 deploy 提交，下次 push 需要 `--force`。
 
 ## 📁 目录结构
 
 ```text
 workbench/
-├── index.html            # 应用主文件（全部 HTML/CSS/JS，约 250KB）
-├── sw.js                 # Service Worker：离线缓存与版本更新（v8）
+├── index.html            # 应用主文件（全部 HTML/CSS/JS，约 283KB）
+├── data-notes.js         # AI 学习笔记静态数据（BUILTIN_NOTES），在主脚本前引入
+├── sw.js                 # Service Worker：离线缓存与版本更新（qi-workbench-v82）
 ├── manifest.webmanifest  # PWA 清单
 ├── smoke.cjs             # 固化冒烟测试，每次改动回归
-├── _p.cjs                # 部署脚本（推送到 GitHub Pages）
 ├── supabase_setup.js     # Supabase 同步建表脚本
 ├── icon.svg / *.png      # 应用图标（含 maskable）
 ├── .nojekyll             # 禁用 GitHub Pages 的 Jekyll 处理
