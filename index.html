@@ -560,10 +560,10 @@
     </div>
     <div class="sect">
       <h3>📅 历史快照</h3>
-      <p class="hint">每天首次打开 App 时自动打一份全量快照存到本机 IndexedDB，保留近 6 个月。可查看任意一天的数据全貌、恢复到当时状态（会覆盖当前数据，请先导出备份）。</p>
+      <p class="hint">每天首次打开 App 时自动打一份全量快照存到本机 IndexedDB，保留近 6 个月。可从某一天的快照恢复（会覆盖当前数据，请先导出备份）。</p>
       <div id="snapshotList" style="margin-top:8px"></div>
       <div class="mini-row" style="margin-top:8px">
-        <button class="mini line" id="btnRefreshSnapshots">刷新列表</button>
+        <button class="mini line" id="btnRefreshSnapshots">刷新</button>
         <button class="mini line" id="btnTakeSnapshotNow">立即打一份快照</button>
       </div>
     </div>
@@ -925,7 +925,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-20d';
+const APP_VERSION = '2026-09-20e';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4408,6 +4408,7 @@ function openSettings(){
   renderLinkEdits();
   updateConnBox();
   document.getElementById('settingsPanel').classList.add('show');
+  snapExpanded = false; snapShowAll = false;  // 每次打开设置回到收起态，避免展开一长串快照
   renderSnapshotList();
 }
 function updateConnBox(){
@@ -4697,14 +4698,23 @@ function resetAll(){
 }
 
 /* ===================== 历史快照面板 ===================== */
+let snapExpanded = false, snapShowAll = false;
 async function renderSnapshotList(){
   const box = document.getElementById('snapshotList');
   if(!box) return;
   box.innerHTML = '<p class="hint">读取中…</p>';
   const list = await histListSnapshots();
   if(!list.length){ box.innerHTML = '<p class="hint">暂无历史快照</p>'; return; }
-  const recent = list.slice(0, 30);
-  box.innerHTML = recent.map(s=>{
+  const RECENT = 5;
+  const snapSummary = `共 ${list.length} 条快照 · 最近 ${list[0].date} ${new Date(list[0].ts).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`;
+  if(!snapExpanded){
+    box.innerHTML = `<p class="hint" style="margin:0">${snapSummary}</p>
+      <div class="mini-row" style="margin-top:6px"><button class="mini line sm" onclick="snapToggleExpand()">管理快照 ▸</button></div>`;
+    return;
+  }
+  const shown = snapShowAll ? list : list.slice(0, RECENT);
+  box.innerHTML = `<p class="hint" style="margin:0 0 6px">${snapSummary}</p>`
+    + shown.map(s=>{
     const dt = new Date(s.ts);
     const time = dt.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
     const size = JSON.stringify(s.state).length;
@@ -4717,8 +4727,14 @@ async function renderSnapshotList(){
         <button class="mini line sm" onclick="deleteSnapshot('${s.id}')">删除</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')
+    + `<div class="mini-row" style="margin-top:2px">
+        ${list.length>RECENT ? `<button class="mini line sm" onclick="snapToggleAll()">${snapShowAll?('只看最近 '+RECENT+' 条'):('展开全部（'+list.length+' 条）')}</button>` : ''}
+        <button class="mini line sm" onclick="snapToggleExpand()">收起 ▴</button>
+      </div>`;
 }
+function snapToggleExpand(){ snapExpanded = !snapExpanded; snapShowAll = false; renderSnapshotList(); }
+function snapToggleAll(){ snapShowAll = !snapShowAll; renderSnapshotList(); }
 
 async function viewSnapshot(id){
   const snap = await histGetSnapshot(id);
