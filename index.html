@@ -402,11 +402,7 @@
   .plan-ref{background:#f3f9ff;border:1px solid #d6ebfb;border-radius:12px;padding:10px 12px;margin:8px 0 4px;}
   .pr-h{font-size:13px;font-weight:700;color:#1b6ca8;margin-bottom:7px;}
   .pr-sub{font-size:11.5px;color:#1b6ca8;margin-bottom:9px;opacity:.92;}
-  .pr-timerow{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px;color:#1b6ca8;margin:2px 0 9px;background:#eaf4ff;border-radius:9px;padding:6px 9px;}
-  .pr-timerow input.tinput{width:74px;border:1px solid #cfe3f7;background:#fff;border-radius:7px;padding:3px 4px;font-size:12px;color:var(--ink);font-family:inherit;}
-  .pr-timerow .thint{margin-left:auto;font-size:10.5px;color:#7aa7c7;}
   .trow{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line);}
-  .trow .tk{color:var(--sub);display:flex;align-items:center;gap:6px;}
   .trow .tk .mini{padding:1px 9px;}
 
   .bgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-bottom:4px;}
@@ -419,7 +415,6 @@
     .main{padding:22px 30px 30px;max-width:820px;}
     .layout{justify-content:center;}
   }
-  .trow.tcancel{opacity:.45;text-decoration:line-through;}
   .grow{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px dashed #cfe3f7;font-size:12.5px;line-height:1.5;}
   .grow:last-child{border-bottom:none;}
   .grow .gt{flex:0 0 64px;font-weight:800;color:#1b6ca8;font-size:12px;line-height:1.5;}
@@ -909,7 +904,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-17a';
+const APP_VERSION = '2026-09-20a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2055,10 +2050,9 @@ function todayChecklistHtml(){
   const readDone=isDone('reading',td);
   const newsDone=isDone('news',td);
   const qaDayDone=!!(state.qaDaily&&state.qaDaily[td]&&state.qaDaily[td].done);
-  const tp=trainPlanToday(); const cancelledToday=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[td])||[]; const trainAllCancelled = tp.items.length && cancelledToday.length>=tp.items.length; let trainDone=!!(m&&m.trainDone); if(trainAllCancelled) trainDone=true;
+  const tp=trainPlanToday(); const trainDone=!!(m&&m.trainDone);
   let trainText;
-  if(trainAllCancelled) trainText='今日训练已取消（'+cancelledToday.length+' 项）🚫';
-  else if(!tp.items.length) trainText='今日休息日，轻松一下';
+  if(!tp.items.length) trainText='今日休息日，轻松一下';
   else { const names=tp.items.map(it=>it.n).join('、'); trainText = trainDone ? ('已完成「'+names+'」训练计划') : ('下班后训练：'+names); }
   const wd=weekdayToday(); const isWeekend=(wd===0||wd===6);
   const hasMeals = !!(m&&m.meals&&['breakfast','lunch','dinner'].some(k=>m.meals[k]&&m.meals[k].length));
@@ -2096,7 +2090,6 @@ function weeklyReviewHtml(){
   if(items.length>=2){ const ws=startOfWeek(new Date()); const inWeek=items.filter(i=>new Date(i.d)>=ws); const a=inWeek.length>=2?inWeek:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
   const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
   const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
-  const cancelLog=(state.trainCancel&&state.trainCancel.log)||{}; let cancelWeek=0; for(let i=6;i>=0;i--){ const d=addDays(td,-i); if(cancelLog[d]) cancelWeek+=cancelLog[d].length; }
   const goalLine=weightGoalLine();
   const summary= rate>=80?'本周节奏很稳，继续保持 💪' : (rate>=50?'本周完成过半，再加把劲 🔥':'本周有点松懈，明天从小事捡起就好 🍃');
   const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
@@ -2108,7 +2101,6 @@ function weeklyReviewHtml(){
       <div class="stat"><b>${wt}</b><span>体重变化</span></div>
       <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
       <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
-      <div class="stat"><b>${cancelWeek}</b><span>训练取消</span></div>
     </div>
     <div class="ichips" style="margin-top:6px">${chips}</div>
     <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
@@ -2136,7 +2128,6 @@ function monthlyReviewHtml(){
   if(items.length>=2){ const inMonth=items.filter(i=>new Date(i.d) >= addDays(td,-(days-1))); const a=inMonth.length>=2?inMonth:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
   const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
   const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
-  const cancelLog=(state.trainCancel&&state.trainCancel.log)||{}; let cancelM=0; for(let i=days-1;i>=0;i--){ const d=addDays(td,-i); if(cancelLog[d]) cancelM+=cancelLog[d].length; }
   const goalLine=weightGoalLine();
   const summary= rate>=75?'这一个月很稳，习惯已经长出来了 💪' : (rate>=45?'这一个月完成近半，节奏不错，下个月再紧一点 🔥':'这个月有点松，下个月从「每天只做一件最小的事」捡起就好 🍃');
   const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
@@ -2147,7 +2138,6 @@ function monthlyReviewHtml(){
       <div class="stat"><b>${wt}</b><span>体重变化</span></div>
       <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
       <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
-      <div class="stat"><b>${cancelM}</b><span>训练取消</span></div>
     </div>
     <div class="ichips" style="margin-top:6px">${chips}</div>
     <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
@@ -3797,8 +3787,6 @@ function dietGuideHtml(){
   </div>`;
 }
 function trainKcal(met,min){ return Math.round(met*effectiveWeight()*min/60); }
-function addTrainItem(n,met,min){ const t=manaToday(); t.exercises.push({n,met,min,kcal:trainKcal(met,min)}); save(); renderMana(); toast('已添加：'+n+' 🏃'); }
-function addTrainAll(){ const tp=trainPlanToday(); if(!tp.items.length) return toast('今日休息，无需训练 😌'); const t=manaToday(); tp.items.forEach(it=>{ t.exercises.push({n:it.n,met:it.met,min:it.min,kcal:trainKcal(it.met,it.min)}); }); save(); renderMana(); toast('已套用今日计划到运动列表 📋'); }
 function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
 function openBatchTrain(){
   const todayStr=today();
@@ -3838,44 +3826,11 @@ function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('
 function trainPlanHtml(){
   const tp=trainPlanToday();
   const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone);
-  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div></div>`; }
-  const cancelled=(state.trainCancel&&state.trainCancel.log&&state.trainCancel.log[today()])||[];
-  const rows=tp.items.map(it=>{
-    const isC=cancelled.includes(it.n);
-    const btns = isC ? `<span>已取消 🚫</span> <button class="mini line" onclick="restoreTrainItem('${escapeAttr(it.n)}')">↺ 恢复</button>` : `约${trainKcal(it.met,it.min)}kcal <button class="mini" onclick="addTrainItem('${escapeAttr(it.n)}',${it.met},${it.min})">+</button> <button class="mini line" onclick="cancelTrainItem('${escapeAttr(it.n)}')">取消</button>`;
-    return `<div class="trow ${isC?'tcancel':''}"><span>${escapeHtml(it.n)} · ${it.min}分钟</span><span class="tk">${btns}</span></div>`;
-  }).join('');
-  const totalK=tp.items.reduce((s,it)=>s+trainKcal(it.met,it.min),0);
-  const totalCancel=(state.trainCancel&&state.trainCancel.total)||0;
-  const todayCancel=cancelled.length;
-  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div><div class="pr-sub">📅 均为下班后训练 · ⚠️ 左手腱鞘炎：掌撑/握重动作做不了，课前说明换前臂支撑</div><div class="pr-timerow">⏰ 训练时段：<input type="time" class="tinput" value="${trainTimeStart()}" onchange="setTrainTime(this.value,null)"> – <input type="time" class="tinput" value="${trainTimeEnd()}" onchange="setTrainTime(null,this.value)"><span class="thint">自动保存</span></div>${rows}
-    <div class="mrow" style="font-weight:800"><span>计划合计</span><span>约 ${totalK} kcal</span></div>
-    <div class="mrow" style="color:var(--warn)"><span>🚫 训练取消统计</span><span>今日 ${todayCancel} 次 · 累计 ${totalCancel} 次</span></div>
-    <button class="btn ghost w100" onclick="addTrainAll()">➕ 一键套用全部到今日运动</button>
-    <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button>
-    <div class="mrow" style="margin-top:10px;color:var(--muted)"><span>💡 想临时换/加运动？在下方「🏃 运动」里搜索任意运动（含乐刻操课、爬坡、深蹲等）即可添加，与原计划无关</span></div></div>`;
+  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
+  const rows=tp.items.map(it=>`<div class="trow"><span>${escapeHtml(it.n)} · ${it.min}分钟</span></div>`).join('');
+  return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div>${rows}
+    <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button></div>`;
 }
-function cancelTrainItem(name){
-  state.trainCancel = state.trainCancel||{total:0, log:{}};
-  const d=today(); const log=state.trainCancel.log; const arr=log[d]||[];
-  if(arr.includes(name)) return toast('今天已取消过该项');
-  arr.push(name); log[d]=arr; state.trainCancel.total=(state.trainCancel.total||0)+1;
-  const t=manaToday(); t.exercises=t.exercises.filter(e=>e.n!==name);
-  save(); renderMana(); toast('已取消：'+name+' 🚫');
-}
-function restoreTrainItem(name){
-  const d=today(); const log=(state.trainCancel&&state.trainCancel.log)||{}; const arr=log[d]||[];
-  const i=arr.indexOf(name); if(i<0) return toast('该项未被取消');
-  arr.splice(i,1); if(!arr.length) delete log[d];
-  const tp=trainPlanToday(); const it=tp.items.find(x=>x.n===name);
-  const t=manaToday();
-  if(!t.exercises.some(e=>e.n===name)) t.exercises.push({n:name, met:it?it.met:0, min:it?it.min:0, kcal:it?trainKcal(it.met,it.min):0});
-  save(); renderMana(); toast('已恢复：'+name+' ↺');
-}
-function trainTime(){ return (state.settings&&state.settings.trainTime)||{start:'19:00',end:'20:30'}; }
-function trainTimeStart(){ return trainTime().start; }
-function trainTimeEnd(){ return trainTime().end; }
-function setTrainTime(start,end){ state.settings=state.settings||{}; state.settings.trainTime=trainTime(); if(start!=null) state.settings.trainTime.start=String(start); if(end!=null) state.settings.trainTime.end=String(end); save(); renderModule('mana'); toast('训练时段已更新 ⏰'); }
 function renderMana(){
   const t=manaToday();
   const losses=[
@@ -3957,6 +3912,7 @@ function renderMana(){
     </div>
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
+      <p class="hint" style="margin:2px 2px 8px">⚠️ 左手腱鞘炎：掌撑/握重动作做不了，课前说明换前臂支撑。</p>
       <div class="inline">
         <input id="exText" type="text" placeholder="如：跑步 30分钟 / 椭圆机 250大卡" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestExercise()" oncompositionend="suggestExercise()" onfocus="suggestExercise()" />
         <button class="mini accent" onclick="addExTyped()">添加</button>
@@ -4840,14 +4796,12 @@ function exportModuleCSV(mod){
     });
     showCSVModal('diet-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'mana-train'){
-    rows.push(['日期', '训练完成', '取消项数', '训练项']);
+    rows.push(['日期', '训练完成']);
     const records = rec('mana');
-    const cancelLog = (state.trainCancel && state.trainCancel.log) || {};
     Object.keys(records).sort().forEach(d=>{
       const r = records[d];
-      const cancels = cancelLog[d] || [];
-      if(!r.trainDone && !cancels.length) return;
-      rows.push([d, r.trainDone?'是':'否', cancels.length, cancels.join(' / ')]);
+      if(!r.trainDone) return;
+      rows.push([d, r.trainDone?'是':'否']);
     });
     showCSVModal('training-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'ielts'){
