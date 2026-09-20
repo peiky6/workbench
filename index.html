@@ -443,6 +443,7 @@
   .celeb-overlay{position:fixed;inset:0;background:rgba(20,20,30,.45);display:none;align-items:center;justify-content:center;z-index:90;padding:20px;overflow:auto}
   .celeb-overlay.show{display:flex}
   .celeb-box{position:relative;background:var(--card);border-radius:20px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:pop .35s cubic-bezier(.2,1.4,.5,1);max-height:88vh;max-height:calc(100dvh - 40px);overflow:auto}
+  .celeb-x{position:absolute;top:8px;right:10px;width:30px;height:30px;line-height:1;font-size:20px;color:var(--sub);background:transparent;border:none;cursor:pointer}
   @keyframes pop{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
   .celeb-emoji{font-size:46px}
   .celeb-title{font-size:20px;font-weight:800;margin-top:4px}
@@ -905,7 +906,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-20b';
+const APP_VERSION = '2026-09-20c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -3137,7 +3138,7 @@ function renderReading(){
       : `<div class="bprog-txt hint">未设总页数（点「更新进度」）</div>`;
     return `
     <div class="bcard-wrap">
-      <a class="bname-link" href="${escapeAttr(b.url)}" target="_blank" rel="noopener">📖 ${escapeHtml(b.name)}</a>
+      <div class="bname-link">📖 ${escapeHtml(b.name)}</div>
       ${prog}
       <button class="mini line" onclick="openBookProgress(${i})">📈 更新进度</button>
     </div>`;
@@ -3162,9 +3163,9 @@ function renderReading(){
       <div class="week-mini">📅 本周已读 <b>${week.days}</b> 天 · ⏱️ <b>${week.mins}</b> 分钟 · 📚 读完 <b>${week.finished}</b> 本</div>
     </div>
     <div class="dcard">
-      <div class="ltitle">📚 本期推荐 Top 3（点书名去微信读书）</div>
+      <div class="ltitle">📚 本期推荐 Top 3</div>
       <div class="books">${books}</div>
-      <p class="hint">点击任意书名开始阅读；书名/链接/进度都可在「编辑书籍」里改。</p>
+      <p class="hint">书名与阅读进度都可在下方「编辑 Top 3 书籍」里改。</p>
       <button class="btn ghost w100" onclick="openBookEditor()">✏️ 编辑 Top 3 书籍</button>
     </div>
     ${readingFinishedHtml()}
@@ -3262,21 +3263,20 @@ function readingRandomCard(){
 }
 // 庆祝 overlay + confetti + 随机卡 + 成就
 function readingCelebrate(mins,newAch){
-  const card=readingRandomCard();
   const achHtml=(newAch&&newAch.length)?`<div class="ach-pop">🎉 解锁成就 ${newAch.map(a=>a.emoji+a.name).join(' ')}</div>`:'';
   const colors=['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c780fa'];
   const confetti=Array.from({length:16}).map((_,i)=>`<i class="cf" style="--i:${i};--c:${colors[i%colors.length]}"></i>`).join('');
   let ov=document.getElementById('readCelebrate');
   if(!ov){ ov=document.createElement('div'); ov.id='readCelebrate'; document.body.appendChild(ov); }
   ov.className='celeb-overlay';
+  ov.onclick=function(e){ if(e.target===ov) closeCelebrate(); };
   ov.innerHTML=`${confetti}<div class="celeb-box">
+    <button class="celeb-x" onclick="closeCelebrate()" aria-label="关闭">×</button>
     <div class="celeb-emoji">🎉</div>
     <div class="celeb-title">阅读打卡成功！</div>
     <div class="celeb-sub">今日已读 ${mins} 分钟 · 已连续 ${streak('reading')} 天 💪</div>
-    <div class="quote-card"><div class="qc-t">${escapeHtml(card.title)}</div><div class="qc-b">${escapeHtml(card.body)}</div></div>
     ${achHtml}
-    <a class="btn primary w100" href="https://weread.qq.com/" target="_blank" rel="noopener">📖 去微信读书领今日书币</a>
-    <button class="btn ghost w100" onclick="closeCelebrate()">收下 ✨</button>
+    <a class="btn primary w100" href="https://weread.qq.com/" target="_blank" rel="noopener" onclick="closeCelebrate()">📖 去微信读书领今日书币</a>
   </div>`;
   requestAnimationFrame(()=>ov.classList.add('show'));
 }
@@ -3292,12 +3292,10 @@ function openBookEditor(){
   const books=state.readingBooks;
   document.getElementById('sheet').innerHTML = `
     <h3>📖 编辑 Top 3 书籍</h3>
-    <p class="desc">修改书名、微信读书跳转链接与阅读进度。</p>
+    <p class="desc">修改书名与阅读进度。</p>
     ${books.map((b,i)=>`
       <label>第 ${i+1} 本 · 书名</label>
-      <input id="bk${i}name" value="${escapeAttr(b.name)}" />
-      <label>微信读书链接</label>
-      <input id="bk${i}url" value="${escapeAttr(b.url)}" placeholder="https://weread.qq.com/..." />
+      <input id="bk${i}name" value="${escapeAttr(b.name)}" placeholder="输入书名" />
       <div class="bgrid">
         <div class="field"><label>总页数</label><input id="bk${i}total" type="number" min="0" value="${b.total||0}"/></div>
         <div class="field"><label>已读页</label><input id="bk${i}current" type="number" min="0" value="${b.current||0}"/></div>
@@ -3314,8 +3312,7 @@ function saveBookEditor(){
     const total=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'total').value)||0));
     const cur=Math.max(0,Math.floor(Number(document.getElementById('bk'+i+'current').value)||0));
     const nb={ name: document.getElementById('bk'+i+'name').value.trim()||b.name,
-      cover: b.cover,
-      url: document.getElementById('bk'+i+'url').value.trim()||b.url,
+      cover: b.cover, url: b.url,
       total, current:cur };
     nb.finished = total>0 && cur>=total;
     if(nb.finished){ nb.finishedDate = b.finishedDate||today(); pushFinished(nb); } else { nb.finishedDate=''; }
