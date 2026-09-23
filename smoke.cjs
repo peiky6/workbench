@@ -47,6 +47,7 @@ checkScriptSyntax('sw.js', swPath);
 // 2) 关键函数 / 字符串存在性（防止重构误删）
 const required = [
   ['renderHome', '首页渲染'],
+  ['todayChecklistItems', '待办清单数据（首页进度共用）'],
   ['togglePlanSeq', '计划打卡'],
   ['togglePlanSkip', '计划跳过'],
   ['planCurrentSeq', '计划进度计算'],
@@ -212,10 +213,16 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-20e') ok('APP_VERSION = 2026-09-20e');
-  else bad('APP_VERSION 未更新为 2026-09-20e（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v82') ok('SW 缓存名 = qi-workbench-v82');
-  else bad('SW 缓存名未递增为 v82');
+  if(verMatch && verMatch[1]==='2026-09-23a') ok('APP_VERSION = 2026-09-23a');
+  else bad('APP_VERSION 未更新为 2026-09-23a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  // 首页顶部进度必须取「今日待办清单」的完成情况，不能再按 ACTIVE_MODULES 计数
+  const homeBody = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
+  if(homeBody && /todayChecklistItems\(\)/.test(homeBody[0]) && !/ACTIVE_MODULES\.filter\(m=>dayDone/.test(homeBody[0])) ok('首页进度取待办清单完成情况');
+  else bad('首页进度口径未切换到 todayChecklistItems()');
+  if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
+  else bad('首页仍存在「我的栏目」');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v83') ok('SW 缓存名 = qi-workbench-v83');
+  else bad('SW 缓存名未递增为 v83');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

@@ -925,7 +925,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-20e';
+const APP_VERSION = '2026-09-23a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2011,26 +2011,8 @@ function reminderBannerHtml(){
 }
 function renderHome(){
   const now=new Date(); const wd=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
-  const done=ACTIVE_MODULES.filter(m=>dayDone(m.key,today())).length;
-  const cards = ACTIVE_MODULES.map(m=>{
-    if(m.key==='plan'){
-      const cur=planCurrentSeq(); const tot=STUDY_PLAN.length; const all=cur===0;
-      const stk=planStreak();
-      const label=all?('✓ 已学完'):('第'+cur+'/'+tot);
-      const sub=all?'24 天计划全部完成':('今天 · 第'+cur+'项 · 约30分钟'+(stk>0?' · 🔥连续'+stk+'天':''));
-      return `<div class="mcard" onclick="setView('plan')">
-        <div class="mi ${m.iconCls}">${m.emoji}</div>
-        <div class="mm"><div class="mn">${m.name}</div><div class="ms">${sub}</div></div>
-        <div class="pill ${all?'done':'todo'}">${label}</div>
-      </div>`;
-    }
-    const d=isDone(m.key,today());
-    return `<div class="mcard" onclick="setView('${m.key}')">
-      <div class="mi ${m.iconCls}">${m.emoji}</div>
-      <div class="mm"><div class="mn">${m.name}</div><div class="ms">${m.desc}</div></div>
-      <div class="pill ${d?'done':'todo'}">${d?'✓':'去打卡'}</div>
-    </div>`;
-  }).join('');
+  // 顶部进度与「今日待办清单」共用同一份完成情况，避免两处口径不一致
+  const cl=todayChecklistItems(); const done=cl.filter(i=>i.done).length; const total=cl.length;
   const hist = historyByDateHtml();
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -2039,8 +2021,8 @@ function renderHome(){
       <div class="quote">${QUOTES[now.getDate()%QUOTES.length]}</div>
     </div>
     <div class="progress">
-      <div class="row"><span class="ttl">今日打卡进度</span><span class="num">${done} / ${ACTIVE_MODULES.length}</span></div>
-      <div class="bar"><i style="width:${done/ACTIVE_MODULES.length*100}%"></i></div>
+      <div class="row"><span class="ttl">今日打卡进度</span><span class="num">${done} / ${total}</span></div>
+      <div class="bar"><i style="width:${total?done/total*100:0}%"></i></div>
     </div>
     ${quizReminderHtml()}
     ${readingStreakWarningHtml()}
@@ -2049,8 +2031,6 @@ function renderHome(){
     ${monthReminderBanner()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
     ${monthlyOpen?monthlyReviewHtml():''}
-    <div class="secttitle">我的栏目（点击进入）</div>
-    ${cards}
     ${interviewHomeCardHtml()}
     ${hist}`;
 }
@@ -2066,7 +2046,8 @@ function dayDone(key,ds){
   }
   return isDone(key,ds);
 }
-function todayChecklistHtml(){
+// 今日待办清单数据（首页顶部进度与清单卡片共用，保证口径一致）
+function todayChecklistItems(){
   const td=today();
   const m=rec('mana')[td]; const weightDone=!!(m&&m.weight!=null);
   const ieltsDone=dayDone('ielts',td);
@@ -2092,6 +2073,10 @@ function todayChecklistHtml(){
     {view:'mana', done:dietDone, text: dietText},
     {view:'mana', done:trainDone, text: trainText}
   ];
+  return items;
+}
+function todayChecklistHtml(){
+  const items=todayChecklistItems();
   const done=items.filter(i=>i.done).length;
   const rows=items.map(i=>`<div class="hitem" onclick="setView('${i.view}')" style="cursor:pointer">
       <span class="hd" style="flex:0 0 22px">${i.done?'✅':'⬜'}</span>
