@@ -547,7 +547,9 @@
         <button class="mini line" id="btnPull">⬇️ 下载云端</button>
         <button class="mini line" id="btnTest">🔌 测试连接</button>
       </div>
+      <div class="mini-row"><button class="mini line" id="btnForcePush">🛠 用本机数据覆盖云端（修复云端过大 / 损坏）</button></div>
       <p class="hint" id="syncStatus" style="margin-top:10px;"></p>
+      <p class="hint" id="syncDiag" style="margin-top:4px;"></p>
     </div>
     <div class="sect">
       <h3>💾 本地备份</h3>
@@ -925,7 +927,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-09-23a';
+const APP_VERSION = '2026-10-08a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -1972,7 +1974,7 @@ function renderSidebar(){
     .concat([{view:'__notes', emi:'📒', label:'笔记问答'},{view:'__monthly', emi:'📊', label:'每月统计'},{view:'__sync', emi:'☁️', label:'同步', dot:true},{view:'__settings', emi:'⚙️', label:'设置'}]);
   const sb = document.getElementById('sidebar');
   sb.innerHTML = '<div class="sb-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">⏴ 收起</div>' + items.map(it=>{
-    const dot = it.dot ? `<span class="dot ${syncConn.state}"></span>` : '';
+    const dot = it.dot ? `<span class="dot ${syncConn.state}" title="${escapeAttr(syncConnHint())}"></span>` : '';
     return `<div class="navitem ${currentView===it.view?'active':''}" data-view="${it.view}"><span class="emi">${it.emi}</span>${it.label}${dot}</div>`;
   }).join('');
   sb.querySelectorAll('.navitem').forEach(el=>{
@@ -4403,8 +4405,11 @@ function updateConnBox(){
   const st=document.getElementById('syncStatus');
   if(st){
     const s=state.settings||{};
-    st.textContent='本机已存配置：Token '+(s.gistToken?s.gistToken.slice(0,4)+'…'+s.gistToken.slice(-3):'未填')+' · Gist '+(s.gistId?s.gistId.slice(0,8)+'…':'未填')+' · 口令'+(s.encPass?'已设':'未设')+' · 加密'+(s.autoEncrypt?'开':'关');
+    let t='本机已存配置：Token '+(s.gistToken?s.gistToken.slice(0,4)+'…'+s.gistToken.slice(-3):'未填')+' · Gist '+(s.gistId?s.gistId.slice(0,8)+'…':'未填')+' · 口令'+(s.encPass?'已设':'未设')+' · 加密'+(s.autoEncrypt?'开':'关');
+    if(syncConn.state==='fail' && syncConn.reason) t+='<br>⚠️ 上次失败：'+escapeHtml(syncConn.reason);
+    st.innerHTML=t;
   }
+  renderSyncDiag();
 }
 function renderLinkEdits(){
   const box=document.getElementById('linkEdits');
@@ -4442,14 +4447,37 @@ async function deriveKey(pass){
   const base=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2',salt:enc.encode('qi-workbench-salt'),iterations:100000,hash:'SHA-256'},base,{'name':'AES-GCM','length':256},false,['encrypt','decrypt']);
 }
+/* v2026-10-08a：加密载体改为「二进制 base64」。
+   旧格式把密文每个字节写成 JSON 数组的十进制数字（如 {iv:[136,15,...],ct:[232,...]}）再 base64，
+   平均 1 字节明文 → 约 4 个字符 JSON + base64 再 ×1.33，总体膨胀约 5.3 倍。
+   本机数据并不大，却被撑到 1,015,068 字节、越过 GitHub Gist 1MB 截断线，导致：
+   API 返回 truncated:true → 代码回落 raw.githubusercontent.com 取全文 → 手机上不可达 → 下载失败、永不上传（死锁）。
+   新格式 ENC2:base64(iv(12字节) + ciphertext)，体积仅比明文大 ~1.4 倍。旧格式仍可解密。 */
+function b64FromBytes(bytes){
+  let s=''; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+  return btoa(s);
+}
+function bytesFromB64(b64){
+  const s=atob(b64); const out=new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++) out[i]=s.charCodeAt(i);
+  return out;
+}
 async function encryptText(plain,pass){
   const enc=new TextEncoder(); const iv=crypto.getRandomValues(new Uint8Array(12));
   const key=await deriveKey(pass);
-  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(plain));
-  return 'ENC:'+btoa(JSON.stringify({iv:[...iv],ct:[...new Uint8Array(ct)]}));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(plain)));
+  const all=new Uint8Array(12+ct.length); all.set(iv,0); all.set(ct,12);
+  return 'ENC2:'+b64FromBytes(all);
 }
-async function decryptText(b64,pass){
-  const o=JSON.parse(atob(b64.slice(4))); const key=await deriveKey(pass);
+async function decryptText(payload,pass){
+  const key=await deriveKey(pass);
+  if(payload.startsWith('ENC2:')){
+    const all=bytesFromB64(payload.slice(5));
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:all.subarray(0,12)},key,all.subarray(12));
+    return new TextDecoder().decode(pt);
+  }
+  const o=JSON.parse(atob(payload.slice(4)));   // 旧格式 ENC:base64({"iv":[...],"ct":[...]})
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(o.iv)},key,new Uint8Array(o.ct));
   return new TextDecoder().decode(pt);
 }
@@ -4467,12 +4495,12 @@ async function encodeState(){
     clone.qa=(clone.qa||[]).filter(q=>customIds.has(q.nid));
     clone.qaProg={}; clone.qaDaily={};
   }
-  const json=JSON.stringify(clone,null,2);
+  const json=JSON.stringify(clone);   // 紧凑序列化（不带缩进），体积比缩进版小 30%~45%
   if(needEncrypt()){ try{ return await encryptText(json,state.settings.encPass); }catch(e){ throw new Error('加密失败：'+e.message); } }
   return json;
 }
 async function decodeState(content,pass){
-  if(content.startsWith('ENC:')){ return JSON.parse(await decryptText(content,pass)); }
+  if(/^ENC2?:/.test(content)){ return JSON.parse(await decryptText(content,pass)); }
   return JSON.parse(content);
 }
 
@@ -4494,8 +4522,8 @@ function restoreInputs(){
 }
 async function pushData(silent){
   const s=state.settings;
-  if(!s.gistToken||!s.gistId){ if(!silent) toast('请先在设置填写 GitHub Token 和 Gist ID'); return; }
-  setSyncStatus('⬆️ 上传中…');
+    if(!s.gistToken||!s.gistId){ if(!silent) toast('请先在设置填写 GitHub Token 和 Gist ID'); return false; }
+    setSyncStatus('⬆️ 上传中…');
   try{
     const content=await encodeState();
     const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{method:'PATCH',
@@ -4504,13 +4532,31 @@ async function pushData(silent){
     if(res.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符(不是整条 URL)，且该 Gist 未被删除、Token 勾选了 gist 权限');
     if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
     if(!res.ok) throw new Error('HTTP '+res.status);
-    setSyncStatus('✅ 已上传 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已同步到云端 ☁️');
-  }catch(e){ setSyncStatus('❌ 上传失败：'+e.message); markConn('fail'); if(!silent) toast('同步失败'); }
+    _cloudBroken=false;
+    _cloudInfo={size:content.length, truncated:content.length>1000000, fmt:(needEncrypt()?'ENC2(紧凑)':'明文'), ts:Date.now()};
+    setSyncStatus('✅ 已上传 '+new Date().toLocaleTimeString()+' · 云端 '+kb(content.length)); markConn('ok'); if(!silent) toast('已同步到云端 ☁️');
+    renderSyncDiag(); return true;
+  }catch(e){ setSyncStatus('❌ 上传失败：'+e.message); markConn('fail',e.message); if(!silent) toast('同步失败'); return false; }
 }
+let _cloudBroken=false;              // 云端文件结构性损坏（超 1MB 被截断且取不到全文）→ 允许用本机数据覆盖自救
+let _cloudInfo=null;                // 最近一次读到的云端文件信息：{size,truncated,fmt,ts}
+let _lastPullFailAt=0;              // 最近一次静默 pull 失败时间戳（避免同一会话重复打网络请求）
+async function gistRawWithRetry(finfo,token){
+  // raw.githubusercontent.com 在移动端/办公网常不可达：连试 2 次（中间隔 1.5s），带时间戳参数绕开中间缓存
+  for(let i=0;i<2;i++){
+    try{
+      const rr=await fetch(finfo.raw_url+(finfo.raw_url.includes('?')?'&':'?')+'_t='+Date.now(),{cache:'no-store',headers:{Authorization:`token ${token}`}});
+      if(rr.ok){ const t=await rr.text(); if(t) return t; }
+    }catch(e){ console.warn('gist raw fetch fail',e); }
+    if(i===0) await new Promise(r=>setTimeout(r,1500));
+  }
+  return null;
+}
+function kb(n){ return Math.round(n/1024).toLocaleString()+'KB'; }
 async function pullData(silent){
   const s=state.settings;
   const pass = needEncrypt()? state.settings.encPass : (silent? '' : (prompt('如云端数据已加密，请输入口令（未加密直接确定）：')||''));
-  if(!s.gistToken||!s.gistId){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return; }
+  if(!s.gistToken||!s.gistId){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return false; }
   setSyncStatus('⬇️ 下载中…');
   try{
     const res=await fetch(`https://api.github.com/gists/${s.gistId}`,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}});
@@ -4518,23 +4564,35 @@ async function pullData(silent){
     if(res.status===401){ const b=await res.text().catch(()=> ''); throw new Error('Token 被拒(401)'+(/Bad credentials/i.test(b)?'：GitHub 返回「Bad credentials」=Token 无效(复制截断/过期/吊销)':'：Token 无效或 gist 无权限')); }
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    let content=data.files['workbench.json'] && data.files['workbench.json'].content;
-    // Gist API 对超过 ~1MB 的文件会截断 content 字段（truncated:true），改走 raw_url 直链取全文；fetch 一律 no-store 防浏览器缓存旧响应导致解码失败
-    if(data.files['workbench.json'] && data.files['workbench.json'].truncated && data.files['workbench.json'].raw_url){
-      try{ const rr=await fetch(data.files['workbench.json'].raw_url,{cache:'no-store',headers:{'Authorization':`token ${s.gistToken}`}}); if(rr.ok) content=await rr.text(); else content=null; }catch(e){ console.warn('gist raw fetch fail',e); content=null; }
-      if(!content) throw new Error('云端文件较大，直链下载失败（网络无法访问 raw.githubusercontent.com）。请稍后重试，或检查网络');
+    const finfo=data.files && data.files['workbench.json'];
+    _cloudInfo=finfo? {size:finfo.size, truncated:!!finfo.truncated, ts:Date.now()} : null;
+    let content=finfo && finfo.content;
+    // GitHub 对超过 1MB 的文件会截断 content（truncated:true），需从 raw_url 取全文
+    if(finfo && finfo.truncated){
+      if(finfo.raw_url) content=await gistRawWithRetry(finfo,s.gistToken); else content=null;
+      if(!content){
+        // 结构性损坏：本机数据反而完整 → 标记后由 doAutoPush / 「覆盖云端」按钮用本机数据重写修复
+        _cloudBroken=true;
+        throw new Error('云端数据 '+kb(finfo.size)+'，已超过 GitHub 1MB 上限被截断，且直链取全文失败（raw.githubusercontent.com 不可达）。请点下方「用本机数据覆盖云端」重写一次即可自动瘦身修复');
+      }
     }
     if(!content) throw new Error('Gist 里没有 workbench.json');
-    const remote=await decodeState(content,pass);
+    if(_cloudInfo) _cloudInfo.fmt = content.startsWith('ENC2:')?'ENC2(紧凑)':content.startsWith('ENC:')?'ENC1(旧版，占空间)':'明文';
+    let remote;
+    try{ remote=await decodeState(content,pass); }
+    catch(e){ throw new Error(/^ENC2?:/.test(content)? '云端数据解密失败：口令不对，或数据已损坏。请确认口令与本机一致；若确认无误，可点「用本机数据覆盖云端」重建' : '云端数据解析失败：'+e.message); }
     try{ const ff=(data.files&&data.files['ai-terms-feed.json']&&data.files['ai-terms-feed.json'].content); if(ff){ const feed=JSON.parse(ff); (feed.terms||[]).forEach(x=>{ const k=x.id||aiSlugOf(x.term); if(!state.aiExt[k]){ const maxIdx=aiExtEntries().reduce((m,e)=>Math.max(m,(e.t.idx||1000)),1000); state.aiExt[k]=Object.assign({},x); state.aiExt[k].idx=maxIdx+1; } }); } }catch(e){ console.warn('ai feed parse fail',e); }
-    mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()); markConn('ok'); if(!silent) toast('已拉取云端数据（笔记 '+(remote.notes||[]).length+' 篇 / 问答 '+(remote.qa||[]).length+' 条）📥'); return true;
+    _cloudBroken=false;
+    mergeState(remote); _pulledThisSession=true; save(); snapshotInputs(); render(); restoreInputs(); setSyncStatus('✅ 已下载 '+new Date().toLocaleTimeString()+' · 云端 '+kb(content.length)); markConn('ok'); if(!silent) toast('已拉取云端数据（笔记 '+(remote.notes||[]).length+' 篇 / 问答 '+(remote.qa||[]).length+' 条）📥'); renderSyncDiag(); return true;
   }catch(e){ return _pullFail(e,silent); }
 }
 function _pullFail(e,silent){
+  _lastPullFailAt=Date.now();
+  const msg='❌ 下载失败：'+e.message;
   if(silent){
     if(/workbench\.json|还没有数据/.test(e.message)){ setSyncStatus('ℹ️ 云端暂无数据，本地已就绪（保存时将自动上传）'); return true; } // 云端本来就没数据 → 允许上传
-    else { markConn('fail'); setSyncStatus('❌ 下载失败：'+e.message); return false; }
-  } else { setSyncStatus('❌ 下载失败：'+e.message); markConn('fail'); toast('同步失败'); return false; }
+    else { markConn('fail',e.message); setSyncStatus(msg); if(_cloudBroken) renderSyncDiag(); return false; }
+  } else { setSyncStatus(msg); markConn('fail',e.message); toast('同步失败'); return false; }
 }
 function mergeState(remote){
   const d=defaultState();
@@ -4629,11 +4687,55 @@ async function testConn(){
     }
     if(r.status===404) throw new Error('Gist 未找到(404)：请确认「Gist ID」是链接末尾那串字符、不是整条 URL，且 Token 勾选了 gist 权限');
     if(!r.ok) throw new Error('连接返回错误（HTTP 非 200）');
-    markConn('ok'); setSyncStatus('✅ 连接成功（GitHub）'); toast('连接成功 ✅');
-  }catch(e){ markConn('fail'); setSyncStatus('❌ 连接失败：'+e.message); toast('连接失败：'+e.message); }
+    const j=await r.json().catch(()=>null);
+    const f=j&&j.files&&j.files['workbench.json'];
+    if(f){ _cloudInfo={size:f.size, truncated:!!f.truncated, fmt:(f.content||'').startsWith('ENC2:')?'ENC2(紧凑)':(f.content||'').startsWith('ENC:')?'ENC1(旧版，占空间)':'明文', ts:Date.now()}; if(f.truncated) _cloudBroken=true; }
+    markConn('ok'); setSyncStatus('✅ 连接成功（GitHub）'); toast('连接成功 ✅'); renderSyncDiag();
+  }catch(e){ markConn('fail',e.message); setSyncStatus('❌ 连接失败：'+e.message); toast('连接失败：'+e.message); }
 }
-function markConn(st){ syncConn={state:st,ts:Date.now()}; renderSidebar(); }
+function localHasData(){
+  const nRec=MODULES.reduce((a,m)=>a+Object.keys(((state.modules||{})[m.key]||{}).records||{}).length,0);
+  return nRec>0 || (state.notes||[]).length>0 || (state.interviews||[]).length>0;
+}
+// 本机实打实的数据量（用于「覆盖云端」前的二次确认文案）
+function localDataSummary(){
+  const nRec=MODULES.reduce((a,m)=>a+Object.keys(((state.modules||{})[m.key]||{}).records||{}).length,0);
+  return {records:nRec, notes:(state.notes||[]).length, interviews:(state.interviews||[]).length};
+}
+// 云端不存在/已损坏时，用本机数据完整覆盖云端（先把本机留一份回滚备份到 localStorage）
+async function forcePush(silent){
+  if(!_cfgOK()){ if(!silent) toast('请先填写 GitHub Token 和 Gist ID'); return false; }
+  const d=localDataSummary();
+  if(!localHasData()){ if(!silent) toast('本机没有数据，已取消覆盖（避免清空云端）'); return false; }
+  if(!silent){
+    if(!confirm('将用本机数据完整覆盖云端：记录 '+d.records+' 天 / 笔记 '+d.notes+' 篇 / 面试 '+d.interviews+' 条。\n\n如果另一台设备上还有没同步下来的新内容，会被覆盖丢失（本机已留一份回滚备份）。\n\n确定继续？')) return false;
+  }
+  try{ localStorage.setItem('qi_workbench_preoverwrite', JSON.stringify({ts:Date.now(), state})); }catch(e){ console.warn('回滚备份写入失败',e); }
+  const okPush=await pushData(silent);
+  if(okPush!==false) _pulledThisSession=true;
+  return true;
+}
+function markConn(st,reason){
+  syncConn={state:st, ts:Date.now(), lastOk:(st==='ok'? Date.now() : (syncConn&&syncConn.lastOk)||0), reason:reason||''};
+  renderSidebar();
+}
+function syncConnHint(){
+  const last=syncConn.lastOk? new Date(syncConn.lastOk).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  if(syncConn.state==='ok') return '云端已连通'+(last?' · 上次成功 '+last:'');
+  if(syncConn.state==='fail') return '云端同步失败'+(syncConn.reason? '：'+syncConn.reason : '')+(last? ' · 上次成功 '+last : '');
+  return '未配置同步 / 尚未同步';
+}
 function setSyncStatus(t){ const el=document.getElementById('syncStatus'); if(el) el.textContent=t; }
+/* 同步区诊断行：云端文件大小 / 是否超 1MB 截断 / 加密格式 / 上次成功时间 */
+function renderSyncDiag(){
+  const el=document.getElementById('syncDiag'); if(!el) return;
+  const c=_cloudInfo;
+  const lastOk=syncConn.lastOk? new Date(syncConn.lastOk).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '从未成功';
+  if(!c){ el.textContent='云端未读取 · 上次同步成功：'+lastOk; return; }
+  const big=c.size>1000000 || c.truncated;
+  el.innerHTML='云端 '+kb(c.size)+(c.fmt?' · '+c.fmt:'')+' · 上次同步成功：'+lastOk+
+    (big? '<br><b style="color:#e0533d">⚠️ 云端文件已超 GitHub 1MB 上限（会被截断导致下载失败），请点上方「用本机数据覆盖云端」瘦身修复</b>' : '');
+}
 
 /* 自动同步：保存后防抖上传；打开时拉取合并（不与手动按钮冲突） */
 let _syncing=false;
@@ -4653,7 +4755,18 @@ async function doAutoPush(){
   _syncing=true;
   try{
     // 防呆：本会话还没拉过云端数据时，先 pull 再 push；若 pull 失败（网络/解密）绝不 push，防「空本地覆盖云端」
-    if(!_pulledThisSession){ const _ok=await pullData(true); if(!_ok) return; }
+    if(!_pulledThisSession){
+      let okPull=false;
+      // 10 秒内已失败过则不再重复打网络（app 打开时的那次 pull 结果可直接复用）
+      if(Date.now()-(_lastPullFailAt||0) > 10000) okPull=await pullData(true);
+      if(!okPull){
+        // 死锁解锁（v2026-10-08a）：云端文件结构性损坏（超 1MB 被截断且取不到全文）时，
+        // 「先 pull 成功才准 push」的规则会让云端永远修不好、红灯一直亮。
+        // 此时本机数据反而是可用的那一侧 → 留好回滚备份后用本机重写云端，自愈一次。
+        if(_cloudBroken && localHasData()) await forcePush(true);
+        return;
+      }
+    }
     await pushData(true);
   } finally { _syncing=false; }
 }
@@ -4919,9 +5032,10 @@ const _setter={
 };
 Object.keys(_setter).forEach(id=>{ const el=document.getElementById(id); if(el) el.oninput=()=>{ _setter[id](el.value); save(); }; });
 document.getElementById('setAutoEncrypt').onchange=()=>{ state.settings.autoEncrypt=document.getElementById('setAutoEncrypt').checked; encWarnUpdate(); save(); };
-document.getElementById('btnPush').onclick=pushData;
-document.getElementById('btnPull').onclick=pullData;
+document.getElementById('btnPush').onclick=()=>pushData(false);
+document.getElementById('btnPull').onclick=()=>pullData(false);
 document.getElementById('btnTest').onclick=testConn;
+document.getElementById('btnForcePush').onclick=()=>forcePush(false);
 document.getElementById('btnExport').onclick=openBackup;
 document.getElementById('btnImport').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('importFile').onchange=e=>{ if(e.target.files[0]) importJSON(e.target.files[0]); };
@@ -4969,10 +5083,7 @@ function showUpdateBar(){ const b=document.getElementById('updateBar'); if(b) b.
 // 自动同步：打开时先静默拉取合并，再上传本地（完成跨端 reconcile）
 (async function autoSyncOnOpen(){
   if(!_cfgOK()) return;
-  _syncing=true;
-  try{ await pullData(true); }catch(e){}
-  _syncing=false;
-  await doAutoPush();
+  await doAutoPush();   // 内含「先 pull 再 push」的防呆顺序，以及云端过大导致拉取失败时的自愈覆盖
   ensurePageBaseline();
   render();
 })();

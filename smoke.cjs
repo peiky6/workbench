@@ -27,8 +27,14 @@ function checkScriptSyntax(label, filePath, extract){
     execFileSync(process.execPath, ['--check', tmp], { stdio: 'pipe' });
     ok(label + ' 语法校验 (node --check)');
   }catch(e){
-    const msg = (e.stderr || '').toString().split('\n')[0] || 'syntax error';
-    bad(label + ' 语法校验', msg);
+    const errText = ((e.stderr || '') + '').trim();
+    if(!errText){
+      // 环境原因（Windows 沙箱 spawn 偶发 EBUSY / 权限），不是代码语法问题 → 退回同进程编译校验
+      try{ new (require('vm').Script)(js, {filename: label}); ok(label + ' 语法校验 (vm.Script 回退)'); }
+      catch(ve){ bad(label + ' 语法校验', (ve.message || '').split('\n')[0]); }
+    }else{
+      bad(label + ' 语法校验', errText.split('\n')[0]);
+    }
   }finally{
     try{ fs.unlinkSync(tmp); }catch(_){}
   }
@@ -213,16 +219,46 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-09-23a') ok('APP_VERSION = 2026-09-23a');
-  else bad('APP_VERSION 未更新为 2026-09-23a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-08a') ok('APP_VERSION = 2026-10-08a');
+  else bad('APP_VERSION 未更新为 2026-10-08a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  // v2026-10-08a 同步修复：加密载体二进制化（ENC2）+ 紧凑 JSON + Gist 1MB 截断自愈覆盖 + 云端诊断行
+  const syncTokens = [
+    ["return 'ENC2:'+b64FromBytes(all)", '加密载体改为二进制 base64(ENC2)'],
+    ["payload.startsWith('ENC2:')", 'decryptText 走 ENC2 分支'],
+    ["const o=JSON.parse(atob(payload.slice(4)))", 'decryptText 兼容旧 ENC1 格式'],
+    ['const json=JSON.stringify(clone);', '上传改为紧凑 JSON（不带缩进）'],
+    ['function gistRawWithRetry', 'raw 直链重试'],
+    ['_cloudBroken=true', '标记云端结构性损坏'],
+    ['if(_cloudBroken && localHasData()) await forcePush(true)', '截断死锁自动自愈'],
+    ['function forcePush', '覆盖云端的强制上传'],
+    ['qi_workbench_preoverwrite', '覆盖前留回滚备份'],
+    ["getElementById('btnForcePush')", '覆盖云端按钮绑定'],
+    ["getElementById('syncDiag')", '诊断行渲染'],
+    ["getElementById('btnPull').onclick=()=>pullData(false)", '下载按钮显式非静默（修复 onclick 传 Event 被当 silent）'],
+    ["getElementById('btnPush').onclick=()=>pushData(false)", '上传按钮显式非静默'],
+  ];
+  for(const [token, desc] of syncTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  if(!/'\s*ENC:'\+btoa\(JSON\.stringify/.test(htmlJs)) ok('旧的 5 倍膨胀加密格式已移除');
+  else bad('旧的 5 倍膨胀加密格式仍存在');
+  if(!/JSON\.stringify\(clone,null,2\)/.test(htmlJs)) ok('上传已不再使用缩进序列化');
+  else bad('上传仍使用缩进序列化（体积浪费）');
+  // HTML 结构类检查（不在 <script> 内，需读整份 HTML）
+  const htmlRaw = fs.readFileSync(htmlPath, 'utf8');
+  for(const [token, desc] of [['id="btnForcePush"', '设置页「用本机数据覆盖云端」按钮'], ['id="syncDiag"', '同步区诊断行占位']]){
+    if(htmlRaw.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc);
+  }
   // 首页顶部进度必须取「今日待办清单」的完成情况，不能再按 ACTIVE_MODULES 计数
   const homeBody = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
   if(homeBody && /todayChecklistItems\(\)/.test(homeBody[0]) && !/ACTIVE_MODULES\.filter\(m=>dayDone/.test(homeBody[0])) ok('首页进度取待办清单完成情况');
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v83') ok('SW 缓存名 = qi-workbench-v83');
-  else bad('SW 缓存名未递增为 v83');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v84') ok('SW 缓存名 = qi-workbench-v84');
+  else bad('SW 缓存名未递增为 v84');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
