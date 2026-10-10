@@ -927,7 +927,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-10a';
+const APP_VERSION = '2026-10-10b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -939,17 +939,32 @@ function seedNotes(){
   if(typeof BUILTIN_NOTES==='undefined'||!BUILTIN_NOTES||!BUILTIN_NOTES.length) return;
   state.notes=state.notes||[]; state.qa=state.qa||[]; state.qaProg=state.qaProg||{};
   const existing=new Set(state.notes.map(n=>n.title));
-  let nAdd=0,qAdd=0;
+  let nAdd=0,qAdd=0,nUpd=0;
   BUILTIN_NOTES.forEach(item=>{
-    if(!item||!item.title||existing.has(item.title)) return;
-    existing.add(item.title);
-    const nid='n'+Date.now()+Math.random().toString(36).slice(2,7);
-    state.notes.push({id:nid,title:item.title,content:item.content||'',ts:Date.now()});
-    (Array.isArray(item.qa)?item.qa:[]).forEach(p=>{ if(p&&p.q&&p.a){ state.qa.push({id:qaId(),nid,q:p.q,a:p.a}); qAdd++; } });
-    nAdd++;
+    if(!item||!item.title) return;
+    const local=state.notes.find(n=>n.title===item.title);
+    if(!local){
+      existing.add(item.title);
+      const nid='n'+Date.now()+Math.random().toString(36).slice(2,7);
+      state.notes.push({id:nid,title:item.title,content:item.content||'',ts:Date.now(),bv:item.v||''});
+      (Array.isArray(item.qa)?item.qa:[]).forEach(p=>{ if(p&&p.q&&p.a){ state.qa.push({id:qaId(),nid,q:p.q,a:p.a,bi:1}); qAdd++; } });
+      nAdd++;
+      return;
+    }
+    // v2026-10-10b：内置笔记改版后自动升级——标题相同且内置版本号更新 → 覆盖正文 + 按问题去重追加新问答（旧问答一律保留）
+    const nv=item.v||'';
+    if(nv && local.bv!==nv){
+      const oldQa=state.qa.filter(x=>x.nid===local.id);
+      try{ localStorage.setItem('qi_notes_qa_bak_'+local.id, JSON.stringify({at:Date.now(),from:local.bv||'旧版',content:local.content||'',qa:oldQa})); }catch(e){}
+      local.content=item.content||local.content;
+      local.bv=nv; local.ts=Date.now();
+      const have=new Set(oldQa.map(x=>String(x.q||'').trim()));
+      (Array.isArray(item.qa)?item.qa:[]).forEach(p=>{ if(p&&p.q&&p.a&&!have.has(String(p.q).trim())){ state.qa.push({id:qaId(),nid:local.id,q:p.q,a:p.a,bi:1}); qAdd++; } });
+      nUpd++;
+    }
   });
   state.notesSeed=true; _notesSeeded=true;
-  if(nAdd){ save(); console.log('内置笔记已载入: +'+nAdd+' 篇 / +'+qAdd+' 条'); }
+  if(nAdd||nUpd){ save(); console.log('内置笔记同步: +'+nAdd+' 篇 / 升级 '+nUpd+' 篇 / +'+qAdd+' 条问答'); }
 }
 
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
