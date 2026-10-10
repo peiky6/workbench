@@ -927,7 +927,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-08a';
+const APP_VERSION = '2026-10-10a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2061,9 +2061,8 @@ function todayChecklistItems(){
   if(!tp.items.length) trainText='今日休息日，轻松一下';
   else if(trainSkip) trainText='今日不训练（已跳过）🚫';
   else { const names=tp.items.map(it=>it.n).join('、'); trainText = trainDone ? ('已完成「'+names+'」训练计划') : ('下班后训练：'+names); }
-  const wd=weekdayToday(); const isWeekend=(wd===0||wd===6);
-  const hasMeals = !!(m&&m.meals&&['breakfast','lunch','dinner'].some(k=>m.meals[k]&&m.meals[k].length));
-  const dietText = isWeekend ? (hasMeals?'已记录饮食（坚持 16+8 · 下午5点前吃完）':'坚持 16+8 · 下午5点前吃完（周末）') : (hasMeals?'已记录今日三餐':'饮食打卡（记录三餐 · 16+8）');
+  const hasMeals = !!(m&&m.meals&&MEAL_KEYS.some(k=>m.meals[k]&&m.meals[k].length));
+  const dietText = hasMeals ? '已记录今日饮食' : '饮食打卡：记录今日餐次';
   const dietDone = hasMeals;
   const items=[
     {view:'mana', done:weightDone, text: weightDone?('已记录今日体重（'+m.weight+'kg）'):'记录今日体重 / 身体指标'},
@@ -3589,7 +3588,16 @@ function ivDelete(id){
 }
 
 /* ---- 体重管理（合并运动+体重+饮食） ---- */
-function manaToday(){ if(!rec('mana')[today()]) rec('mana')[today()]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''}; return rec('mana')[today()]; }
+const MEAL_KEYS=['breakfast','lunch','snack','dinner'];
+function manaToday(){
+  const t0=today();
+  if(!rec('mana')[t0]) rec('mana')[t0]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],snack:[],dinner:[]},note:''};
+  const t=rec('mana')[t0];
+  if(!t.meals) t.meals={breakfast:[],lunch:[],snack:[],dinner:[]};
+  MEAL_KEYS.forEach(k=>{ if(!Array.isArray(t.meals[k])) t.meals[k]=[]; });
+  return t;
+}
+function mealArr(t,meal){ return (t&&t.meals&&Array.isArray(t.meals[meal]))?t.meals[meal]:[]; }
 function latestWeight(){
   const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
   return items.length?items[items.length-1].w:null;
@@ -3680,9 +3688,10 @@ function manaMotivation(){
 /* ---- 训练计划 / 饮食计划 ---- */
 // 训练日：同样守 16+8（9:00-17:00 窗口），晚餐 17:00 吃完再去训练（参照减脂饮食指南·乐刻版）
 function dietTrain(){ return {free:false, tag:'训练日', meals:{
-  breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:150,qty:1.5}],
-  lunch:[{n:'鸡腿(去皮)',k:180},{n:'烤蔬菜',k:80},{n:'意面（少酱）',k:320}],
-  dinner:[{n:'糯玉米',k:160},{n:'2煮蛋',k:140}]
+  breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:235}],
+  lunch:[{n:'杂粮饭',k:180},{n:'鸡胸肉',k:250},{n:'豆腐',k:120}],
+  snack:[{n:'香蕉',k:90}],
+  dinner:[{n:'2煮蛋',k:140},{n:'关东煮豆腐串',k:60},{n:'蔬菜',k:80}]
 }}; }
 const TRAIN_PLAN = {
  1:{title:'周一：下肢力量 → 基础普拉提（~90分钟）', items:[{n:'腿举机',met:3.5,min:8},{n:'坐姿腿屈伸',met:3.5,min:8},{n:'滑腿弯举',met:3.5,min:8},{n:'自重臀桥',met:3,min:8},{n:'基础普拉提',met:3,min:60}]},
@@ -3693,66 +3702,108 @@ const TRAIN_PLAN = {
  6:{title:'周六：Zumba 燃脂舞（~60分钟）', items:[{n:'Zumba 燃脂舞',met:7,min:60}]},
  0:{title:'周日：核心雕塑（低强度收尾，~60分钟）', items:[{n:'核心雕塑',met:5,min:60}]}
 };
-const DIET_PLAN = { 1:dietTrain(),2:dietTrain(),3:dietTrain(),4:dietTrain(),5:dietTrain() };
+function dietRest(){ return {free:false, tag:'休息日', meals:{
+  breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:235}],
+  lunch:[{n:'鸡腿(去皮)',k:180},{n:'烤蔬菜',k:80},{n:'意面（少酱）',k:280}],
+  snack:[],
+  dinner:[{n:'2煮蛋',k:140},{n:'玉米',k:106},{n:'青菜',k:50}]
+}}; }
+const DIET_PLAN = { 0:dietTrain(),1:dietTrain(),2:dietTrain(),3:dietTrain(),4:dietTrain(),5:dietTrain(),6:dietTrain() };
 function weekdayToday(){ return new Date().getDay(); }
 function trainPlanToday(){ return TRAIN_PLAN[weekdayToday()]||{title:'今日无计划',items:[]}; }
-function dietPlanToday(){ const d=DIET_PLAN[weekdayToday()]; return d&&!d.free ? d : {free:true,meals:dietTrain().meals}; }
+function dietPlanToday(){
+  const m=dietModeToday();
+  if(m==='rest') return dietRest();
+  if(m==='free') return {free:true, meals:{breakfast:[],lunch:[],snack:[],dinner:[]}};
+  return dietTrain();
+}
 
-/* ---- 今日饮食指南（佩奇减脂饮食指南 · 乐刻课表版 2026-07-29 · 轮换菜单 2026-08-22） ---- */
+/* ---- 今日饮食指南（佩祈减脂饮食指南 · 乐刻课表版 2026-07-29 · 修订 2026-10-10） ---- */
 const DIET_GUIDE = {
-  // 训练日（周一~五）：同样守 16+8（9:00-17:00 窗口），晚餐 17:00 吃完再去训练
-  train:{
-    tag:'训练日 · 16+8（9:00-17:00 窗口）',
-    total:'≈ 1290 kcal',
-    note:'今天有课，但同样守 16+8：晚餐 17:00 前吃完再去训练，练后不用补餐。',
-    timeline:[
-      {time:'9:00', title:'早餐', meal:'breakfast', kcal:'≈410', text:'2鸡蛋 + 牛奶咖啡 + 全麦面包1.5片', foods:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:150,qty:1.5}]},
-      {time:'12:00', title:'午餐', meal:'lunch', kcal:'≈580', text:'轻食：鸡腿（去皮）+ 烤蔬菜 + 意面（少酱）', foods:[{n:'鸡腿(去皮)',k:180},{n:'烤蔬菜',k:80},{n:'意面（少酱）',k:320}]},
-      {time:'17:00', title:'晚餐', meal:'dinner', kcal:'≈300', text:'糯玉米1根 + 2个鸡蛋（或 关东煮：萝卜+豆腐串+福袋）', foods:[{n:'糯玉米',k:160},{n:'2煮蛋',k:140}]}
-    ]
+  meta:{
+    updated:'2026-10-10',
+    goal:'体脂率 29.8% → <b>28% 以下</b> · 躯干脂肪 8.74kg → <b>8.5kg 以下</b>（10 月底复查；体重 60.9kg 只作参考，不设日期）',
+    floor:'基础代谢 ≈1300（10/9 实测 1295）· <b>摄入别低于 1300</b> · 训练日总消耗约 1700-1900',
+    rule:'体重单次不算数，<b>连续两次不动</b>才算卡住'
   },
-  // 周末（周六/日）：自由饮食，不卡热量不卡时间
+  // 训练日（有课）：晚餐练后吃，蛋白主体 + 蔬菜/豆腐，不上饭面
+  train:{
+    tag:'训练日 · 有课',
+    total:'≈ 1400-1480 kcal',
+    note:'早餐 9:00、午餐 12:00、加餐 16:30、晚餐练后 20:30 前后。9:00-17:00 进食窗口可选，不考核。',
+    timeline:[
+      {time:'9:00', title:'早餐', meal:'breakfast', kcal:'≈490', text:'2鸡蛋 + 牛奶咖啡 + 全麦面包1.5片（87g）', foods:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:235}]},
+      {time:'12:00', title:'午餐', meal:'lunch', kcal:'≈550', text:'拌将健康餐：豆腐 / 鸡胸 / 鹌鹑蛋 + 杂粮饭', foods:[{n:'杂粮饭',k:180},{n:'鸡胸肉',k:250},{n:'豆腐',k:120}]},
+      {time:'16:30', title:'加餐', meal:'snack', kcal:'≈90', text:'香蕉 1 根（或酸奶 1 杯）', foods:[{n:'香蕉',k:90}]},
+      {time:'20:30', title:'晚餐（练后）', meal:'dinner', kcal:'≈280-350', text:'蛋白主体 1 个 + 蔬菜/豆腐，不上饭面', foods:[{n:'2煮蛋',k:140},{n:'关东煮豆腐串',k:60},{n:'蔬菜',k:80}]}
+    ],
+    optional:'😴 睡前（可选，不考核）：牛奶 300ml 一杯。'
+  },
+  // 休息日（无训练）：晚餐提前到 16:30，不设加餐
+  rest:{
+    tag:'休息日 · 无训练',
+    total:'≈ 1290-1390 kcal',
+    note:'不训练就不加餐，晚餐 16:30 吃：蛋白主体 1 个 + 配菜（玉米当配菜不当主角）。',
+    timeline:[
+      {time:'9:00', title:'早餐', meal:'breakfast', kcal:'≈490', text:'2鸡蛋 + 牛奶咖啡 + 全麦面包1.5片（87g）', foods:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:235}]},
+      {time:'12:00', title:'午餐', meal:'lunch', kcal:'≈500-550', text:'拌将健康餐 或 super model（鸡腿去皮 + 烤蔬菜 + 意面少酱）', foods:[{n:'鸡腿(去皮)',k:180},{n:'烤蔬菜',k:80},{n:'意面（少酱）',k:280}]},
+      {time:'16:30', title:'晚餐', meal:'dinner', kcal:'≈300-350', text:'蛋白主体 1 个 + 配菜（玉米半根~1根 / 青菜 / 黄瓜）', foods:[{n:'2煮蛋',k:140},{n:'玉米',k:106},{n:'青菜',k:50}]}
+    ],
+    optional:'😴 睡前（可选，不考核）：牛奶 300ml 一杯 · 🕐 9:00-17:00 进食窗口可选，断了不补、不回溯。'
+  },
+  // 周末 + 不训练：不套指南，家常菜正常吃
   weekend:{
-    tag:'周末自由 · 不卡热量不卡时间',
+    tag:'周末休息 · 家常菜自由',
     total:'不暴饮暴食',
-    note:'坚持 16+8：下午 5 点前吃完。如周日有课，练后补一份蛋白质（鸡蛋/鸡胸/豆腐）即可，不用刻意加餐。',
+    note:'周末不训练就不硬套指南：家常菜正常吃，坚持 16+8、下午 5 点前吃完即可。',
     tips:[
-      '家常菜正常吃，米饭减到半碗',
-      '肉类挑瘦的：鸡、鱼、瘦猪肉；避开红烧肉、炸物',
+      '米饭减到半碗，肉类挑瘦的：鸡、鱼、瘦猪肉；避开红烧肉、炸物',
       '有聚餐吃到八分饱就停',
-      '周末蛋白质吃得多，刚好补工作日的蛋白缺口'
+      '周末蛋白质吃得多，刚好补工作日的蛋白缺口',
+      '如临时去上课，练后补一份蛋白质（鸡蛋/鸡胸/豆腐）即可'
     ],
     warn:'📌 周一早上体重重 0.5-1kg 是水分和食物残渣，不是脂肪，周三早上再看。'
   },
   // 轮换菜单（换内容不换热量 · 防腻不破热量）
   rotation:{
     lunch:[
-      {t:'A. 麻辣烫/冒菜（清汤）', d:'荤：牛肉/鸡肉/虾 + 素：青菜/木耳/豆腐/魔芋', k:'400-500', note:'不喝汤、不点丸子/油条/方便面 · 味道重解腻，轻食最佳替代'},
-      {t:'B. 沙县小吃', d:'鸡腿饭去鸡皮 + 青菜，不喝例汤；或蒸饺+卤蛋+青菜', k:'450-550', note:'便宜遍地都是'},
-      {t:'C. 兰州拉面', d:'牛肉面 + 加一份牛肉 + 少面多菜；或凉拌牛肉+白切鸡', k:'450-550', note:'汤喝一半别喝完'},
-      {t:'D. 轻食店换菜', d:'super model 鸡腿换虾仁/牛肉，意面换杂粮饭，酱换油醋汁', k:'500-600', note:'还是那家店，换个蛋白质'}
+      {t:'A. 轻食店', d:'鸡腿去皮 + 烤蔬菜 + 杂粮饭，少酱', k:'500-550', note:'首选 · 酱换油醋汁更稳'},
+      {t:'B. 沙县鸡腿饭', d:'去皮 + 青菜，不喝例汤', k:'450-550', note:'便宜遍地都是'},
+      {t:'C. 兰州拉面', d:'加一份牛肉、少面多菜', k:'450-550', note:'汤喝一半别喝完'}
     ],
-    dinner:[
-      {t:'A. 三明治/饭团 + 无糖酸奶', d:'全麦三明治（鸡蛋/鸡肉）+ 明治无糖酸奶', k:'350-400', note:'换掉玉米+蛋固定组合'},
-      {t:'B. 关东煮换内容', d:'萝卜+豆腐+鸡蛋+海带+笋（换掉重复串）', k:'250-300', note:'还在便利店，换搭配'},
-      {t:'C. 酸辣粉/螺蛳粉（偶尔解馋）', d:'选少油版，加蛋加青菜', k:'500-600', note:'解腻神器，一周最多 1 次'},
-      {t:'D. 关东煮 + 茶叶蛋 + 蔬菜杯', d:'萝卜/豆腐/海带 + 茶叶蛋 + 便利店蔬菜杯', k:'300-350', note:'补全天蔬菜缺口'},
-      {t:'E. 麦当劳：板烧鸡腿堡+零度+玉米杯', d:'单层非油炸，配玉米杯', k:'≈480', note:'训练日首选 · 蛋白24g+纤维+0糖'},
-      {t:'F. 麦当劳：吉士堡+零度+苹果片/玉米杯', d:'配苹果片或玉米杯', k:'≈360', note:'休息日首选 · 完美落在窗口'},
-      {t:'G. 麦当劳：麦辣鸡腿堡+零度', d:'不加薯条', k:'≈510', note:'解馋版 · 一周最多 1 次'}
+    dinnerTrain:[
+      {t:'A. 即食鸡胸 1 袋', d:'配蔬菜/豆腐，不上饭面', k:'280-320', note:'练后最快'},
+      {t:'B. 关东煮：鸡蛋 + 豆腐', d:'鸡蛋 + 豆腐串 + 海带，换着搭', k:'280-320', note:'便利店随手买'},
+      {t:'C. 白切鸡 / 清蒸鱼 / 卤牛肉', d:'蛋白主体 1 个 + 青菜', k:'300-350', note:'家常菜优先'},
+      {t:'D. 麦当劳：板烧鸡腿堡 + 零度可乐', d:'单层非油炸，配玉米杯', k:'≈480', note:'训练日首选 · 蛋白24g + 0糖'}
     ],
-    mcdRule:'🍔 麦当劳铁律：配零度/无糖可乐（省 180kcal）· 配玉米杯/苹果片 · 不点薯条（中薯 340=一个汉堡）· 不配甜筒/派。',
-    week:[
-      '周一　午餐：麻辣烫（清汤牛肉+青菜）／晚餐：三明治+无糖酸奶',
-      '周二　午餐：赛百味（鸡胸三明治）／晚餐：关东煮换搭配（+海带+鸡蛋）',
-      '周三　午餐：沙县鸡腿饭（去皮）／晚餐：关东煮+茶叶蛋+蔬菜杯',
-      '周四　午餐：兰州牛肉面（加牛肉）／晚餐：麦当劳吉士堡+零度+玉米杯（解腻日）',
-      '周五　午餐：轻食店（换虾仁/牛肉）／晚餐：板烧鸡腿堡+零度（训练日首选）',
-      '周六 / 周日　周末自由（家常菜正常吃）'
-    ]
+    dinnerRest:[
+      {t:'A. 即食鸡胸 + 半根玉米', d:'玉米当配菜，不当主角', k:'300-350', note:'最省事'},
+      {t:'B. 关东煮换搭配', d:'鸡蛋 + 豆腐 + 海带', k:'280-320', note:'补蔬菜缺口'},
+      {t:'C. 麦当劳：吉士堡 + 零度 + 玉米杯', d:'配苹果片或玉米杯', k:'≈360', note:'休息日首选 · 完美落在窗口'}
+    ],
+    mcdRule:'🍔 麦当劳铁律：配零度/无糖可乐（省 180kcal）· 配玉米杯/苹果片 · 不点薯条（中薯 340=一个汉堡）· 不配甜筒/派。'
   }
 };
-function dietGuideToday(){ const d=weekdayToday(); return (d>=1&&d<=5) ? DIET_GUIDE.train : DIET_GUIDE.weekend; }
+/* 饮食方案判定：手动选择 > 自动（跟随训练打卡；周末不训练 = 自由吃） */
+function isWeekendDay(){ const w=weekdayToday(); return w===0||w===6; }
+function dietModeToday(){
+  const t=manaToday();
+  if(t.dietMode==='train'||t.dietMode==='rest'||t.dietMode==='free') return t.dietMode;
+  const auto = t.trainSkip ? 'rest' : 'train';
+  return (auto==='rest'&&isWeekendDay()) ? 'free' : auto;
+}
+function setDietMode(m){
+  const t=manaToday();
+  if(m){ t.dietMode=m; } else { delete t.dietMode; }
+  t.ts=Date.now(); save(); renderMana();
+  const msg={train:'已按「训练日」饮食方案 🏋️',rest:'已按「休息日」饮食方案 🛋️',free:'已切到「周末自由吃」，不套指南 🍚'}[m];
+  toast(msg||'已恢复自动判定：跟随今日训练打卡 🔄');
+}
+function dietGuideToday(){
+  const m=dietModeToday();
+  return m==='rest'?DIET_GUIDE.rest : (m==='free'?DIET_GUIDE.weekend : DIET_GUIDE.train);
+}
 function applyGuideMeal(meal){
   const g=dietGuideToday(); if(!g.timeline) return toast('今天是周末自由饮食，自行记录即可 🍽️');
   const t=manaToday(); let n=0;
@@ -3767,41 +3818,59 @@ function applyGuideAll(){
   t.done=true; t.ts=Date.now(); save(); renderMana(); toast('已一键套用今日饮食指南（'+n+' 项）📋');
 }
 function dietGuideHtml(){
-  const g=dietGuideToday(); const isTrain=!!g.timeline;
-  const tl=isTrain?g.timeline.map(s=>`
+  const g=dietGuideToday(); const hasTl=!!g.timeline;
+  const t=manaToday();
+  const body=hasTl ? g.timeline.map(s=>`
       <div class="grow">
         <div class="gt">${s.time}<br><b>${s.title}</b></div>
         <div class="gc">${s.text}<span class="gk"> ${s.kcal}</span></div>
         <button class="mini line sm" onclick="applyGuideMeal('${s.meal}')" title="套用本餐到饮食记录">套用</button>
-      </div>`).join(''):g.tips.map(t=>`<div class="rc">· ${t}</div>`).join('');
-  const weekendWarn=isTrain?'':`<div class="rc" style="color:var(--warn);font-weight:700;border-bottom:none">${g.warn}</div>`;
-  const rot=DIET_GUIDE.rotation;
+      </div>`).join('') : g.tips.map(x=>`<div class="rc">· ${x}</div>`).join('');
+  const warnRow=hasTl?'':`<div class="rc" style="color:var(--warn);font-weight:700;border-bottom:none">${g.warn}</div>`;
+  const modeBtn=m=>{
+    const on=(t.dietMode||'')===m; const cur=(!t.dietMode)&&dietModeToday()===m;
+    const cls=(on||cur)?'mini accent sm':'mini line sm';
+    const label={train:'🏋️ 训练日',rest:'🛋️ 休息日',free:'🍚 自由吃'}[m];
+    return `<button class="${cls}" onclick="setDietMode('${m}')">${label}</button>`;
+  };
+  const rot=DIET_GUIDE.rotation; const meta=DIET_GUIDE.meta;
   return `
   <div class="dcard">
     <div class="ltitle">🍽️ 今日饮食指南 <span class="rbadge">${g.tag}</span></div>
     <div class="plan-ref">
-      <div class="pr-h">⏰ ${isTrain?('全天动线 · 合计 '+g.total):g.total}</div>
+      <div class="pr-h">⏰ ${hasTl?('全天动线 · 合计 '+g.total):g.total}</div>
       <div class="pr-sub">${g.note}</div>
-      ${tl}${weekendWarn}
-      ${isTrain?`<button class="btn line w100" style="margin-top:8px" onclick="applyGuideAll()">📋 一键套用今日指南（全部餐次）</button>`:''}
+      ${body}${warnRow}
+      ${hasTl?`<div class="rc" style="border-bottom:none">${g.optional}</div>
+      <button class="btn line w100" style="margin-top:8px" onclick="applyGuideAll()">📋 一键套用今日指南（全部餐次）</button>`:''}
+      <div class="inline" style="margin-top:6px;flex-wrap:wrap">${modeBtn('train')}${modeBtn('rest')}${modeBtn('free')}<button class="mini ${t.dietMode?'line':'accent'} sm" onclick="setDietMode('')">🔄 自动${t.dietMode?'':'（当前）'}</button></div>
+      <div class="pr-sub">${t.dietMode?'已手动指定方案，点「自动」恢复跟随训练打卡。':'自动判定：点「今日不训练」→ 休息日方案；周末不训练 → 自由吃。'}</div>
     </div>
+    <details class="fold" style="margin-top:10px">
+      <summary>🎯 目标与红线（${meta.updated} 修订）</summary>
+      <div class="body">
+        <div class="rc">${meta.goal}</div>
+        <div class="rc" style="color:var(--warn)">⚠️ ${meta.floor}</div>
+        <div class="rc">📌 ${meta.rule}</div>
+      </div>
+    </details>
     <details class="fold" style="margin-top:10px">
       <summary>🔄 轮换菜单（防腻不破热量）</summary>
       <div class="body">
         <div class="secttitle" style="margin:4px 0 2px">午餐轮换（换内容不换热量）</div>
         ${rot.lunch.map(r=>`<div class="rc"><b>${r.t}</b> ${r.d} <span class="rk">${r.k} kcal</span>${r.note?' · '+r.note:''}</div>`).join('')}
-        <div class="secttitle" style="margin:10px 0 2px">晚餐轮换</div>
-        ${rot.dinner.map(r=>`<div class="rc"><b>${r.t}</b> ${r.d} <span class="rk">${r.k} kcal</span>${r.note?' · '+r.note:''}</div>`).join('')}
+        <div class="secttitle" style="margin:10px 0 2px">晚餐轮换 · 训练日</div>
+        ${rot.dinnerTrain.map(r=>`<div class="rc"><b>${r.t}</b> ${r.d} <span class="rk">${r.k} kcal</span>${r.note?' · '+r.note:''}</div>`).join('')}
+        <div class="secttitle" style="margin:10px 0 2px">晚餐轮换 · 休息日</div>
+        ${rot.dinnerRest.map(r=>`<div class="rc"><b>${r.t}</b> ${r.d} <span class="rk">${r.k} kcal</span>${r.note?' · '+r.note:''}</div>`).join('')}
         <div class="rc" style="color:#1b6ca8;background:#eaf4ff;border-radius:8px;padding:7px 9px;margin-top:6px;border-bottom:none">${rot.mcdRule}</div>
-        <div class="secttitle" style="margin:10px 0 2px">📅 一周轮换示例（直接抄）</div>
-        ${rot.week.map(w=>`<div class="rc">${w}</div>`).join('')}
       </div>
     </details>
   </div>`;
 }
 function trainKcal(met,min){ return Math.round(met*effectiveWeight()*min/60); }
-function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; if(t.trainDone) t.trainSkip=false; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁':'已撤销训练完成打卡'); }
-function toggleTrainSkip(){ const t=manaToday(); t.trainSkip=!t.trainSkip; if(t.trainSkip) t.trainDone=false; t.ts=Date.now(); save(); renderMana(); toast(t.trainSkip?'今日已标记为不训练 🚫 可再次点击撤销':'已撤销「今日不训练」'); }
+function toggleTrainDone(){ const t=manaToday(); t.trainDone=!t.trainDone; if(t.trainDone) t.trainSkip=false; delete t.dietMode; t.ts=Date.now(); save(); renderMana(); toast(t.trainDone?'已标记今日训练完成 🏁 · 饮食切回训练日方案':'已撤销训练完成打卡'); }
+function toggleTrainSkip(){ const t=manaToday(); t.trainSkip=!t.trainSkip; if(t.trainSkip) t.trainDone=false; delete t.dietMode; t.ts=Date.now(); save(); renderMana(); toast(t.trainSkip?('今日已标记为不训练 🚫 · 饮食切到'+(isWeekendDay()?'「周末自由吃」':'「休息日」')+'方案'):'已撤销「今日不训练」'); }
 function openBatchTrain(){
   const todayStr=today();
   document.getElementById('sheet').innerHTML = `
@@ -3826,7 +3895,7 @@ function doBatchTrain(){
   const recM=rec('mana'); let n=0; const d=new Date(sd.getTime());
   while(d<=ed){
     const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    if(!recM[ds]) recM[ds]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    if(!recM[ds]) recM[ds]={done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],snack:[],dinner:[]},note:''};
     if(!recM[ds].trainDone){ recM[ds].trainDone=true; recM[ds].ts=recM[ds].ts||Date.now(); n++; }
     d.setDate(d.getDate()+1);
   }
@@ -3836,7 +3905,7 @@ function doBatchTrain(){
   if(typeof renderHome==='function') renderHome();
   toast('✅ 已补训练达成 '+n+' 天（'+sv+' ~ '+ev+'）');
 }
-function addDietMeal(meal){ const dp=dietPlanToday(); if(dp.free) return toast('周末自由饮食，自行记录即可 🍽️'); const items=dp.meals[meal]||[]; if(!items.length) return; const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
+function addDietMeal(meal){ const dp=dietPlanToday(); const items=(dp.meals&&dp.meals[meal])||[]; if(!items.length) return toast('该餐今日无计划食物，手动记录即可 🍽️'); const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
 function trainPlanHtml(){
   const tp=trainPlanToday();
   const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone); const tsk=!!(tr.trainSkip);
@@ -3866,9 +3935,9 @@ function renderMana(){
   const exTotal = t.exercises.reduce((s,e)=>s+e.kcal,0);
 
   // 饮食
-  const mealsHtml=['breakfast','lunch','dinner'].map(meal=>{
-    const name={breakfast:'🍳 早餐',lunch:'🍱 午餐',dinner:'🍲 晚餐'}[meal];
-    const arr=t.meals[meal];
+  const mealsHtml=MEAL_KEYS.map(meal=>{
+    const name={breakfast:'🍳 早餐',lunch:'🍱 午餐',snack:'🍌 加餐',dinner:'🍲 晚餐'}[meal];
+    const arr=mealArr(t,meal);
     const rows=arr.length?arr.map((f,i)=>`<div class="mrow"><span>${escapeHtml(f.n)}${f.qty&&f.qty!==1?(' ×'+f.qty):''} (${f.k}kcal)</span><span class="x" onclick="delFood('${meal}',${i})">✕</span></div>`).join(''):'<p class="hint" style="margin:2px 0">未记录</p>';
     return `<div class="meal"><div class="mh"><span>${name}</span><span class="mk">${mealKcal(arr)} kcal</span></div>${rows}
       <div class="inline"><input id="food_${meal}" type="text" placeholder="如：米饭1碗 / 蛋白粉 120（名字+热量=自定义）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="suggestFood('${meal}')" onfocus="suggestFood('${meal}')" oncompositionend="suggestFood('${meal}')" />
@@ -3876,7 +3945,7 @@ function renderMana(){
       <div class="inline kcal-row" style="margin-top:2px"><span class="kcal-label">✨</span><input id="cfName_${meal}" type="text" placeholder="自定义食物名（可留空）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0" /><input id="kcal_${meal}" type="number" inputmode="numeric" min="0" step="1" placeholder="热量" style="width:80px" /> <button class="mini" onclick="addCustomFood('${meal}')">添加</button></div>
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
-  const intake=mealKcal(t.meals.breakfast)+mealKcal(t.meals.lunch)+mealKcal(t.meals.dinner);
+  const intake=MEAL_KEYS.reduce((s,k)=>s+mealKcal(mealArr(t,k)),0);
   const out=Math.round(bmr())+exTotal;
   const net=intake-out;
   const predict = net<0 ? `预计每周约减 <b>${(Math.abs(net)*7/7700).toFixed(2)} kg</b> 📉` : (net>0?`今日盈余 ${net}kcal，预计每周约增 <b>${(net*7/7700).toFixed(2)} kg</b> 📈`:'今日收支平衡，体重维稳');
@@ -3942,7 +4011,7 @@ function renderMana(){
     <div class="dcard">
       <div class="ltitle">🍽️ 饮食（输入即算卡路里）</div>
       ${mealsHtml}
-      <p class="hint" style="margin:4px 2px 8px">🗓️ 周一~五套用训练日计划；工作日 16+8，晚餐在 17:00 前吃完、餐后训练。周末自由饮食，但同样坚持 16+8、下午 5 点前吃完 🍽️。</p>
+      <p class="hint" style="margin:4px 2px 8px">🍽️ 按今日饮食指南走：训练日 4 餐（含 16:30 加餐），休息日 3 餐不加餐；周末不训练为「自由吃」，家常菜正常吃、不套指南。点「今日不训练」会自动切换方案。</p>
       <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
     </div>
     <div class="dcard">
@@ -4013,14 +4082,14 @@ function bodyFatChart(items){
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${vl}${bars}${labs}</svg>`;
 }
 function manaHistoryHtml(){
-  const dates=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null||rec('mana')[d].exercises.length||(rec('mana')[d].meals&&(rec('mana')[d].meals.breakfast.length||rec('mana')[d].meals.lunch.length||rec('mana')[d].meals.dinner.length))).sort((a,b)=>b.localeCompare(a)).slice(0,20);
+  const dates=Object.keys(rec('mana')).filter(d=>{ const r=rec('mana')[d]; return r.weight!=null||(r.exercises&&r.exercises.length)||MEAL_KEYS.some(k=>mealArr(r,k).length); }).sort((a,b)=>b.localeCompare(a)).slice(0,20);
   if(!dates.length) return '';
   const body=dates.map(d=>{
     const r=rec('mana')[d]; const w=r.weight!=null?r.weight+'kg':'—';
     const bf=r.bodyFat!=null?r.bodyFat+'%':null;
     const bmi=r.bmi!=null?r.bmi:null;
     const ex=r.exercises.reduce((s,e)=>s+e.kcal,0);
-    const intake=mealKcal(r.meals.breakfast)+mealKcal(r.meals.lunch)+mealKcal(r.meals.dinner);
+    const intake=MEAL_KEYS.reduce((s,k)=>s+mealKcal(mealArr(r,k)),0);
     const sumExtra=[bf?('体脂 '+bf):'', bmi?('BMI '+bmi):''].filter(Boolean).join(' · ');
     return `<details class="fold"><summary>${d} · 体重 ${w}${sumExtra?' · '+sumExtra:''}</summary><div class="body">
       ${bf?`<div class="mrow"><span>体脂率</span><span>${bf}</span></div>`:''}
@@ -4106,7 +4175,7 @@ function importAntafu(text){
   let added=0;
   Object.keys(map).forEach(ds=>{
     const o=map[ds];
-    const t=rec('mana')[ds]||{done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],dinner:[]},note:''};
+    const t=rec('mana')[ds]||{done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],snack:[],dinner:[]},note:''};
     if(o.weight!=null) t.weight=o.weight;
     if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
     if(o.bmi!=null) t.bmi=o.bmi;
@@ -4268,7 +4337,7 @@ function addCustomKcal(meal){
   const t=manaToday(); t.meals[meal].push({n:'自定义'+k+'kcal',k}); t.done=true; t.ts=Date.now();
   inp.value=''; save(); renderMana(); toast('已记录自定义热量 '+k+' kcal 🍽️');
 }
-function mealNameCn(m){ return {breakfast:'早餐',lunch:'午餐',dinner:'晚餐'}[m]||m; }
+function mealNameCn(m){ return {breakfast:'早餐',lunch:'午餐',snack:'加餐',dinner:'晚餐'}[m]||m; }
 function delEx(i){ manaToday().exercises.splice(i,1); save(); renderMana(); }
 function addFood(meal,name,k){ manaToday().meals[meal].push({n:name,k}); manaToday().done=true; save(); renderMana(); }
 function delFood(meal,i){ manaToday().meals[meal].splice(i,1); save(); renderMana(); }
@@ -4931,9 +5000,9 @@ function exportModuleCSV(mod){
     const records = rec('mana');
     Object.keys(records).sort().forEach(d=>{
       const r = records[d]; if(!r.meals) return;
-      ['breakfast','lunch','dinner'].forEach(meal=>{
-        const label = meal === 'breakfast' ? '早餐' : (meal === 'lunch' ? '午餐' : '晚餐');
-        (r.meals[meal]||[]).forEach(f => rows.push([d, label, f.n||'', f.qty||1, f.k||'']));
+      MEAL_KEYS.forEach(meal=>{
+        const label = mealNameCn(meal);
+        mealArr(r,meal).forEach(f => rows.push([d, label, f.n||'', f.qty||1, f.k||'']));
       });
     });
     showCSVModal('diet-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));

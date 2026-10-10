@@ -219,7 +219,7 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-08a') ok('APP_VERSION = 2026-10-08a');
+  if(verMatch && verMatch[1]==='2026-10-10a') ok('APP_VERSION = 2026-10-10a');
   else bad('APP_VERSION 未更新为 2026-10-08a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-08a 同步修复：加密载体二进制化（ENC2）+ 紧凑 JSON + Gist 1MB 截断自愈覆盖 + 云端诊断行
   const syncTokens = [
@@ -257,7 +257,7 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v84') ok('SW 缓存名 = qi-workbench-v84');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v85') ok('SW 缓存名 = qi-workbench-v85');
   else bad('SW 缓存名未递增为 v84');
 }
 
