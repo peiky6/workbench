@@ -189,7 +189,7 @@ if(htmlJs){
     ['function renderNotes', '笔记问答视图渲染'],
     ['function qaAnswer', '问答自测反馈'],
     ['function qaBulk', '问答批量导入'],
-    ['function qaDayList', '每日5条自测抽题'],
+    ['function qaWeekList', '每周5条自测抽题(v2026-10-13 由每日改为每周)'],
     ['笔记问答', '导航入口'],
     ['qaReveal', '显示答案按钮'],
     ['从云端同步', '空状态一键同步'],
@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-10b') ok('APP_VERSION = 2026-10-10b');
-  else bad('APP_VERSION 未更新为 2026-10-10b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-13a') ok('APP_VERSION = 2026-10-13a');
+  else bad('APP_VERSION 未更新为 2026-10-13a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,49 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v86') ok('SW 缓存名 = qi-workbench-v86');
-  else bad('SW 缓存名未递增为 v86');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v87') ok('SW 缓存名 = qi-workbench-v87');
+  else bad('SW 缓存名未递增为 v87');
+  // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
+  const weekTokens = [
+    ['function weeklyTaskItems', '本周任务数据'],
+    ['function weeklyTasksHtml', '本周任务卡片'],
+    ['function ieltsWeekOutput', '本周雅思产出物统计'],
+    ['function ieltsExamCountdownHtml', '雅思考试倒计时横幅'],
+    ['function weekKeyOf', '周起始日计算'],
+    ['function ymdToDate', '日期字符串转 Date'],
+    ['function qaWeekList', '每周5条自测抽题'],
+    ['qaWeekly', '按周锁定的自测字段'],
+    ['📌 本周任务', '首页本周任务卡片标题'],
+    ['WEEK_OUTPUT_HINT', '产出物说明常量'],
+    ['out:1', '雅思菜单输出型标记'],
+    ['x.out', '输出型判定（ieltsWeekOutput）'],
+    ['距离雅思考试还有', '倒计时文案'],
+    ['setIeltsExamDate', '设置页考试日期输入框(JS)'],
+    ['ieltsExamDate', '考试日期字段'],
+    ['本周问答自测（每周 5 条）', '笔记页改为周维度'],
+    ['本周进度', '统计卡改为本周进度'],
+    ['📤 本周输出', '雅思页本周输出区块'],
+  ];
+  for(const [token, desc] of weekTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  for(const token of ['function qaDayList']){
+    if(htmlJs.includes(token)) bad('每日问答抽题应已改为每周但仍存在：' + token);
+    else ok('已移除：' + token);
+  }
+  // 笔记问答必须从「每日待办」挪到「本周任务」，不能两处都出现
+  const tciBody = htmlJs.match(/function todayChecklistItems\(\)\{[\s\S]*?\n\}/);
+  if(tciBody && !/__notes/.test(tciBody[0])) ok('今日待办已不含笔记问答（移到本周任务）');
+  else bad('今日待办仍含笔记问答条目');
+  const wtiBody = htmlJs.match(/function weeklyTaskItems\(\)\{[\s\S]*?\n\}/);
+  if(wtiBody && /__notes/.test(wtiBody[0]) && /ieltsWeekOutput\(\)/.test(wtiBody[0])) ok('本周任务含「笔记自测 + 雅思输出」两项');
+  else bad('本周任务项不完整');
+  const htmlRaw2 = fs.readFileSync(htmlPath, 'utf8');
+  if(htmlRaw2.includes('id="setIeltsExamDate"')) ok('存在：设置页考试日期 input');
+  else bad('缺失：设置页考试日期 input');
+  const examRead = htmlJs.match(/s\.ieltsExamDate=\(document\.getElementById\('setIeltsExamDate'\)\.value\|\|''\)\.trim\(\);/);
+  if(examRead) ok('设置保存时读取考试日期'); else bad('设置保存未读取考试日期');
 }
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

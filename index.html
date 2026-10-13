@@ -510,6 +510,7 @@
       <p class="hint">设定目标后，体重图会显示目标线、首页清单与复盘会追踪进度。先留空也可随时回来填。</p>
       <div class="field"><label>目标体重(kg)</label><input id="setGoalWeight" type="number" step="0.1" placeholder="如 60" /></div>
       <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
+      <div class="field"><label>雅思考试日期（没报名就填自定的模拟考日期 · 首页显示倒计时）</label><input id="setIeltsExamDate" type="date" /></div>
       <div class="field"><label>每日阅读目标(分钟 · 微习惯，默认 5)</label><input id="setReadGoal" type="number" min="1" max="240" placeholder="如 5" /></div>
       <p class="hint">阅读用「微习惯」思路：目标设很小（如 5 分钟），容易启动、容易坚持；连续打卡解锁成就，完成后记得去微信读书领书币 📖。</p>
     </div>
@@ -677,7 +678,7 @@ function defaultState(){
     customExercises:[],
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
-    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin' }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin' }
   };
 }
 let state = load();
@@ -730,6 +731,7 @@ function load(){
     s.qa = Array.isArray(s.qa)? s.qa : [];
     s.qaProg = s.qaProg||{};
     s.qaDaily = s.qaDaily||{};
+    s.qaWeekly = s.qaWeekly||{};
     s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ console.error('load 失败，已回退默认状态（本地数据可能已损坏）', e); return defaultState(); }
@@ -927,7 +929,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-10b';
+const APP_VERSION = '2026-10-13a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2041,9 +2043,11 @@ function renderHome(){
       <div class="row"><span class="ttl">今日打卡进度</span><span class="num">${done} / ${total}</span></div>
       <div class="bar"><i style="width:${total?done/total*100:0}%"></i></div>
     </div>
+    ${ieltsExamCountdownHtml()}
     ${quizReminderHtml()}
     ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
+    ${weeklyTasksHtml()}
     ${weeklyReviewHtml()}
     ${monthReminderBanner()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
@@ -2070,7 +2074,6 @@ function todayChecklistItems(){
   const ieltsDone=dayDone('ielts',td);
   const readDone=isDone('reading',td);
   const newsDone=isDone('news',td);
-  const qaDayDone=!!(state.qaDaily&&state.qaDaily[td]&&state.qaDaily[td].done);
   const tp=trainPlanToday(); const trainSkip=!!(m&&m.trainSkip); const trainDone=!!(m&&m.trainDone)||trainSkip;
   let trainText;
   if(!tp.items.length) trainText='今日休息日，轻松一下';
@@ -2085,11 +2088,77 @@ function todayChecklistItems(){
     {view:'ai', done:aiDayDone(), text: aiDayDone()?'今日 AI 术语卡已刷完（5 张）':'刷今日 AI 术语卡（5 张）'},
     {view:'news', done:newsDone, text: newsDone?'已读今日虎嗅早报':'阅读虎嗅早报（新闻阅读）'},
     {view:'reading', done:readDone, text: readDone?'已阅读 5 分钟':'每日阅读5分钟'},
-    {view:'__notes', done:qaDayDone, text: qaDayDone?'今日问答自测已完成':'笔记问答自测（5 条）'},
     {view:'mana', done:dietDone, text: dietText},
     {view:'mana', done:trainDone, text: trainText}
   ];
   return items;
+}
+/* ---- 本周任务（每周一次 · 必须有产出物）v2026-10-13 ----
+   设计来由：笔记问答、雅思刷题/口语长期萎缩——每日打卡只判定「做没做」，
+   凡是需要被检验的动作都被压到最低完成版本。改为按周计、且必须留下产出物，
+   把「做了」升级为「有东西留下」。 */
+const WEEK_OUTPUT_HINT = '必须留下产出物才算数：一道题的答案 / 一段录音 / 一条笔记';
+function ymdToDate(s){ const p=String(s||'').split('-'); return new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
+function weekKeyOf(ds){
+  const p=String(ds||today()).split('-');
+  return fmt(startOfWeek(new Date(Number(p[0]),Number(p[1])-1,Number(p[2]))));
+}
+// 本周雅思输出：本周内完成过任一「输出型」菜单项，且该项留了笔记（产出物）
+function ieltsWeekOutput(){
+  const wk=weekKeyOf(); const list=[];
+  Object.keys(rec('ielts')).forEach(d=>{
+    if(weekKeyOf(d)!==wk) return;
+    const r=rec('ielts')[d]; if(!r||!r.menu||!r.menu.done) return;
+    (r.menu.picks||[]).forEach(id=>{
+      if(!r.menu.done[id]) return;
+      const it=IELTS_MENU.find(x=>x.id===id);
+      if(!it||!it.out) return;
+      const note=((r.menu.notes||{})[id]||'').trim();
+      if(!note) return;
+      list.push({d, name:it.name, emoji:it.emoji, note});
+    });
+  });
+  return {done:list.length>0, list};
+}
+// 注：qaWeekList() 定义在下方「笔记问答自测」区（函数声明提升，此处可调用）
+function weeklyTaskItems(){
+  const qw=(state.qa||[]).length? qaWeekList() : {list:[],cur:0,done:false};
+  const io=ieltsWeekOutput();
+  return [
+    {view:'__notes', done:!!qw.done,
+     text: qw.done?'本周笔记自测已完成（5 条）':'本周笔记自测：5 条问答，做完要留下答案',
+     sub:'每周一次'},
+    {view:'ielts', done:io.done,
+     text: io.done?('本周雅思输出已完成（'+(io.list[0]?io.list[0].emoji+' '+io.list[0].name:'已留产出物')+'）'):'本周雅思输出：刷题 / 口语录音 / 写作，做完必须留笔记',
+     sub:'每周一次'}
+  ];
+}
+function weeklyTasksHtml(){
+  const items=weeklyTaskItems();
+  const done=items.filter(i=>i.done).length;
+  const rows=items.map(i=>`<div class="hitem" onclick="setView('${i.view}')" style="cursor:pointer">
+      <span class="hd" style="flex:0 0 22px">${i.done?'✅':'⬜'}</span>
+      <span class="hn">${escapeHtml(i.text)}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--sub);flex:none">${i.sub}</span>
+    </div>`).join('');
+  return `<div class="dcard">
+    <div class="ltitle">📌 本周任务 <span style="margin-left:auto;font-size:12px;color:${done<items.length?'var(--warn)':'var(--good)'}">${done}/${items.length} 完成</span></div>
+    ${rows}
+    <p class="hint">${WEEK_OUTPUT_HINT}。本周没做完不补，下周自动换新的一批。</p>
+  </div>`;
+}
+// 雅思考试倒计时（设置里填考试日期或自定模拟考日期 → 首页常驻提醒）
+function ieltsExamCountdownHtml(){
+  const ed=(state.settings.ieltsExamDate||'').trim();
+  if(!ed) return '';
+  const days=Math.round((ymdToDate(ed)-ymdToDate(today()))/86400000);
+  const g=(state.settings.goal&&state.settings.goal.ielts!=null)?Number(state.settings.goal.ielts):null;
+  const goalTxt=g!=null?('目标 '+g+' 分'):'';
+  const io=ieltsWeekOutput();
+  if(days<0) return `<div class="reminder done" onclick="setView('ielts')"><span class="ri">🎓</span><div class="rm"><div class="rt">雅思考试日期已过（${escapeHtml(ed)}）</div><div class="rs">去设置更新下一次日期 →</div></div></div>`;
+  if(days===0) return `<div class="reminder warn" onclick="setView('ielts')"><span class="ri">🎯</span><div class="rm"><div class="rt">就是今天：雅思考试</div><div class="rs">${goalTxt} 加油 →</div></div></div>`;
+  const sub=(goalTxt?goalTxt+' · ':'')+(io.done?'本周输出已完成 ✅':'本周还没留下输出物');
+  return `<div class="reminder ${days<=30?'warn':'done'}" onclick="setView('ielts')"><span class="ri">🎯</span><div class="rm"><div class="rt">距离雅思考试还有 ${days} 天（${escapeHtml(ed)}）</div><div class="rs">${sub} →</div></div></div>`;
 }
 function todayChecklistHtml(){
   const items=todayChecklistItems();
@@ -2470,24 +2539,25 @@ function toggleIeltsSub(key,sub){ const date=today(); const p=ieltsPartMut(date,
 function setIeltsNote(key,val){ const date=today(); const p=ieltsPartMut(date,key); p.note=val; save(); }
 function ieltsPartDays(key){ const a=[]; const base=new Date(); for(let i=6;i>=0;i--){ const d=new Date(base); d.setDate(d.getDate()-i); const ds=fmt(d); const r=rec('ielts')[ds]; a.push(!!(r&&r.parts&&r.parts[key]&&r.parts[key].done)); } return a; }
 /* ---- 雅思：菜单制（每日点选 1-2 项，18 项菜单，源自《每日英语学习计划_菜单制.md》） ---- */
+/* out:1 = 输出型（有产出物），计入「本周输出」；未标注的算输入型（背单词/泛听/看课等），不计入 */
 const IELTS_MENU=[
-  {id:1, cat:'IELTS', emoji:'🎧', name:'听力·精听', how:'1 篇真题：盲听 1 遍 → 逐句暂停听写 → 对答案复听', dur:'20-25min', tag:'听'},
+  {id:1, cat:'IELTS', emoji:'🎧', name:'听力·精听', how:'1 篇真题：盲听 1 遍 → 逐句暂停听写 → 对答案复听', dur:'20-25min', tag:'听', out:1},
   {id:2, cat:'IELTS', emoji:'🎧', name:'听力·泛听', how:'英文播客 / 美剧当背景音磨耳朵，不用懂全', dur:'15min', tag:'听'},
   {id:3, cat:'IELTS', emoji:'💬', name:'口语·看课', how:'看口语教学视频，学答题框架（Part 1/2/3 怎么组织）', dur:'15-20min', tag:'说'},
   {id:4, cat:'IELTS', emoji:'💬', name:'口语·影子跟读', how:'老师说一句 → 暂停 → 模仿一句，练发音节奏', dur:'15min', tag:'说'},
-  {id:5, cat:'IELTS', emoji:'💬', name:'口语·开口录音', how:'拿当季题库录 1 条（Part 2 讲 2 分钟），回听找问题', dur:'15-20min', tag:'说'},
-  {id:6, cat:'IELTS', emoji:'📖', name:'阅读·精读', how:'1 篇真题：查生词 + 拆 2 个长难句', dur:'20-25min', tag:'读'},
+  {id:5, cat:'IELTS', emoji:'💬', name:'口语·开口录音', how:'拿当季题库录 1 条（Part 2 讲 2 分钟），回听找问题', dur:'15-20min', tag:'说', out:1},
+  {id:6, cat:'IELTS', emoji:'📖', name:'阅读·精读', how:'1 篇真题：查生词 + 拆 2 个长难句', dur:'20-25min', tag:'读', out:1},
   {id:7, cat:'IELTS', emoji:'📖', name:'阅读·泛读', how:'读 1 篇感兴趣领域的英文文章，只求大意', dur:'15min', tag:'读'},
-  {id:8, cat:'IELTS', emoji:'✍️', name:'写作·小作文', how:'写 1 篇小作文（图表题），或大作文写提纲', dur:'25-30min', tag:'写'},
-  {id:9, cat:'IELTS', emoji:'✍️', name:'写作·仿写', how:'选范文 1 段，模仿句式重写一遍', dur:'15-20min', tag:'写'},
+  {id:8, cat:'IELTS', emoji:'✍️', name:'写作·小作文', how:'写 1 篇小作文（图表题），或大作文写提纲', dur:'25-30min', tag:'写', out:1},
+  {id:9, cat:'IELTS', emoji:'✍️', name:'写作·仿写', how:'选范文 1 段，模仿句式重写一遍', dur:'15-20min', tag:'写', out:1},
   {id:10, cat:'IELTS', emoji:'🔤', name:'单词', how:'背 20 个新词 + 复习昨天的（保底项）', dur:'10-15min', tag:''},
   {id:11, cat:'RESUME', emoji:'📄', name:'简历·熟读', how:'跟读网页练 1 段简历（5-8 句），刷到流利', dur:'15min', tag:''},
-  {id:12, cat:'RESUME', emoji:'🗣️', name:'简历·复述', how:'用「背景→问题→方案→结果」框架，英文讲 1 个项目故事', dur:'15-20min', tag:''},
-  {id:13, cat:'RESUME', emoji:'🎯', name:'简历·面试问答', how:'模拟面试：walk me through a project you led…', dur:'15min', tag:''},
+  {id:12, cat:'RESUME', emoji:'🗣️', name:'简历·复述', how:'用「背景→问题→方案→结果」框架，英文讲 1 个项目故事', dur:'15-20min', tag:'', out:1},
+  {id:13, cat:'RESUME', emoji:'🎯', name:'简历·面试问答', how:'模拟面试：walk me through a project you led…', dur:'15min', tag:'', out:1},
   {id:14, cat:'RESUME', emoji:'🗂️', name:'简历·词汇', how:'挑 3 个简历里的词（如 orchestrate），找同义替换扩展', dur:'10-15min', tag:''},
   {id:15, cat:'HANDBOOK', emoji:'📘', name:'手册·场景跟读', how:'选 1 个场景（站会 / 邮件 / 合规…）练 10 句', dur:'15min', tag:''},
-  {id:16, cat:'HANDBOOK', emoji:'🎭', name:'手册·场景演练', how:'挑 1 个场景，自己扮演双方把对话演出来', dur:'10-15min', tag:''},
-  {id:17, cat:'HANDBOOK', emoji:'📧', name:'手册·邮件写作', how:'用邮件句式，写一封真实的模拟邮件', dur:'15min', tag:''},
+  {id:16, cat:'HANDBOOK', emoji:'🎭', name:'手册·场景演练', how:'挑 1 个场景，自己扮演双方把对话演出来', dur:'10-15min', tag:'', out:1},
+  {id:17, cat:'HANDBOOK', emoji:'📧', name:'手册·邮件写作', how:'用邮件句式，写一封真实的模拟邮件', dur:'15min', tag:'', out:1},
   {id:18, cat:'HANDBOOK', emoji:'⚡', name:'手册·短语速查', how:'过一遍 20 个高频短语，造句加深记忆', dur:'10min', tag:''}
 ];
 const IELTS_MENU_CATS=[
@@ -2520,11 +2590,19 @@ function ieltsStatsHtml(){
   const weekDays=[0,1,2,3,4,5,6].map(i=>{ const d=new Date(); d.setDate(d.getDate()-i); return fmt(d); }).reverse();
   const weekCnt=weekDays.filter(ds=>ieltsMenuWeekDone(ds)).length;
   const tags=['听','说','读','写'].map(tg=>`<span class="ichip ${cov[tg]?'on':''}" style="margin:2px 4px 2px 0">${tg} ×${cov[tg]}</span>`).join('');
+  const io=ieltsWeekOutput();
+  const outNames=IELTS_MENU.filter(x=>x.out).map(x=>x.emoji+x.name).join('、');
+  const outHtml=io.done
+    ? `<div class="istat-sub">✅ 已完成 ${io.list.length} 次：${io.list.map(x=>escapeHtml(x.emoji+' '+x.name)+'（'+escapeHtml(x.d.slice(5))+'）').join('、')}</div>`
+    : `<div class="istat-sub">还没有产出物 · 本周需完成 <b>1 次</b>输出型任务，并在任务卡里写下产出（答案 / 录音要点 / 笔记）</div>`;
   return `<div class="dcard ielts-stats"><div class="ltitle">📊 本周概览（菜单制）</div>
     <div class="istat-sub">本周打卡 <b>${weekCnt}</b> 天 · 每天 1-2 项，保底 1 项</div>
     <div class="ltitle" style="margin-top:10px">🔄 本周听说读写覆盖（不偏科铁律）</div>
     <div>${tags}</div>
-    <p class="hint">听说读写各至少碰 1 次即可；可通过组合一次练两项（如「口语录音 + 简历复述」）。</p></div>`;
+    <p class="hint">听说读写各至少碰 1 次即可；可通过组合一次练两项（如「口语录音 + 简历复述」）。</p>
+    <div class="ltitle" style="margin-top:10px">📤 本周输出（每周 1 次 · 必须有产出物）</div>
+    ${outHtml}
+    <p class="hint">算输出的项目：${outNames}。背单词、泛听、看课不算——它们是输入，做完也不会被检验。</p></div>`;
 }
 function ieltsGoalHtml(){
   const g=(state.settings.goal&&state.settings.goal.ielts!=null)?Number(state.settings.goal.ielts):null;
@@ -2533,9 +2611,17 @@ function ieltsGoalHtml(){
   if(g==null){
     return `<div class="dcard ielts-goal"><div class="ltitle">🎯 雅思目标</div><p class="hint">还没设定雅思目标总分。去 ⚙️ 设置 → 目标设定，填写「目标雅思总分」，这里会显示你的冲刺目标与进度。</p></div>`;
   }
+  const ed=(state.settings.ieltsExamDate||'').trim();
+  let examLine='';
+  if(ed){
+    const days=Math.round((ymdToDate(ed)-ymdToDate(today()))/86400000);
+    examLine = days<0 ? `<div class="goal-sub">考试日期 ${escapeHtml(ed)} 已过，去设置更新下一次</div>`
+      : `<div class="goal-sub">距离考试 <b>${days}</b> 天（${escapeHtml(ed)}）${days<=30?' · 进入冲刺期，本周输出别断':''}</div>`;
+  }
   return `<div class="dcard ielts-goal">
     <div class="ltitle">🎯 雅思目标</div>
     <div class="goal-row"><div class="goal-main">目标总分 <b>${g}</b> 分</div><div class="goal-sub">建议每科尽量 ≥ ${g} 分（总分 = 四科平均分，四舍五入至 0.5）</div></div>
+    ${examLine}
     <p class="hint">今天已完成 <b>${doneToday}/${t.picks.length||1}</b> 个菜单任务。每天碰 1-2 项，离 ${g} 分目标更近一步 💪</p>
   </div>`;
 }
@@ -2562,10 +2648,12 @@ function ieltsLearn(){
   const todayCards=t.picks.length?t.picks.map(id=>{
     const it=IELTS_MENU.find(x=>x.id===id); if(!it) return '';
     const done=!!t.done[id]; const note=(t.notes&&t.notes[id])||'';
+    const needOut=!!it.out && !note.trim();
     return `<div class="term ${done?'mastered':''}">
-      <div class="term-h">${it.emoji} ${it.name} ${done?'<span class="mbadge">✓ 完成</span>':''}<span style="margin-left:auto;font-size:11px;color:var(--sub)">${it.dur}</span></div>
+      <div class="term-h">${it.emoji} ${it.name} ${it.out?'<span class="mbadge">📤 输出型</span>':''} ${done?'<span class="mbadge">✓ 完成</span>':''}<span style="margin-left:auto;font-size:11px;color:var(--sub)">${it.dur}</span></div>
       <div class="term-b"><b>做法</b> ${it.how}</div>
-      <textarea class="note" placeholder="笔记 / 生词（可选）" oninput="ieltsMenuNote(${it.id},this.value)">${escapeHtml(note)}</textarea>
+      <textarea class="note" placeholder="${it.out?'产出物（必填）：答案 / 录音要点 / 笔记 —— 写了才计入本周输出':'笔记 / 生词（可选）'}" oninput="ieltsMenuNote(${it.id},this.value)">${escapeHtml(note)}</textarea>
+      ${(done&&needOut)?'<p class="hint" style="color:var(--warn)">⚠️ 这是输出型任务，还没留产出物，不计入本周输出</p>':''}
       <button class="mtoggle" onclick="ieltsMenuDone(${it.id})">${done?'↺ 取消完成':'✅ 标记完成'}</button>
       <button class="mtoggle line" onclick="ieltsMenuPick(${it.id})">✕ 移除</button>
     </div>`;
@@ -2911,14 +2999,14 @@ function aiAddTermFromForm(){
 /* ===================== 笔记问答自测（长文笔记 → 主动回忆） ===================== */
 function qaId(){ return 'q'+Date.now()+Math.random().toString(36).slice(2,7); }
 function qaProgOf(id){ const p=(state.qaProg||{})[id]; return p||{n:0,ok:0,miss:0,last:''}; }
-// 每日 5 条：当天锁定；优先没测过的 → 上次测过最早的
-function qaDayList(){
-  state.qaDaily=state.qaDaily||{};
-  const ds=today();
-  const entry=state.qaDaily[ds];
+// 每周 5 条：本周锁定（周一起算）；优先没测过的 → 上次测过最早的
+function qaWeekList(){
+  state.qaWeekly=state.qaWeekly||{};
+  const wk=weekKeyOf();
+  const entry=state.qaWeekly[wk];
   const all=(state.qa||[]).slice();
   if(entry && entry.list && entry.list.length){
-    // v53：清洗失效 id（问答被删除/内置数据更新后，当日锁定列表可能含已删 id → 不再报「问答数据异常」）
+    // v53：清洗失效 id（问答被删除/内置数据更新后，锁定列表可能含已删 id → 不再报「问答数据异常」）
     const valid=entry.list.filter(id=>all.some(x=>x.id===id));
     if(valid.length){
       if(valid.length!==entry.list.length){
@@ -2934,7 +3022,7 @@ function qaDayList(){
   const score=q=>{ const p=qaProgOf(q.id); return (p.n||0)*100000 + (p.last? Number(p.last.replace(/-/g,'')):0); };
   all.sort((a,b)=>score(a)-score(b));
   const cur={list:all.slice(0,5).map(q=>q.id), cur:0, done:false};
-  state.qaDaily[ds]=cur; save();
+  state.qaWeekly[wk]=cur; save();
   return cur;
 }
 function notesAdd(){
@@ -2979,7 +3067,7 @@ function qaBulk(nid){
 function qaDel(id){ state.qa=(state.qa||[]).filter(x=>x.id!==id); delete (state.qaProg||{})[id]; save(); renderNotes(); toast('已删除问答'); }
 function qaReveal(){ const b=document.getElementById('qaAnsBox'); if(b) b.style.display='block'; }
 function qaAnswer(ok){
-  const entry=qaDayList();
+  const entry=qaWeekList();
   const id=entry.list[entry.cur]; if(!id) return;
   state.qaProg=state.qaProg||{};
   const p=state.qaProg[id]=state.qaProg[id]||{n:0,ok:0,miss:0,last:''};
@@ -2987,7 +3075,7 @@ function qaAnswer(ok){
   entry.cur++;
   if(entry.cur>=entry.list.length) entry.done=true;
   save(); renderNotes();
-  toast(ok?'记得 👍':'不记得也没关系，明天还会再见 👀');
+  toast(ok?'记得 👍':'不记得也没关系，下周还会再见 👀');
 }
 // 轻量 Markdown 渲染（v50 笔记阅读）：支持标题/列表/表格/代码块/引用/分割线/加粗/斜体/行内代码/链接。先转义再渲染，安全
 function mdInline(s){
@@ -3065,22 +3153,22 @@ function mdRender(md){
 }
 function renderNotes(){
   const notes=state.notes||[], allQa=state.qa||[];
-  const entry=allQa.length? qaDayList() : {list:[],cur:0,done:false};
-  // v54 顶部学习统计（激励打卡，样式同各模块 stats 卡）
+  const entry=allQa.length? qaWeekList() : {list:[],cur:0,done:false};
+  // v54 顶部学习统计（激励打卡，样式同各模块 stats 卡）· v2026-10-13 改为周维度
   const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
-  const dailies=state.qaDaily||{};
-  let streak=0; { const d=new Date(); if(!(dailies[fmt(d)]&&dailies[fmt(d)].done)) d.setDate(d.getDate()-1); while(dailies[fmt(d)]&&dailies[fmt(d)].done){ streak++; d.setDate(d.getDate()-1); } }
-  const totalDays=Object.keys(dailies).filter(k=>dailies[k]&&dailies[k].done).length;
+  const weeklies=state.qaWeekly||{};
+  let streak=0; { const d=new Date(); if(!(weeklies[weekKeyOf(fmt(d))]&&weeklies[weekKeyOf(fmt(d))].done)) d.setDate(d.getDate()-7); while(weeklies[weekKeyOf(fmt(d))]&&weeklies[weekKeyOf(fmt(d))].done){ streak++; d.setDate(d.getDate()-7); } }
+  const totalWeeks=Object.keys(weeklies).filter(k=>weeklies[k]&&weeklies[k].done).length;
   const om=allQa.reduce((s,q)=>{ const p=qaProgOf(q.id); s[0]+=(p.ok||0); s[1]+=(p.miss||0); return s; },[0,0]);
   const qaStatsHtml=`<div class="dcard">
     <div class="ltitle">📊 学习统计</div>
     <div class="stats stats2">
-      ${stat(streak+' 天','🔥 连续自测')}
-      ${stat(entry.done?'✅ 已完成':'第 '+(entry.cur+1)+'/'+(entry.list.length||5)+' 题','📝 今日进度')}
-      ${stat(totalDays+' 天','📅 累计打卡')}
+      ${stat(streak+' 周','🔥 连续自测')}
+      ${stat(entry.done?'✅ 已完成':'第 '+(entry.cur+1)+'/'+(entry.list.length||5)+' 题','📝 本周进度')}
+      ${stat(totalWeeks+' 周','📅 累计自测')}
       ${stat(om[0]+' / '+om[1],'🧠 记住 / 生疏')}
     </div>
-    <p class="hint">${streak>=3?`已连续 ${streak} 天，别断！`:allQa.length?'从今天开始，坚持主动回忆 💪':'先添加问答，开始第一次自测吧'}（测完即算打卡）</p>
+    <p class="hint">${streak>=3?`已连续 ${streak} 周，别断！`:allQa.length?(entry.done?'本周已完成，下周一自动换一批 💪':'每周 5 条，做完一次就算这周完成'):'先添加问答，开始第一次自测吧'}（测完即算本周完成）</p>
   </div>`;
   let quizHtml;
   if(!allQa.length){
@@ -3089,9 +3177,9 @@ function renderNotes(){
   } else if(entry.done){
     const miss=entry.list.filter(id=>qaProgOf(id).miss>0).length;
     quizHtml=`<div class="stats stats2">
-      <div class="stat"><b>${entry.list.length}</b><span>今日已测</span></div>
+      <div class="stat"><b>${entry.list.length}</b><span>本周已测</span></div>
       <div class="stat"><b>${miss}</b><span>仍有生疏</span></div></div>
-      <p class="hint">明天 0 点自动换一批：优先没测过的，生疏的会更常出现。坚持主动回忆，记得更牢 💪</p>`;
+      <p class="hint">下周一自动换一批：优先没测过的，生疏的会更常出现。坚持主动回忆，记得更牢 💪</p>`;
   } else {
     const id=entry.list[entry.cur];
     const q=allQa.find(x=>x.id===id);
@@ -3131,7 +3219,7 @@ function renderNotes(){
     </div>
     ${qaStatsHtml}
     <div class="dcard">
-      <div class="ltitle">🎯 今日问答自测（每日 5 条）</div>
+      <div class="ltitle">🎯 本周问答自测（每周 5 条）</div>
       ${quizHtml}
     </div>
     <div class="dcard">
@@ -3142,9 +3230,9 @@ function renderNotes(){
       <div style="margin-top:10px">${notesHtml}</div>
     </div>
     <div class="dcard">
-      <div class="ltitle">📅 自测打卡周视图（近 4 周）</div>
-      ${weekGridHtml(ds=>{ const d=state.qaDaily[ds]; return !!(d&&d.done); }, 4)}
-      <p class="hint">绿=当天完成了 5 条自测；「记得/不记得」不影响打卡，测完即算。</p>
+      <div class="ltitle">📅 自测周视图（近 4 周 · 每格 = 一周）</div>
+      <div class="ichips">${[3,2,1,0].map(i=>{ const d=new Date(); d.setDate(d.getDate()-i*7); const k=weekKeyOf(fmt(d)); const w=state.qaWeekly[k]; return `<span class="ichip ${(w&&w.done)?'on':''}">${k.slice(5)} 周${(w&&w.done)?' ✅':''}</span>`; }).join('')}</div>
+      <p class="hint">每周做一次 5 条自测即可；「记得/不记得」不影响完成，测完即算。旧版的每日打卡记录已保留在本地，不再参与统计。</p>
     </div>`;
 }
 
@@ -4468,6 +4556,7 @@ function openSettings(){
   document.getElementById('setBmrFormula').value=state.settings.bmrFormula||'mifflin';
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
+  document.getElementById('setIeltsExamDate').value=state.settings.ieltsExamDate||'';
   document.getElementById('setReadGoal').value=(state.settings.readGoal!=null)?state.settings.readGoal:5;
   document.getElementById('setRemind').value=state.settings.reminderEnabled?'on':'off';
   document.getElementById('setRemindHour').value=(state.settings.reminderHour!=null)?state.settings.reminderHour:21;
@@ -4519,6 +4608,7 @@ function closeSettings(){
   s.encPass=document.getElementById('setEncPass').value;
   if(s.autoEncrypt && !s.encPass){ toast('⚠️ 加密已开启但未设口令，云端仍是明文，请填口令后重存'); }
   s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
+  s.ieltsExamDate=(document.getElementById('setIeltsExamDate').value||'').trim();
   s.reminderEnabled = document.getElementById('setRemind').value==='on';
   s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
   s.readGoal = document.getElementById('setReadGoal').value.trim()?Math.max(1,Number(document.getElementById('setReadGoal').value.trim())||5):5;
