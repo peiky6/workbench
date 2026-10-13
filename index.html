@@ -929,7 +929,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-13a';
+const APP_VERSION = '2026-10-13b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2048,6 +2048,7 @@ function renderHome(){
     ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
     ${weeklyTasksHtml()}
+    ${takeawayBlankAlertHtml()}
     ${weeklyReviewHtml()}
     ${monthReminderBanner()}
     <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
@@ -2172,6 +2173,62 @@ function todayChecklistHtml(){
     ${rows}
     <p class="hint">点击任意一项直接进入对应板块完成 ✨</p>
   </div>`;
+}
+/* ---- 一句话产出（v2026-10-13b）：新闻 / 阅读读完写一句「对我做 PM 有什么用」 ----
+   刻意不强制：写不出可以点「没想法」，空白照样被记录。
+   理由：连续留白不是罪，是信号——它在告诉你这个输入源没给到东西，而不是你不够努力。 */
+const TAKEAWAY_ANGLES=[
+  {k:'节奏', t:'影响交付节奏：'},
+  {k:'选型', t:'影响选型 / 成本：'},
+  {k:'风险', t:'合规或风险：'},
+  {k:'团队', t:'团队能力 / 协作：'}
+];
+const TAKEAWAY_KINDS={
+  news:   {emoji:'📰', label:'新闻', ph:'这条对我做 PM 有什么用？（写不出就点下面的「没想法」）'},
+  reading:{emoji:'📖', label:'阅读', ph:'这段对我做 PM 有什么用？（写不出就点下面的「没想法」）'}
+};
+function takeawayMut(kind){ const m=rec(kind); const d=today(); if(!m[d]) m[d]={done:false}; return m[d]; }
+function setTakeaway(kind,val){ const r=takeawayMut(kind); const v=String(val||'').trim(); r.take=v; if(v) r.takeBlank=false; r.takeTs=Date.now(); save(); render(); }
+function takeawayFill(kind,prefix){ const r=takeawayMut(kind); r.take=prefix; r.takeBlank=false; save(); render(); const el=document.getElementById('take_'+kind); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length,el.value.length); }catch(_){} } }
+function takeawayBlank(kind){ const r=takeawayMut(kind); r.takeBlank=true; r.take=''; r.takeTs=Date.now(); save(); render(); toast('记下了：今天没想法 🤷 连续留白本身也是信号'); }
+function takeawayClear(kind){ const r=takeawayMut(kind); r.takeBlank=false; r.take=''; save(); render(); }
+function takeawayWeekStats(){
+  const now=new Date(); let got=0, blank=0;
+  for(let i=0;i<7;i++){ const d=new Date(now); d.setDate(now.getDate()-i); const ds=fmt(d);
+    ['news','reading'].forEach(k=>{ const r=rec(k)[ds]; if(!r) return; if((r.take||'').trim()) got++; else if(r.takeBlank) blank++; });
+  }
+  return {got, blank};
+}
+// 连续留白天数：只数「明确点了没想法」的天（今天往前，最多回溯 30 天）
+function takeawayBlankStreak(){
+  let n=0; const d=new Date();
+  for(let i=0;i<30;i++){
+    const ds=fmt(d);
+    if([rec('news')[ds],rec('reading')[ds]].some(r=>r&&r.takeBlank)) n++;
+    else break;
+    d.setDate(d.getDate()-1);
+  }
+  return n;
+}
+function takeawayHtml(kind){
+  const cfg=TAKEAWAY_KINDS[kind]; const r=rec(kind)[today()]||{};
+  const val=(r.take||'').trim();
+  const chips=TAKEAWAY_ANGLES.map(a=>`<button class="mini line" style="flex:none" onclick="takeawayFill('${kind}','${a.t}')">${a.k}</button>`).join('');
+  const tip = r.takeBlank
+    ? '<p class="hint">🤷 今天记为「没想法」。留白同样被统计——它是在替你判断这个输入源值不值得每天看。</p>'
+    : (val?'<p class="hint">✅ 已留下这一句。不用管文采，自己看得懂就行。</p>':'<p class="hint">写不出就点「没想法」，别硬凑。诚实留白比一句敷衍的话有用。</p>');
+  const tw=takeawayWeekStats();
+  return `<div class="dcard">
+    <div class="ltitle">💡 一句话产出 · ${cfg.emoji}${cfg.label} <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 天 ${tw.got} 句${tw.blank?(' · '+tw.blank+' 次留白'):''}</span></div>
+    <input id="take_${kind}" class="full" placeholder="${cfg.ph}" value="${val?escapeAttr(val):''}" onchange="setTakeaway('${kind}',this.value)"/>
+    <div class="inline" style="margin-top:6px">${chips}<button class="mini" style="flex:none" onclick="takeawayBlank('${kind}')">🤷 没想法</button>${(val||r.takeBlank)?`<button class="mini line" style="flex:none" onclick="takeawayClear('${kind}')">✕ 清除</button>`:''}</div>
+    ${tip}
+  </div>`;
+}
+function takeawayBlankAlertHtml(){
+  const n=takeawayBlankStreak();
+  if(n<3) return '';
+  return `<div class="reminder warn" style="cursor:default"><span class="ri">🫙</span><div class="rm"><div class="rt">连续 ${n} 天读完还是空的</div><div class="rs">这不是你不够努力，多半是这个信息源本身没给到东西。考虑换个源，或者干脆降低频率。</div></div></div>`;
 }
 function weeklyReviewHtml(){
   const td=today();
@@ -2725,6 +2782,7 @@ function newsLearn(){
     <div id="huxiuResult"></div>
     <div class="ltitle">🔗 我的其他新闻源</div>
     ${links || '<p class="hint">还没添加，去 ⚙️ 设置里加几个吧</p>'}
+    ${takeawayHtml('news')}
     <button class="btn ${isDone('news',today())?'ghost':'primary'} w100" onclick="toggleDone('news')">${isDone('news',today())?'✏️ 取消今日完成':'✅ 标记今日已读虎嗅'}</button>
   </div>`;
 }
@@ -3295,6 +3353,7 @@ function renderReading(){
       <button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('reading')" style="margin-top:10px">${done?'✏️ 取消今日完成':'✅ 标记今日完成'}</button>
       <p class="hint">${done?'📖 已打卡！记得去微信读书领今日书币':'读完填写时长并打卡，连续天数会自动累计 💪'}</p>
     </div>
+    ${takeawayHtml('reading')}
     ${hist}`;
 }
 function readingHistoryHtml(){

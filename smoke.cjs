@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-13a') ok('APP_VERSION = 2026-10-13a');
-  else bad('APP_VERSION 未更新为 2026-10-13a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-13b') ok('APP_VERSION = 2026-10-13b');
+  else bad('APP_VERSION 未更新为 2026-10-13b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v87') ok('SW 缓存名 = qi-workbench-v87');
-  else bad('SW 缓存名未递增为 v87');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v88') ok('SW 缓存名 = qi-workbench-v88');
+  else bad('SW 缓存名未递增为 v88');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -317,6 +317,35 @@ if(htmlJs){
   const htmlRaw2 = fs.readFileSync(htmlPath, 'utf8');
   if(htmlRaw2.includes('id="setIeltsExamDate"')) ok('存在：设置页考试日期 input');
   else bad('缺失：设置页考试日期 input');
+  // v2026-10-13b：新闻 / 阅读「一句话产出」（不强制，留白也记录；连续留白 ≥3 天首页提醒）
+  const takeTokens = [
+    ['const TAKEAWAY_ANGLES', 'PM 视角起手式常量'],
+    ['const TAKEAWAY_KINDS', '新闻/阅读产出配置'],
+    ['function takeawayHtml', '一句话产出输入卡'],
+    ['function takeawayBlank', '「没想法」留白按钮'],
+    ['function takeawayFill', '角度 chip 一键填入'],
+    ['function takeawayClear', '清除已填产出'],
+    ['function takeawayWeekStats', '近 7 天产出 / 留白统计'],
+    ['function takeawayBlankStreak', '连续留白天数'],
+    ['function takeawayBlankAlertHtml', '连续留白首页提醒'],
+    ['💡 一句话产出', '产出卡标题'],
+    ['takeawayHtml(\'news\')', '新闻页挂产出卡'],
+    ['takeawayHtml(\'reading\')', '阅读页挂产出卡'],
+    ['takeTs', '产出写入时间戳'],
+  ];
+  for(const [token, desc] of takeTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // 连续留白提醒必须挂在首页，且阈值 3 天
+  const tbaBody = htmlJs.match(/function takeawayBlankAlertHtml\(\)\{[\s\S]*?\n\}/);
+  if(tbaBody && /n<3/.test(tbaBody[0])) ok('连续留白提醒阈值为 3 天');
+  else bad('连续留白提醒阈值不是 3 天');
+  const homeBody2 = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
+  if(homeBody2 && /takeawayBlankAlertHtml\(\)/.test(homeBody2[0])) ok('首页已挂连续留白提醒');
+  else bad('首页未挂连续留白提醒');
+  if(!/takeawayHtml\('notes'\)/.test(htmlJs)) ok('产出卡只挂新闻/阅读两个输入源');
+  else bad('产出卡挂到了非输入源');
   const examRead = htmlJs.match(/s\.ieltsExamDate=\(document\.getElementById\('setIeltsExamDate'\)\.value\|\|''\)\.trim\(\);/);
   if(examRead) ok('设置保存时读取考试日期'); else bad('设置保存未读取考试日期');
 }
