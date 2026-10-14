@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-14b') ok('APP_VERSION = 2026-10-14b');
-  else bad('APP_VERSION 未更新为 2026-10-14b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-14c') ok('APP_VERSION = 2026-10-14c');
+  else bad('APP_VERSION 未更新为 2026-10-14c（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v90') ok('SW 缓存名 = qi-workbench-v90');
-  else bad('SW 缓存名未递增为 v90');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v91') ok('SW 缓存名 = qi-workbench-v91');
+  else bad('SW 缓存名未递增为 v91');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -392,6 +392,25 @@ if(htmlJs){
   else bad('缺失：设置页活动系数下拉 id="setActFactor"');
   if(/value="1\.40">1\.40 中低/.test(htmlRaw3)) ok('活动系数下拉含 1.40 推荐档');
   else bad('活动系数下拉缺少 1.40 推荐档');
+  // v2026-10-14c：运动消耗可导出（原「训练打卡」表只有布尔值 + 过滤条件会丢掉未打卡但有运动的天）
+  const exportTokens = [
+    ["rows.push(['日期', '训练完成', '标记不训练', '运动明细', '运动消耗(kcal)'])", '训练打卡表补上运动明细与消耗'],
+    ['if(!r.trainDone && !r.trainSkip && !exs.length) return;', '过滤条件放宽：有运动明细也算有效行'],
+    ["} else if(mod === 'mana-exercise'){", '新增运动消耗明细导出分支'],
+    ["rows.push(['日期', '运动项目', '时长(分钟)', 'MET', '消耗(kcal)', '当日合计(kcal)', '训练完成', '标记不训练'])", '明细表表头'],
+    ["showCSVModal('exercise-' + td + '.csv'", '明细表文件名 exercise-*.csv'],
+  ];
+  for(const [token, desc] of exportTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // 回归锁：旧的三列表头 + 会把未打卡日整行丢弃的过滤条件，都不许回来
+  if(!/rows\.push\(\['日期', '训练完成', '标记不训练'\]\);/.test(htmlJs)) ok('旧的三列训练表头已移除');
+  else bad('旧的三列训练表头仍存在');
+  if(!/if\(!r\.trainDone && !r\.trainSkip\) return;/.test(htmlJs)) ok('会丢弃未打卡日的旧过滤条件已移除');
+  else bad('会丢弃未打卡日的旧过滤条件仍存在');
+  if(htmlRaw3.includes('<option value="mana-exercise">')) ok('设置页含运动消耗明细导出选项（HTML 属性）');
+  else bad('设置页缺少 mana-exercise 导出选项');
   // tdeeOf 必须读可配置系数，不能再乘硬编码 ACT_FACTOR
   const tdeeBody = htmlJs.match(/function tdeeOf\(d\)\{[\s\S]*?\n\}/);
   if(tdeeBody && /\* actFactor\(\)/.test(tdeeBody[0])) ok('tdeeOf 使用可配置活动系数');

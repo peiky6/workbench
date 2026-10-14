@@ -585,7 +585,8 @@
         <select id="exportModule">
           <option value="mana-weight">体重管理 · 体重/体脂/BMI/BMR</option>
           <option value="mana-diet">体重管理 · 三餐卡路里</option>
-          <option value="mana-train">体重管理 · 训练打卡</option>
+          <option value="mana-train">体重管理 · 训练打卡（含运动明细）</option>
+          <option value="mana-exercise">体重管理 · 运动消耗明细（一行一条）</option>
           <option value="ielts">雅思英语 · 每日打卡</option>
           <option value="ai">AI 知识 · 术语掌握</option>
           <option value="reading">每日阅读 · 书籍进度</option>
@@ -937,7 +938,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-14b';
+const APP_VERSION = '2026-10-14c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -5357,14 +5358,38 @@ function exportModuleCSV(mod){
     });
     showCSVModal('diet-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'mana-train'){
-    rows.push(['日期', '训练完成', '标记不训练']);
+    rows.push(['日期', '训练完成', '标记不训练', '运动明细', '运动消耗(kcal)']);
     const records = rec('mana');
     Object.keys(records).sort().forEach(d=>{
       const r = records[d];
-      if(!r.trainDone && !r.trainSkip) return;
-      rows.push([d, r.trainDone?'是':'否', r.trainSkip?'是':'否']);
+      const exs = r.exercises || [];
+      const exKcal = exs.reduce((s,e)=>s+(Number(e.kcal)||0),0);
+      /* 关键修复：原过滤条件只认 trainDone/trainSkip，导致「记了运动但没点训练完成」的日子
+         整行被丢弃，用户记录的消耗 kcal 永远导不出来。现在有运动明细也算有效行。 */
+      if(!r.trainDone && !r.trainSkip && !exs.length) return;
+      const detail = exs.map(e=>{
+        const nm = e.n || '';
+        const min = Number(e.min)||0;
+        return min>0 ? (nm+' '+min+'分钟') : nm;
+      }).filter(Boolean).join('；');
+      rows.push([d, r.trainDone?'是':'否', r.trainSkip?'是':'否', detail, exKcal||'']);
     });
     showCSVModal('training-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
+  } else if(mod === 'mana-exercise'){
+    // 运动消耗明细：一行一条运动记录（结构化，可直接进 Excel/Python 做分析）
+    rows.push(['日期', '运动项目', '时长(分钟)', 'MET', '消耗(kcal)', '当日合计(kcal)', '训练完成', '标记不训练']);
+    const records = rec('mana');
+    Object.keys(records).sort().forEach(d=>{
+      const r = records[d];
+      const exs = r.exercises || [];
+      if(!exs.length) return;
+      const sum = exs.reduce((s,e)=>s+(Number(e.kcal)||0),0);
+      exs.forEach(e=>{
+        rows.push([d, e.n||'', (Number(e.min)||0)||'', (e.met!=null?e.met:''), (Number(e.kcal)||0)||'', sum,
+          r.trainDone?'是':'否', r.trainSkip?'是':'否']);
+      });
+    });
+    showCSVModal('exercise-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'ielts'){
     rows.push(['日期', '听', '说', '读', '写', '菜单完成项']);
     const records = rec('ielts');
