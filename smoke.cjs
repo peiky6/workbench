@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-14a') ok('APP_VERSION = 2026-10-14a');
-  else bad('APP_VERSION 未更新为 2026-10-14a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-14b') ok('APP_VERSION = 2026-10-14b');
+  else bad('APP_VERSION 未更新为 2026-10-14b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v89') ok('SW 缓存名 = qi-workbench-v89');
-  else bad('SW 缓存名未递增为 v89');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v90') ok('SW 缓存名 = qi-workbench-v90');
+  else bad('SW 缓存名未递增为 v90');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -348,7 +348,6 @@ if(htmlJs){
   else bad('产出卡挂到了非输入源');
   // v2026-10-14a：体重/能量「让漂移可见」（7日均体重 · 热量漂移预警 · 盈余直给 · 停滞先查摄入）
   const energyTokens = [
-    ['const ACT_FACTOR', '日常活动系数常量'],
     ['const KCAL_PER_KG = 7700', '脂肪热量换算常量'],
     ['function kcalIntakeOf', '某日摄入热量'],
     ['function kcalExOf', '某日运动消耗'],
@@ -368,6 +367,40 @@ if(htmlJs){
     if(htmlJs.includes(token)) ok('存在：' + desc);
     else bad('缺失：' + desc + '（token: ' + token + '）');
   }
+  // v2026-10-14b：活动系数可校准（默认 1.40）+ 近 8 周摄入折线
+  const actTokens = [
+    ['const ACT_FACTOR_DEFAULT = 1.40', '活动系数默认值 1.40（骑车通勤+6000步）'],
+    ['function actFactor(', '活动系数读取（设置优先，越界回落默认）'],
+    ['function actFactorLabel(', '活动系数档位文案'],
+    ['function kcalExAvg(', '近 N 日日均已记录运动消耗'],
+    ['function maintenanceKcal(', '维持体重所需日均摄入'],
+    ['function kcalWeeks(', '近 N 周周均摄入'],
+    ['function kcalWeeksChart(', '8 周摄入折线图'],
+    ['function kcalWeeksHtml(', '8 周摄入卡'],
+    ['📈 近 8 周摄入', '8 周卡标题'],
+    ['维持线 ${maint}', '维持线参考标注'],
+    ['s.actFactor=(af>=1.1&&af<=2.0)? af : 1.40;', '设置保存写入活动系数'],
+    ['actFactor:1.40', '默认设置含 actFactor'],
+  ];
+  for(const [token, desc] of actTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // HTML 属性（id="xxx"）不在 <script> 抽取内容里，必须查整份 HTML
+  const htmlRaw3 = fs.readFileSync(htmlPath, 'utf8');
+  if(htmlRaw3.includes('id="setActFactor"')) ok('存在：设置页活动系数下拉（HTML 属性）');
+  else bad('缺失：设置页活动系数下拉 id="setActFactor"');
+  if(/value="1\.40">1\.40 中低/.test(htmlRaw3)) ok('活动系数下拉含 1.40 推荐档');
+  else bad('活动系数下拉缺少 1.40 推荐档');
+  // tdeeOf 必须读可配置系数，不能再乘硬编码 ACT_FACTOR
+  const tdeeBody = htmlJs.match(/function tdeeOf\(d\)\{[\s\S]*?\n\}/);
+  if(tdeeBody && /\* actFactor\(\)/.test(tdeeBody[0])) ok('tdeeOf 使用可配置活动系数');
+  else bad('tdeeOf 未使用可配置活动系数');
+  if(!/\* ACT_FACTOR\)/.test(htmlJs)) ok('硬编码 ACT_FACTOR 乘法已移除');
+  else bad('仍存在硬编码 ACT_FACTOR 乘法');
+  const manaBody2 = htmlJs.match(/function renderMana\(\)\{[\s\S]*?\n\}/);
+  if(manaBody2 && /kcalWeeksHtml\(\)/.test(manaBody2[0])) ok('体重页已挂 8 周摄入折线');
+  else bad('体重页未挂 8 周摄入折线');
   // TDEE 口径必须改：旧代码 out = BMR + 运动（低估约 25%）
   if(/const out=tdeeOf\(today\(\)\)/.test(htmlJs)) ok('饮食区热量支出已改用 TDEE 口径');
   else bad('饮食区热量支出仍是旧的 BMR+运动 口径');

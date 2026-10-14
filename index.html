@@ -503,7 +503,15 @@
           <option value="mifflin">Mifflin–St Jeor（身高/年龄估算）</option>
           <option value="katch">Katch–McArdle（需体脂率，更准）</option>
         </select></div>
-      <p class="hint">Katch–McArdle 基于去脂体重（LBM），比 Mifflin 更贴合健身人群；选它后请尽量每天填体脂率，没填时会自动退回 Mifflin 估算。</p>
+      <div class="field"><label>日常活动系数（非训练）</label>
+        <select id="setActFactor">
+          <option value="1.20">1.20 久坐 · 开车/打车通勤，几乎不走动</option>
+          <option value="1.30">1.30 轻度 · 办公室为主，约 4000 步，通勤不骑车</option>
+          <option value="1.40">1.40 中低 · 骑车/步行通勤 + 日均约 6000 步（推荐）</option>
+          <option value="1.50">1.50 中高 · 骑车通勤 + 日均 1 万步以上</option>
+          <option value="1.60">1.60 高 · 工作需要长时间走动/站立</option>
+        </select></div>
+      <p class="hint">Katch–McArdle 基于去脂体重（LBM），比 Mifflin 更贴合健身人群；选它后请尽量每天填体脂率，没填时会自动退回 Mifflin 估算。<br>活动系数只算<b>非训练</b>活动（通勤骑车/走路、办公室走动、食物热效应），训练消耗另按你记录的运动叠加。<b>如果你已把通勤骑车记进运动记录，请下调一档</b>（1.40 → 1.30），否则同一笔消耗会算两遍。系数每 ±0.05 ≈ 日均支出 ±64 kcal。</p>
     </div>
     <div class="sect">
       <h3>🎯 目标设定</h3>
@@ -678,7 +686,7 @@ function defaultState(){
     customExercises:[],
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
-    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin' }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
   };
 }
 let state = load();
@@ -929,7 +937,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-14a';
+const APP_VERSION = '2026-10-14b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -3788,9 +3796,19 @@ function mealKcal(arr){ return arr.reduce((s,f)=>s+f.k,0); }
    来由：78 天真实数据复盘显示——摄入从 1694 涨到 2243 kcal（+32%）全程无感知，
    而体重已掉头向上；且 r(热量,Δ体重)=+0.272 远强于 r(训练,Δ体重)=-0.086，
    饮食杠杆约为训练的 3 倍。所以这一组函数的目的不是「预测」，是「把漂移摆到眼前」。 */
-const ACT_FACTOR = 1.35;   // 非运动性日常活动系数（久坐偏轻）；运动消耗另行叠加
+const ACT_FACTOR_DEFAULT = 1.40; // 非训练性活动系数默认值（骑车通勤 + 日均 6000 步 + 办公室久坐）
 const KCAL_PER_KG = 7700;  // 1 kg 脂肪 ≈ 7700 kcal
 const WEIGHT_NOISE = 0.45; // 实测单日体重波动 σ（晨起空腹亦然），约等于日均真实信号的 26 倍
+/* 活动系数只覆盖「非训练」活动：通勤骑车/走路、办公室走动、食物热效应。
+   训练消耗由 kcalExOf 另行叠加，所以——
+   · 通勤没记进运动记录 → 认 1.40（默认）；
+   · 通勤已记进运动记录 → 下调一档到 1.30，否则同一笔消耗算两遍。
+   换算：系数每 ±0.05，日均支出约 ±64 kcal（按 BMR 1275 计）。 */
+function actFactor(){ const v=Number(state.settings.actFactor); return (v>=1.1&&v<=2.0)? v : ACT_FACTOR_DEFAULT; }
+function actFactorLabel(){
+  const v=actFactor();
+  return v<=1.22?'久坐':(v<=1.32?'轻度':(v<=1.42?'中低':(v<=1.52?'中高':'高')));
+}
 function kcalIntakeOf(d){
   const t=rec('mana')[d]; if(!t||!t.meals) return null;
   let s=0, any=false;
@@ -3798,12 +3816,21 @@ function kcalIntakeOf(d){
   return any? s : null;
 }
 function kcalExOf(d){ const t=rec('mana')[d]; return (t&&t.exercises)? t.exercises.reduce((s,e)=>s+(e.kcal||0),0) : 0; }
+// 近 days 天日均「已记录」的运动消耗（没记录的天按 0 计）
+function kcalExAvg(days){
+  let s=0; for(let i=0;i<days;i++) s+=kcalExOf(addDays(today(), -i));
+  return Math.round(s/days);
+}
+// 维持体重所需的日均摄入参考 = BMR × 活动系数 + 日均已记录运动消耗
+function maintenanceKcal(){
+  return Math.round(bmrCalc(effectiveWeight(), latestBodyFat()) * actFactor()) + kcalExAvg(30);
+}
 // TDEE = BMR × 活动系数 + 当日运动消耗（旧口径只算 BMR+运动，系统性低估消耗约 25%）
 function tdeeOf(d){
   const t=rec('mana')[d]||{};
   const w=(t.weight!=null? Number(t.weight):null) || effectiveWeight();
   const bf=(t.bodyFat!=null? Number(t.bodyFat):null);
-  return Math.round(bmrCalc(w, bf==null? latestBodyFat() : bf) * ACT_FACTOR) + kcalExOf(d);
+  return Math.round(bmrCalc(w, bf==null? latestBodyFat() : bf) * actFactor()) + kcalExOf(d);
 }
 // 当日能量收支：gap > 0 = 盈余
 function dayEnergy(d){
@@ -3880,8 +3907,58 @@ function weightEnergyCardHtml(){  // 需求②③：7 日均值 + 盈余直给 +
   return `<div class="dcard">
     <div class="ltitle">⚖️ 体重趋势与能量收支 <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 日</span></div>
     ${statsHtml}
-    ${en.gap!=null?`<p class="hint">日均${en.gap>0?'盈余':'缺口'} ${Math.abs(en.gap)} kcal ${monTxt} · TDEE 按 BMR×${ACT_FACTOR}+运动消耗估算</p>`:''}
+    ${en.gap!=null?`<p class="hint">日均${en.gap>0?'盈余':'缺口'} ${Math.abs(en.gap)} kcal ${monTxt} · TDEE 按 BMR×${actFactor()}（${actFactorLabel()}）+ 已记录运动估算</p>`:''}
     ${lastW!=null?`<p class="hint">最新单日 ${lastW} kg（仅供记录，不作趋势依据）</p>`:''}
+    ${tip}
+  </div>`;
+}
+
+/* 需求：把「慢慢爬上去」摆到眼前。7 日对比只能看到台阶，8 周折线才能看到斜坡——
+   78 天实测里摄入从 1694 涨到 2243 kcal（+32%）全程无感知，就是因为没有任何一屏把它拉长看。 */
+function kcalWeeks(n){
+  const out=[];
+  for(let k=(n||8)-1; k>=0; k--){
+    const e=energyAvg(7, k*7);
+    out.push({ lo:addDays(today(), -(k*7+6)), hi:addDays(today(), -(k*7)), intake:e.intake, gap:e.gap, n:e.n });
+  }
+  return out;   // 旧 → 新
+}
+function kcalWeeksChart(ws){
+  const W=320,H=180,pad=28;
+  const vals=ws.map(x=>x.intake), maint=maintenanceKcal();
+  let lo=Math.min(...vals, maint), hi=Math.max(...vals, maint);
+  const gap=Math.max((hi-lo)*0.18, 80); lo-=gap; hi+=gap;
+  const X=i=> pad + i*((W-2*pad)/Math.max(ws.length-1,1));
+  const Y=v=> H-pad - (v-lo)/(hi-lo)*(H-2*pad);
+  const pts=ws.map((x,i)=>X(i).toFixed(1)+','+Y(x.intake).toFixed(1)).join(' ');
+  const area=`<polygon points="${pts} ${X(ws.length-1).toFixed(1)},${H-pad} ${X(0).toFixed(1)},${H-pad}" fill="#5cb3e6" opacity="0.10"/>`;
+  const mLine=`<line x1="${pad}" y1="${Y(maint).toFixed(1)}" x2="${W-pad}" y2="${Y(maint).toFixed(1)}" stroke="#2f9e44" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.9"/>`+
+    `<text x="${W-pad}" y="${(Y(maint)-4).toFixed(1)}" font-size="9" fill="#2f9e44" text-anchor="end">维持线 ${maint}</text>`;
+  const line=`<polyline points="${pts}" fill="none" stroke="#5cb3e6" stroke-width="2" stroke-linejoin="round"/>`;
+  const dots=ws.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.intake).toFixed(1)}" r="3.4" fill="${x.intake>maint?'#e8590c':'#5cb3e6'}" cursor="pointer" onclick="showBarTip(event,'${x.lo.slice(5)}~${x.hi.slice(5)}','${x.intake} kcal/日 · ${x.n} 天有记录')"/>`).join('');
+  const labs=ws.map((x,i)=>(i%Math.ceil(ws.length/6)===0||i===ws.length-1)?`<text x="${X(i).toFixed(1)}" y="${H-8}" font-size="9" fill="#7d93a6" text-anchor="middle">${x.hi.slice(5)}</text>`:'').join('');
+  const vl=`<text x="4" y="${Y(hi).toFixed(1)}" font-size="9" fill="#7d93a6">${Math.round(hi)}</text><text x="4" y="${Y(lo).toFixed(1)}" font-size="9" fill="#7d93a6">${Math.round(lo)}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${vl}${area}${mLine}${line}${dots}${labs}</svg>`;
+}
+function kcalWeeksHtml(){
+  const ws=kcalWeeks(8).filter(x=>x.intake!=null);
+  if(ws.length<2) return '';
+  const first=ws[0].intake, last=ws[ws.length-1].intake, diff=last-first;
+  const maint=maintenanceKcal();
+  const dTxt=(diff>0?'+':'−')+Math.abs(diff);
+  const dCol=diff>150?'var(--warn)':(diff<-150?'var(--good)':'var(--sub)');
+  let tip;
+  if(diff>=150){
+    tip=`<p class="hint" style="color:var(--warn)">⚠️ 8 周里日均摄入爬升 ${diff} kcal。这种变化是「每周多一点点」，任何一天都看不出来，只有拉长到 8 周才现形——按 7700 kcal ≈ 1 kg 折算，光这一项每月就多约 ${(diff*30/KCAL_PER_KG).toFixed(1)} kg 的增重压力。</p>`;
+  } else if(diff<=-150){
+    tip=`<p class="hint" style="color:var(--good)">✅ 8 周里日均摄入下降 ${Math.abs(diff)} kcal，方向对。继续盯这条线，别盯单日数字。</p>`;
+  } else {
+    tip=`<p class="hint">摄入整体平稳。绿虚线 = 维持体重所需（BMR × ${actFactor()} + 日均已记录运动 ${kcalExAvg(30)} kcal）；橙点 = 那一周平均吃超了维持线。</p>`;
+  }
+  return `<div class="dcard">
+    <div class="ltitle">📈 近 8 周摄入 <span style="margin-left:auto;font-size:12px;color:var(--sub)">周均 kcal/日 · ${ws.length} 周有记录</span></div>
+    <div style="margin:8px 0 2px">${kcalWeeksChart(ws)}</div>
+    <p class="hint">8 周前 ${first} → 本周 ${last} kcal/日（<b style="color:${dCol}">${dTxt}</b>）· 维持线 ${maint} kcal/日</p>
     ${tip}
   </div>`;
 }
@@ -4229,6 +4306,7 @@ function renderMana(){
       <div class="motivate">💡 ${manaMotivation()}</div>
     </div>
     ${weightEnergyCardHtml()}
+    ${kcalWeeksHtml()}
     <div class="dcard">
       <div class="ltitle">⚖️ 记录今日身体指标</div>
       <div class="bgrid">
@@ -4718,6 +4796,7 @@ function openSettings(){
   document.getElementById('setHeight').value=p.height||'';
   document.getElementById('setWeight').value=p.weight||'';
   document.getElementById('setBmrFormula').value=state.settings.bmrFormula||'mifflin';
+  document.getElementById('setActFactor').value=String(actFactor());
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
   document.getElementById('setIeltsExamDate').value=state.settings.ieltsExamDate||'';
@@ -4766,6 +4845,8 @@ function closeSettings(){
   p.weight=document.getElementById('setWeight').value.trim();
   const s=state.settings;
   s.bmrFormula=document.getElementById('setBmrFormula').value==='katch'?'katch':'mifflin';
+  const af=Number(document.getElementById('setActFactor').value);
+  s.actFactor=(af>=1.1&&af<=2.0)? af : 1.40;
   s.gistToken=document.getElementById('setToken').value.trim();
   s.gistId=cleanGistId(document.getElementById('setGistId').value);
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
