@@ -938,7 +938,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-14c';
+const APP_VERSION = '2026-10-14d';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4797,7 +4797,12 @@ function openSettings(){
   document.getElementById('setHeight').value=p.height||'';
   document.getElementById('setWeight').value=p.weight||'';
   document.getElementById('setBmrFormula').value=state.settings.bmrFormula||'mifflin';
-  document.getElementById('setActFactor').value=String(actFactor());
+  /* ⚠️ 必须 toFixed(2)：option 的 value 是 "1.40" 这类两位小数字符串，
+     而 actFactor() 返回数字 1.4 → String(1.4) === "1.4" 匹配不上，
+     select 会被置成 selectedIndex=-1（空白），下次保存还会把设置冲回默认值。 */
+  const afSel=document.getElementById('setActFactor');
+  afSel.value=actFactor().toFixed(2);
+  if(afSel.selectedIndex<0) afSel.value='1.40';   // 兜底：绝不留下空白下拉
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
   document.getElementById('setIeltsExamDate').value=state.settings.ieltsExamDate||'';
@@ -4846,8 +4851,11 @@ function closeSettings(){
   p.weight=document.getElementById('setWeight').value.trim();
   const s=state.settings;
   s.bmrFormula=document.getElementById('setBmrFormula').value==='katch'?'katch':'mifflin';
-  const af=Number(document.getElementById('setActFactor').value);
-  s.actFactor=(af>=1.1&&af<=2.0)? af : 1.40;
+  /* 值异常时（下拉空白、被清空）保持原设置不动，不要静默重置为默认值——
+     否则用户改别的设置顺手一存，活动系数就被悄悄改回 1.40。 */
+  const afRaw=(document.getElementById('setActFactor').value||'').trim();
+  const af=Number(afRaw);
+  if(afRaw && af>=1.1 && af<=2.0) s.actFactor=af;
   s.gistToken=document.getElementById('setToken').value.trim();
   s.gistId=cleanGistId(document.getElementById('setGistId').value);
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;

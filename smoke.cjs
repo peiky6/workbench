@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-14c') ok('APP_VERSION = 2026-10-14c');
-  else bad('APP_VERSION 未更新为 2026-10-14c（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-14d') ok('APP_VERSION = 2026-10-14d');
+  else bad('APP_VERSION 未更新为 2026-10-14d（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v91') ok('SW 缓存名 = qi-workbench-v91');
-  else bad('SW 缓存名未递增为 v91');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v92') ok('SW 缓存名 = qi-workbench-v92');
+  else bad('SW 缓存名未递增为 v92');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -379,7 +379,9 @@ if(htmlJs){
     ['function kcalWeeksHtml(', '8 周摄入卡'],
     ['📈 近 8 周摄入', '8 周卡标题'],
     ['维持线 ${maint}', '维持线参考标注'],
-    ['s.actFactor=(af>=1.1&&af<=2.0)? af : 1.40;', '设置保存写入活动系数'],
+    ["afSel.value=actFactor().toFixed(2)", '打开设置回填活动系数（补两位小数）'],
+    ["if(afSel.selectedIndex<0) afSel.value='1.40'", '回填兜底：绝不留下空白下拉'],
+    ['if(afRaw && af>=1.1 && af<=2.0) s.actFactor=af;', '设置保存写入活动系数（异常值保持不动）'],
     ['actFactor:1.40', '默认设置含 actFactor'],
   ];
   for(const [token, desc] of actTokens){
@@ -411,6 +413,16 @@ if(htmlJs){
   else bad('会丢弃未打卡日的旧过滤条件仍存在');
   if(htmlRaw3.includes('<option value="mana-exercise">')) ok('设置页含运动消耗明细导出选项（HTML 属性）');
   else bad('设置页缺少 mana-exercise 导出选项');
+  // v2026-10-14d 回归锁：活动系数下拉曾因 String(1.4)==="1.4" 匹配不上 option 的 "1.40"
+  // 而被置成空白，且下次保存会被静默冲回 1.40。这两种写法都不许回来。
+  if(!/setActFactor'\)\.value=String\(actFactor\(\)\)/.test(htmlJs)) ok('已移除会丢尾零的 String(actFactor()) 回填');
+  else bad('会丢尾零的 String(actFactor()) 回填仍存在');
+  if(!/s\.actFactor=\(af>=1\.1&&af<=2\.0\)\? af : 1\.40/.test(htmlJs)) ok('已移除会静默重置为默认的保存写法');
+  else bad('会静默重置为默认的保存写法仍存在');
+  // select 的 option value 必须都是两位小数，才能和 toFixed(2) 对上
+  const optVals = [...htmlRaw3.matchAll(/<option value="(1\.\d+)">/g)].map(m=>m[1]);
+  if(optVals.length===5 && optVals.every(v=>/^1\.\d{2}$/.test(v))) ok('活动系数 5 个 option value 均为两位小数');
+  else bad('活动系数 option value 不是两位小数：' + JSON.stringify(optVals));
   // tdeeOf 必须读可配置系数，不能再乘硬编码 ACT_FACTOR
   const tdeeBody = htmlJs.match(/function tdeeOf\(d\)\{[\s\S]*?\n\}/);
   if(tdeeBody && /\* actFactor\(\)/.test(tdeeBody[0])) ok('tdeeOf 使用可配置活动系数');
