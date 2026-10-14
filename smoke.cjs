@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-13b') ok('APP_VERSION = 2026-10-13b');
-  else bad('APP_VERSION 未更新为 2026-10-13b（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-14a') ok('APP_VERSION = 2026-10-14a');
+  else bad('APP_VERSION 未更新为 2026-10-14a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v88') ok('SW 缓存名 = qi-workbench-v88');
-  else bad('SW 缓存名未递增为 v88');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v89') ok('SW 缓存名 = qi-workbench-v89');
+  else bad('SW 缓存名未递增为 v89');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -346,6 +346,40 @@ if(htmlJs){
   else bad('首页未挂连续留白提醒');
   if(!/takeawayHtml\('notes'\)/.test(htmlJs)) ok('产出卡只挂新闻/阅读两个输入源');
   else bad('产出卡挂到了非输入源');
+  // v2026-10-14a：体重/能量「让漂移可见」（7日均体重 · 热量漂移预警 · 盈余直给 · 停滞先查摄入）
+  const energyTokens = [
+    ['const ACT_FACTOR', '日常活动系数常量'],
+    ['const KCAL_PER_KG = 7700', '脂肪热量换算常量'],
+    ['function kcalIntakeOf', '某日摄入热量'],
+    ['function kcalExOf', '某日运动消耗'],
+    ['function tdeeOf', 'TDEE 估算（BMR×系数+运动）'],
+    ['function dayEnergy', '当日能量收支'],
+    ['function energyAvg', '近 N 日均值'],
+    ['function weightMA', '体重 N 日均值'],
+    ['function kcalDrift', '热量漂移计算'],
+    ['function kcalDriftHtml', '热量漂移预警横幅'],
+    ['function weightEnergyCardHtml', '体重趋势与能量收支卡'],
+    ['⚖️ 体重趋势与能量收支', '综合卡标题'],
+    ['7 日均体重(kg)', '7 日均体重口径'],
+    ['先查摄入，不要先加训练', '停滞时指向饮食而非训练'],
+    ['weightEnergyCardHtml()', '体重页挂综合卡'],
+  ];
+  for(const [token, desc] of energyTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // TDEE 口径必须改：旧代码 out = BMR + 运动（低估约 25%）
+  if(/const out=tdeeOf\(today\(\)\)/.test(htmlJs)) ok('饮食区热量支出已改用 TDEE 口径');
+  else bad('饮食区热量支出仍是旧的 BMR+运动 口径');
+  if(!/const out=Math\.round\(bmr\(\)\)\+exTotal/.test(htmlJs)) ok('旧的 BMR+运动 口径已移除');
+  else bad('旧的 BMR+运动 口径仍存在');
+  // 漂移预警阈值 10%
+  const driftBody = htmlJs.match(/function kcalDriftHtml\(\)\{[\s\S]*?\n\}/);
+  if(driftBody && /Math\.abs\(d\.pct\)<10/.test(driftBody[0])) ok('热量漂移预警阈值为 ±10%');
+  else bad('热量漂移预警阈值不是 ±10%');
+  const homeBody3 = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
+  if(homeBody3 && /kcalDriftHtml\(\)/.test(homeBody3[0]) && /weightEnergyCardHtml\(\)/.test(homeBody3[0])) ok('首页已挂漂移预警 + 综合卡');
+  else bad('首页未挂漂移预警或综合卡');
   const examRead = htmlJs.match(/s\.ieltsExamDate=\(document\.getElementById\('setIeltsExamDate'\)\.value\|\|''\)\.trim\(\);/);
   if(examRead) ok('设置保存时读取考试日期'); else bad('设置保存未读取考试日期');
 }

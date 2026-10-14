@@ -929,7 +929,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-13b';
+const APP_VERSION = '2026-10-14a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2048,6 +2048,8 @@ function renderHome(){
     ${readingStreakWarningHtml()}
     ${todayChecklistHtml()}
     ${weeklyTasksHtml()}
+    ${kcalDriftHtml()}
+    ${weightEnergyCardHtml()}
     ${takeawayBlankAlertHtml()}
     ${weeklyReviewHtml()}
     ${monthReminderBanner()}
@@ -3782,6 +3784,108 @@ function bmr(){
 function exKcal(e){ return Math.round((e.met*effectiveWeight()*e.min)/60); }
 function mealKcal(arr){ return arr.reduce((s,f)=>s+f.k,0); }
 
+/* ---- 能量与趋势（v2026-10-14）：让漂移可见 ----
+   来由：78 天真实数据复盘显示——摄入从 1694 涨到 2243 kcal（+32%）全程无感知，
+   而体重已掉头向上；且 r(热量,Δ体重)=+0.272 远强于 r(训练,Δ体重)=-0.086，
+   饮食杠杆约为训练的 3 倍。所以这一组函数的目的不是「预测」，是「把漂移摆到眼前」。 */
+const ACT_FACTOR = 1.35;   // 非运动性日常活动系数（久坐偏轻）；运动消耗另行叠加
+const KCAL_PER_KG = 7700;  // 1 kg 脂肪 ≈ 7700 kcal
+const WEIGHT_NOISE = 0.45; // 实测单日体重波动 σ（晨起空腹亦然），约等于日均真实信号的 26 倍
+function kcalIntakeOf(d){
+  const t=rec('mana')[d]; if(!t||!t.meals) return null;
+  let s=0, any=false;
+  MEAL_KEYS.forEach(k=>{ const a=mealArr(t,k); if(a.length){ any=true; s+=mealKcal(a); } });
+  return any? s : null;
+}
+function kcalExOf(d){ const t=rec('mana')[d]; return (t&&t.exercises)? t.exercises.reduce((s,e)=>s+(e.kcal||0),0) : 0; }
+// TDEE = BMR × 活动系数 + 当日运动消耗（旧口径只算 BMR+运动，系统性低估消耗约 25%）
+function tdeeOf(d){
+  const t=rec('mana')[d]||{};
+  const w=(t.weight!=null? Number(t.weight):null) || effectiveWeight();
+  const bf=(t.bodyFat!=null? Number(t.bodyFat):null);
+  return Math.round(bmrCalc(w, bf==null? latestBodyFat() : bf) * ACT_FACTOR) + kcalExOf(d);
+}
+// 当日能量收支：gap > 0 = 盈余
+function dayEnergy(d){
+  const intake=kcalIntakeOf(d); if(intake==null) return null;
+  const td=tdeeOf(d);
+  return {intake, tdee:td, gap: Math.round(intake-td)};
+}
+// 近 days 天（从 offset 天前往前数）的日均摄入 / 日均盈余
+function energyAvg(days, offset){
+  const ks=[], gs=[];
+  for(let i=0;i<days;i++){
+    const d=addDays(today(), -((offset||0)+i));
+    const k=kcalIntakeOf(d);
+    if(k==null) continue;
+    ks.push(k); const e=dayEnergy(d); if(e) gs.push(e.gap);
+  }
+  return {
+    n: ks.length,
+    intake: ks.length? Math.round(ks.reduce((a,b)=>a+b,0)/ks.length) : null,
+    gap: gs.length? Math.round(gs.reduce((a,b)=>a+b,0)/gs.length) : null
+  };
+}
+function weightSeries(){
+  return Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null)
+    .map(d=>({d, w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
+}
+// 最近 n 天体重均值（offset=7 即「上一个 n 天」，用于对比）
+function weightMA(n, offset){
+  const s=weightSeries(); if(!s.length) return null;
+  const hi=addDays(today(), -(offset||0));
+  const lo=addDays(today(), -((offset||0)+(n-1)));
+  const inR=s.filter(i=>i.d>=lo && i.d<=hi);
+  return inR.length? inR.reduce((a,b)=>a+b.w,0)/inR.length : null;
+}
+// 近 7 日 vs 前 7 日的热量漂移
+function kcalDrift(){
+  const now=energyAvg(7,0), prev=energyAvg(7,7);
+  if(now.intake==null||prev.intake==null||!prev.intake) return null;
+  const pct=(now.intake-prev.intake)/prev.intake*100;
+  return {now:now.intake, prev:prev.intake, pct};
+}
+function kcalDriftHtml(){  // 需求①：漂移 ≥±10% 才打扰
+  const d=kcalDrift(); if(!d||Math.abs(d.pct)<10) return '';
+  const up=d.pct>0;
+  return `<div class="reminder ${up?'warn':'done'}" onclick="setView('mana')"><span class="ri">${up?'📈':'📉'}</span><div class="rm"><div class="rt">日均摄入${up?'上升':'下降'} ${Math.abs(d.pct).toFixed(0)}%</div><div class="rs">近 7 日 ${d.now} kcal · 前 7 日 ${d.prev} kcal${up?' · 体重大概率会跟着掉头':''} →</div></div></div>`;
+}
+function weightEnergyCardHtml(){  // 需求②③：7 日均值 + 盈余直给 + 需求④停滞指向
+  const ma=weightMA(7,0), prev=weightMA(7,7);
+  const en=energyAvg(7,0);
+  const s=weightSeries(); const lastW=s.length? s[s.length-1].w : null;
+  if(ma==null && en.gap==null) return '';
+  const delta=(ma!=null&&prev!=null)? ma-prev : null;
+  const dTxt = delta==null? '—' : (delta>0?'+':'−')+Math.abs(delta).toFixed(2)+' kg';
+  const dCol = delta==null? 'var(--sub)' : (delta<-0.05?'var(--good)':(delta>0.05?'var(--warn)':'var(--sub)'));
+  const gapTxt = en.gap==null? '—' : (en.gap>0?'+':'−')+Math.abs(en.gap)+' kcal';
+  const gapCol = en.gap==null? 'var(--sub)' : (en.gap>0?'var(--warn)':'var(--good)');
+  const mon = en.gap==null? null : en.gap*30/KCAL_PER_KG;
+  const monTxt = mon==null? '' : `（照此每月 ${mon>0?'+':'−'}${Math.abs(mon).toFixed(1)} kg）`;
+  const statsHtml=`<div class="stats stats2">
+      <div class="stat"><b>${ma==null?'—':ma.toFixed(1)}</b><span>7 日均体重(kg)</span></div>
+      <div class="stat"><b style="color:${dCol}">${dTxt}</b><span>较上周（7日均）</span></div>
+      <div class="stat"><b>${en.intake==null?'—':en.intake}</b><span>日均摄入(kcal)</span></div>
+      <div class="stat"><b style="color:${gapCol}">${gapTxt}</b><span>日均盈余/缺口</span></div>
+    </div>`;
+  // 需求④：停滞或掉头时，指向「吃」，不是「练」
+  let tip='';
+  const gw=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
+  const wantLose=(gw==null)? true : (ma==null? true : ma>gw);
+  if(delta!=null && wantLose && delta>-0.05){
+    tip=`<p class="hint" style="color:var(--warn)">⚠️ 体重 ${delta>0.05?'掉头向上':'连续两周没动'} —— <b>先查摄入，不要先加训练</b>。你的实测数据里，热量对体重的影响约为训练的 3 倍；训练全勤也补不回每天多吃的那 200 kcal。</p>`;
+  } else if(delta!=null && delta<0){
+    tip=`<p class="hint">✅ 趋势向下。单日体重有 ±${WEIGHT_NOISE} kg 的生理波动，是日均真实变化的二十几倍——盯 7 日均线，别盯今天的数字。</p>`;
+  }
+  return `<div class="dcard">
+    <div class="ltitle">⚖️ 体重趋势与能量收支 <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 日</span></div>
+    ${statsHtml}
+    ${en.gap!=null?`<p class="hint">日均${en.gap>0?'盈余':'缺口'} ${Math.abs(en.gap)} kcal ${monTxt} · TDEE 按 BMR×${ACT_FACTOR}+运动消耗估算</p>`:''}
+    ${lastW!=null?`<p class="hint">最新单日 ${lastW} kg（仅供记录，不作趋势依据）</p>`:''}
+    ${tip}
+  </div>`;
+}
+
 function periodLoss(kind){
   const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
   if(items.length<1) return null;
@@ -4108,7 +4212,7 @@ function renderMana(){
       <div id="foodSug_${meal}" class="sug"></div><div id="foodPrev_${meal}" class="prev"></div></div>`;
   }).join('');
   const intake=MEAL_KEYS.reduce((s,k)=>s+mealKcal(mealArr(t,k)),0);
-  const out=Math.round(bmr())+exTotal;
+  const out=tdeeOf(today());   // v2026-10-14：改用 TDEE（BMR×活动系数+运动），旧口径只算 BMR+运动会低估消耗约 25%
   const net=intake-out;
   const predict = net<0 ? `预计每周约减 <b>${(Math.abs(net)*7/7700).toFixed(2)} kg</b> 📉` : (net>0?`今日盈余 ${net}kcal，预计每周约增 <b>${(net*7/7700).toFixed(2)} kg</b> 📈`:'今日收支平衡，体重维稳');
   const willDrop = net<0 ? '✅ 热量缺口成立，体重大概率会下降，继续保持！' : (net>0?'⚠️ 今日热量盈余，注意控制饮食或加练':'➖ 热量持平');
@@ -4124,6 +4228,7 @@ function renderMana(){
       <div class="stats stats2">${losses}</div>
       <div class="motivate">💡 ${manaMotivation()}</div>
     </div>
+    ${weightEnergyCardHtml()}
     <div class="dcard">
       <div class="ltitle">⚖️ 记录今日身体指标</div>
       <div class="bgrid">
