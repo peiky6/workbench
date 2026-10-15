@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-14d') ok('APP_VERSION = 2026-10-14d');
-  else bad('APP_VERSION 未更新为 2026-10-14d（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-10-15a') ok('APP_VERSION = 2026-10-15a');
+  else bad('APP_VERSION 未更新为 2026-10-15a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -276,8 +276,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v92') ok('SW 缓存名 = qi-workbench-v92');
-  else bad('SW 缓存名未递增为 v92');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v93') ok('SW 缓存名 = qi-workbench-v93');
+  else bad('SW 缓存名未递增为 v93');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
@@ -411,6 +411,44 @@ if(htmlJs){
   else bad('旧的三列训练表头仍存在');
   if(!/if\(!r\.trainDone && !r\.trainSkip\) return;/.test(htmlJs)) ok('会丢弃未打卡日的旧过滤条件已移除');
   else bad('会丢弃未打卡日的旧过滤条件仍存在');
+  // v2026-10-15a：产出池（写过的不再丢）+ 标签自由化（出口不预设为面试）
+  const outTokens = [
+    ['const OUTPUT_TAGS_BASE', '用途标签基础集（面试素材只是其一）'],
+    ['function allOutTags(', '标签全集（预设 + 自定义去重）'],
+    ['function addOutTagPrompt(', '自定义标签'],
+    ['function migrateOutputs(', '历史产出迁移'],
+    ['s.outputs = Array.isArray(s.outputs)', 'load 初始化 outputs'],
+    ['migrateOutputs(s);', 'load 调用迁移'],
+    ['function opId(', '产出 id 生成'],
+    ['function outputsAll(', '产出池列表（时间倒序）'],
+    ['function outputUpsert(', '产出写入/更新'],
+    ['function outputRemove(', '产出删除'],
+    ['function outputStats(', '产出统计'],
+    ['function delOutput(', '单条删除'],
+    ['function renderOutputs(', '我的产出页面'],
+    ['function takeawayPick(', '顺手选标签'],
+    ['__outputs\') renderOutputs()', 'render 分支'],
+    ["view:'__outputs'", '侧栏入口'],
+    ['remote.outputs||[]', '云同步合并产出池'],
+    ['💡 我的产出', '产出页标题'],
+    ['不会再被明天覆盖', '不再覆盖的提示文案'],
+  ];
+  for(const [token, desc] of outTokens){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // 关键回归锁：写想法必须同步进池，清除必须同步出池，否则两边不一致
+  const setBody = htmlJs.match(/function setTakeaway\(kind,val\)\{[\s\S]*?\n\}/);
+  if(setBody && /outputUpsert\(/.test(setBody[0])) ok('setTakeaway 已同步写入产出池');
+  else bad('setTakeaway 未写入产出池');
+  if(/function takeawayClear\(kind\)\{[^}]*outputRemove\(/.test(htmlJs)) ok('takeawayClear 已同步移出产出池');
+  else bad('takeawayClear 未同步移出产出池');
+  if(/function takeawayBlank\(kind\)\{[^}]*outputRemove\(/.test(htmlJs)) ok('takeawayBlank 已同步移出产出池');
+  else bad('takeawayBlank 未同步移出产出池');
+  // 标签 chip 必须渲染自定义标签，不能只剩原来 4 个 PM 角度
+  if(/allOutTags\(\)\.map\(t=>/.test(htmlJs)) ok('标签 chip 渲染自定义标签全集');
+  else bad('标签 chip 仍写死为固定角度');
+
   if(htmlRaw3.includes('<option value="mana-exercise">')) ok('设置页含运动消耗明细导出选项（HTML 属性）');
   else bad('设置页缺少 mana-exercise 导出选项');
   // v2026-10-14d 回归锁：活动系数下拉曾因 String(1.4)==="1.4" 匹配不上 option 的 "1.40"

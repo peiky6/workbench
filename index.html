@@ -687,6 +687,7 @@ function defaultState(){
     customExercises:[],
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
+    outputs:[], outTags:[],
     settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
   };
 }
@@ -694,6 +695,26 @@ let state = load();
 let currentView = 'home';
 let syncConn = {state:'none', ts:0}; // none | ok | fail
 
+/* ---- 产出池迁移（v2026-10-15）：把历史上「每天一句话」一次性搬进池子 ----
+   原因：旧实现把产出存在 rec('news'|'reading')[日期].take，第二天就被覆盖，
+   写了就丢。改为沉淀到 state.outputs 后，老数据必须迁过来，否则历史产出凭空消失。
+   按 src|日期 去重，幂等，可重复执行。只用字面量，不引用后文 const（避免 TDZ）。 */
+function migrateOutputs(s){
+  if(!Array.isArray(s.outputs)) s.outputs=[];
+  const have={}; s.outputs.forEach(o=>{ if(o) have[(o.src||'')+'|'+(o.ds||'')]=1; });
+  const mods=(s.modules&&typeof s.modules==='object')?s.modules:{};
+  ['news','reading'].forEach(k=>{
+    const r=mods[k]&&mods[k].records; if(!r) return;
+    Object.keys(r).forEach(ds=>{
+      if(have[k+'|'+ds]) return;
+      const rec0=r[ds]; const t=rec0?String(rec0.take||'').trim():'';
+      if(!t) return;
+      s.outputs.push({ id:'op'+Date.now()+Math.random().toString(36).slice(2,7),
+        ds:ds, ts:(rec0&&rec0.takeTs)||Date.now(), src:k, text:t, tag:'' });
+      have[k+'|'+ds]=1;
+    });
+  });
+}
 function load(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -741,6 +762,9 @@ function load(){
     s.qaProg = s.qaProg||{};
     s.qaDaily = s.qaDaily||{};
     s.qaWeekly = s.qaWeekly||{};
+    s.outputs = Array.isArray(s.outputs)? s.outputs : [];
+    s.outTags = Array.isArray(s.outTags)? s.outTags : [];
+    migrateOutputs(s);
     s.settings.readGoal = s.settings.readGoal||5;
     return s;
   }catch(e){ console.error('load 失败，已回退默认状态（本地数据可能已损坏）', e); return defaultState(); }
@@ -938,7 +962,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-10-14d';
+const APP_VERSION = '2026-10-15a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -1991,13 +2015,13 @@ const IELTS_READING = [
 ];
 
 /* ===================== 渲染 ===================== */
-function render(){ renderSidebar(); if(currentView==='home') renderHome(); else if(currentView==='__monthly') renderMonthly(); else if(currentView==='__notes') renderNotes(); else if(currentView==='interview') renderInterview(); else renderModule(currentView); }
+function render(){ renderSidebar(); if(currentView==='home') renderHome(); else if(currentView==='__monthly') renderMonthly(); else if(currentView==='__notes') renderNotes(); else if(currentView==='__outputs') renderOutputs(); else if(currentView==='interview') renderInterview(); else renderModule(currentView); }
 
 function renderSidebar(){
   const items = [{view:'home', emi:'🏠', label:'总览'}]
     .concat(ACTIVE_MODULES.map(m=>({view:m.key, emi:m.emoji, label:m.name})))
     .concat([{view:'interview', emi:'💼', label:'求职面试'}])
-    .concat([{view:'__notes', emi:'📒', label:'笔记问答'},{view:'__monthly', emi:'📊', label:'每月统计'},{view:'__sync', emi:'☁️', label:'同步', dot:true},{view:'__settings', emi:'⚙️', label:'设置'}]);
+    .concat([{view:'__outputs', emi:'💡', label:'我的产出'},{view:'__notes', emi:'📒', label:'笔记问答'},{view:'__monthly', emi:'📊', label:'每月统计'},{view:'__sync', emi:'☁️', label:'同步', dot:true},{view:'__settings', emi:'⚙️', label:'设置'}]);
   const sb = document.getElementById('sidebar');
   sb.innerHTML = '<div class="sb-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">⏴ 收起</div>' + items.map(it=>{
     const dot = it.dot ? `<span class="dot ${syncConn.state}" title="${escapeAttr(syncConnHint())}"></span>` : '';
@@ -2194,15 +2218,81 @@ const TAKEAWAY_ANGLES=[
   {k:'风险', t:'合规或风险：'},
   {k:'团队', t:'团队能力 / 协作：'}
 ];
+/* 用途标签：出口不预设。阅读不一定是为了面试，所以标签是平级的、可增删——
+   「面试素材」只是其中之一，跟「读书笔记」「随手记」没有高低之分。
+   TAKEAWAY_ANGLES 的 t 是句式前缀（点了帮你起头，降低空白焦虑）；
+   OUTPUT_TAGS_BASE 是纯归类标签，不填句式。 */
+const OUTPUT_TAGS_BASE=['面试素材','读书笔记','AI转型','随手记'];
+function allOutTags(){
+  const arr=TAKEAWAY_ANGLES.map(a=>a.k).concat(OUTPUT_TAGS_BASE).concat(state.outTags||[]);
+  // 末尾过滤：标签名会拼进 onclick 字符串，含引号/尖括号会直接破坏页面
+  return arr.filter((v,i,a)=>v && a.indexOf(v)===i).filter(v=>!/['"\\<>]/.test(v));
+}
+function tagPrefixOf(t){ const a=TAKEAWAY_ANGLES.find(x=>x.k===t); return a?a.t:''; }
+function addOutTagPrompt(){
+  const v=String(prompt('新标签名称（2–8 个字，例如：产品思维 / 英语表达 / 团队管理')||'').trim();
+  if(!v) return;
+  if(v.length>8) return toast('标签最多 8 个字，短一点更好用');
+  if(/['"\\<>]/.test(v)) return toast('标签不要含引号或尖括号');
+  if(!Array.isArray(state.outTags)) state.outTags=[];
+  if(allOutTags().indexOf(v)>=0) return toast('这个标签已经有了');
+  state.outTags.push(v); save(); render(); toast('已添加标签「'+v+'」🏷');
+}
+/* ---- 产出池（v2026-10-15）：写过的不再丢 ---- */
+function opId(){ return 'op'+Date.now()+Math.random().toString(36).slice(2,7); }
+function outputsAll(){ return (state.outputs||[]).slice().sort((a,b)=>((b.ds||'').localeCompare(a.ds||''))||((b.ts||0)-(a.ts||0))); }
+function outputOf(src,ds){ return (state.outputs||[]).find(x=>x.src===src&&x.ds===ds)||null; }
+function outputUpsert(src,ds,text,tag){
+  if(!Array.isArray(state.outputs)) state.outputs=[];
+  const t=String(text||'').trim();
+  let o=state.outputs.find(x=>x.src===src&&x.ds===ds);
+  if(!t){ if(o) state.outputs=state.outputs.filter(x=>x!==o); return null; }
+  if(!o){ o={id:opId(), ds:ds, src:src, ts:Date.now()}; state.outputs.push(o); }
+  o.text=t; o.ts=Date.now(); if(tag!=null) o.tag=tag;
+  return o;
+}
+function outputRemove(src,ds){ state.outputs=(state.outputs||[]).filter(x=>!(x.src===src&&x.ds===ds)); }
+function outputStats(){
+  const all=outputsAll(); const lo=addDays(today(),-6);
+  let week=0, tagged=0;
+  all.forEach(o=>{ if((o.ds||'')>=lo) week++; if(o.tag) tagged++; });
+  return {total:all.length, week:week, tagged:tagged};
+}
+function delOutput(id){
+  if(!confirm('删除这条产出？删了找不回来。')) return;
+  state.outputs=(state.outputs||[]).filter(x=>x.id!==id);
+  save(); render(); toast('已删除');
+}
 const TAKEAWAY_KINDS={
   news:   {emoji:'📰', label:'新闻', ph:'这条对我做 PM 有什么用？（写不出就点下面的「没想法」）'},
   reading:{emoji:'📖', label:'阅读', ph:'这段对我做 PM 有什么用？（写不出就点下面的「没想法」）'}
 };
 function takeawayMut(kind){ const m=rec(kind); const d=today(); if(!m[d]) m[d]={done:false}; return m[d]; }
-function setTakeaway(kind,val){ const r=takeawayMut(kind); const v=String(val||'').trim(); r.take=v; if(v) r.takeBlank=false; r.takeTs=Date.now(); save(); render(); }
-function takeawayFill(kind,prefix){ const r=takeawayMut(kind); r.take=prefix; r.takeBlank=false; save(); render(); const el=document.getElementById('take_'+kind); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length,el.value.length); }catch(_){} } }
-function takeawayBlank(kind){ const r=takeawayMut(kind); r.takeBlank=true; r.take=''; r.takeTs=Date.now(); save(); render(); toast('记下了：今天没想法 🤷 连续留白本身也是信号'); }
-function takeawayClear(kind){ const r=takeawayMut(kind); r.takeBlank=false; r.take=''; save(); render(); }
+function setTakeaway(kind,val){
+  const r=takeawayMut(kind); const v=String(val||'').trim();
+  r.take=v; if(v) r.takeBlank=false; r.takeTs=Date.now();
+  outputUpsert(kind, today(), v, r.takeTag||'');
+  save(); render();
+}
+function takeawayFill(kind,prefix){
+  const r=takeawayMut(kind); r.take=prefix; r.takeBlank=false; r.takeTs=Date.now();
+  outputUpsert(kind, today(), prefix, r.takeTag||'');
+  save(); render();
+  const el=document.getElementById('take_'+kind); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length,el.value.length); }catch(_){} }
+}
+/* 顺手选标签：一次点击完成归类；若该标签带句式前缀且当前还是空的，顺带起个头 */
+function takeawayPick(kind,tag){
+  const r=takeawayMut(kind);
+  r.takeTag=(r.takeTag===tag)? '' : tag;
+  const pre=tagPrefixOf(tag);
+  if(pre && !(r.take||'').trim()){ r.take=pre; r.takeBlank=false; }
+  r.takeTs=Date.now();
+  outputUpsert(kind, today(), r.take||'', r.takeTag||'');
+  save(); render();
+  const el=document.getElementById('take_'+kind); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length,el.value.length); }catch(_){} }
+}
+function takeawayBlank(kind){ const r=takeawayMut(kind); r.takeBlank=true; r.take=''; r.takeTag=''; r.takeTs=Date.now(); outputRemove(kind,today()); save(); render(); toast('记下了：今天没想法 🤷 连续留白本身也是信号'); }
+function takeawayClear(kind){ const r=takeawayMut(kind); r.takeBlank=false; r.take=''; r.takeTag=''; outputRemove(kind,today()); save(); render(); }
 function takeawayWeekStats(){
   const now=new Date(); let got=0, blank=0;
   for(let i=0;i<7;i++){ const d=new Date(now); d.setDate(now.getDate()-i); const ds=fmt(d);
@@ -2223,18 +2313,70 @@ function takeawayBlankStreak(){
 }
 function takeawayHtml(kind){
   const cfg=TAKEAWAY_KINDS[kind]; const r=rec(kind)[today()]||{};
-  const val=(r.take||'').trim();
-  const chips=TAKEAWAY_ANGLES.map(a=>`<button class="mini line" style="flex:none" onclick="takeawayFill('${kind}','${a.t}')">${a.k}</button>`).join('');
+  const val=(r.take||'').trim(); const cur=r.takeTag||'';
+  const chips=allOutTags().map(t=>{
+    const on=(t===cur);
+    return `<button class="mini ${on?'accent':'line'}" style="flex:none" onclick="takeawayPick('${kind}','${escapeAttr(t)}')">${on?'✓ ':''}${escapeHtml(t)}</button>`;
+  }).join('')+`<button class="mini line" style="flex:none" onclick="addOutTagPrompt()">＋ 标签</button>`;
   const tip = r.takeBlank
     ? '<p class="hint">🤷 今天记为「没想法」。留白同样被统计——它是在替你判断这个输入源值不值得每天看。</p>'
     : (val?'<p class="hint">✅ 已留下这一句。不用管文采，自己看得懂就行。</p>':'<p class="hint">写不出就点「没想法」，别硬凑。诚实留白比一句敷衍的话有用。</p>');
-  const tw=takeawayWeekStats();
+  const tw=takeawayWeekStats(); const os=outputStats();
   return `<div class="dcard">
     <div class="ltitle">💡 一句话产出 · ${cfg.emoji}${cfg.label} <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 天 ${tw.got} 句${tw.blank?(' · '+tw.blank+' 次留白'):''}</span></div>
     <input id="take_${kind}" class="full" placeholder="${cfg.ph}" value="${val?escapeAttr(val):''}" onchange="setTakeaway('${kind}',this.value)"/>
     <div class="inline" style="margin-top:6px">${chips}<button class="mini" style="flex:none" onclick="takeawayBlank('${kind}')">🤷 没想法</button>${(val||r.takeBlank)?`<button class="mini line" style="flex:none" onclick="takeawayClear('${kind}')">✕ 清除</button>`:''}</div>
     ${tip}
+    <p class="hint">🏷 标签决定它流向哪儿，不预设用途——面试素材只是其中一个。写过的都会攒进「我的产出」（现有 ${os.total} 条），不会再被明天覆盖。</p>
   </div>`;
+}
+/* ---- 「我的产出」页面（v2026-10-15）：写过的每一句都攒在这里 ----
+   设计要点：只管攒住 + 能搜，不预设用途。出口由标签决定，不是由模块决定。 */
+let _outKw='', _outTag='';
+function setOutKw(v){ _outKw=String(v||''); render(); }
+function setOutTag(t){ _outTag=(_outTag===t)?'':t; render(); }
+function renderOutputs(){
+  const all=outputsAll(); const st=outputStats();
+  const tags=allOutTags().filter(t=>all.some(o=>o.tag===t));
+  const kw=(_outKw||'').trim();
+  const list=all.filter(o=>{
+    if(_outTag && o.tag!==_outTag) return false;
+    if(kw && (o.text||'').indexOf(kw)<0 && (o.tag||'').indexOf(kw)<0) return false;
+    return true;
+  });
+  const SRC={news:{e:'📰',n:'新闻'}, reading:{e:'📖',n:'阅读'}};
+  const rows=list.length ? list.map(o=>{
+    const s=SRC[o.src]||{e:'💡',n:(o.src||'其他')};
+    return `<div class="dcard" style="margin:8px 0;padding:12px 14px">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1;font-size:14px;line-height:1.5">${escapeHtml(o.text||'')}</div>
+        <span class="x" style="flex:none" onclick="delOutput('${o.id}')">✕</span>
+      </div>
+      <p class="hint" style="margin:6px 2px 0">${s.e} ${s.n} · ${o.ds||''}${o.tag?(' · 🏷 '+escapeHtml(o.tag)):' · 未打标签'}</p>
+    </div>`;
+  }).join('') : `<div class="empty">${all.length?'没有符合条件的产出':'还没有产出。去新闻 / 阅读页写第一句吧 💡'}</div>`;
+  const chips=tags.length
+    ? `<div class="inline" style="margin-top:6px"><button class="mini ${!_outTag?'accent':'line'}" style="flex:none" onclick="setOutTag('')">全部 ${all.length}</button>`+
+      tags.map(t=>`<button class="mini ${_outTag===t?'accent':'line'}" style="flex:none" onclick="setOutTag('${escapeAttr(t)}')">${escapeHtml(t)}</button>`).join('')+`</div>`
+    : '';
+  document.getElementById('main').innerHTML=`
+    <div class="mhead"><button class="back" onclick="setView('home')">‹ 总览</button><h2>💡 我的产出</h2></div>
+    <div class="dcard">
+      <div class="stats stats2">
+        <div class="stat"><b>${st.total}</b><span>累计产出(条)</span></div>
+        <div class="stat"><b>${st.week}</b><span>近 7 天新增</span></div>
+        <div class="stat"><b>${st.tagged}</b><span>已打标签</span></div>
+        <div class="stat"><b>${st.total?Math.round(st.tagged/st.total*100):0}%</b><span>标签覆盖率</span></div>
+      </div>
+      <p class="hint" style="margin:8px 2px 0">每天在新闻 / 阅读写下的那一句都会攒在这里，不会再被明天覆盖。标签决定它流向哪儿——面试素材只是其中一个出口。</p>
+    </div>
+    <div class="dcard">
+      <div class="ltitle">🔍 找一条</div>
+      <input id="outKw" class="full" placeholder="搜关键词（内容或标签）" value="${escapeAttr(_outKw||'')}" onchange="setOutKw(this.value)"/>
+      ${chips}
+    </div>
+    <div class="ltitle" style="margin:12px 2px 4px">共 ${list.length} 条</div>
+    ${rows}`;
 }
 function takeawayBlankAlertHtml(){
   const n=takeawayBlankStreak();
@@ -5099,6 +5241,17 @@ function mergeState(remote){
     li.forEach(iv=>{ map[iv.id]=Object.assign({},iv); });
     ri.forEach(iv=>{ if(!iv||!iv.id) return; const ex=map[iv.id]; if(!ex) map[iv.id]=Object.assign({},iv); else if((iv.ts||0)>(ex.ts||0)) map[iv.id]=Object.assign({},iv); });
     state.interviews=Object.values(map).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  }
+  // 产出池：按 id 并集，冲突时 ts 更新者优先（漏了这段，多端写的产出会互相丢失）
+  { const li=state.outputs||[], ri=remote.outputs||[]; const map={};
+    li.forEach(o=>{ if(o&&o.id) map[o.id]=Object.assign({},o); });
+    ri.forEach(o=>{ if(!o||!o.id) return; const ex=map[o.id]; if(!ex) map[o.id]=Object.assign({},o); else if((o.ts||0)>(ex.ts||0)) map[o.id]=Object.assign({},o); });
+    state.outputs=Object.values(map);
+  }
+  // 自定义标签：并集即可（标签只是名字，没有冲突概念）
+  if(Array.isArray(remote.outTags) && remote.outTags.length){
+    const set={}; (state.outTags||[]).concat(remote.outTags).forEach(t=>{ if(t) set[t]=1; });
+    state.outTags=Object.keys(set);
   }
 }
 async function testConn(){
