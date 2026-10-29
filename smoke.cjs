@@ -219,20 +219,21 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-15a') ok('APP_VERSION = 2026-10-15a');
-  else bad('APP_VERSION 未更新为 2026-10-15a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
-  // v2026-10-10b：M0/M5/M6 内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
+  if(verMatch && verMatch[1]==='2026-10-29a') ok('APP_VERSION = 2026-10-29a');
+  else bad('APP_VERSION 未更新为 2026-10-29a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  // v2026-10-10b / v2026-10-29a：内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
     const targets = {
-      '【AI学习笔记】M0 认知地基': [14, 'rerank'],
-      '【AI学习笔记】M5 需求落地': [25, '图片提示词六件套'],
-      '【AI学习笔记】M6 行业商机': [21, 'SLA']
+      '【AI学习笔记】M0 认知地基': ['2026-10-10', 14, 'rerank'],
+      '【AI学习笔记】M5 需求落地': ['2026-10-10', 25, '图片提示词六件套'],
+      '【AI学习笔记】M6 行业商机': ['2026-10-10', 21, 'SLA'],
+      '【AI学习笔记】20260902-AI笔记一页纸速记总表': ['2026-10-29', 43, '选型五步']
     };
-    for(const [t, [cnt, kw]] of Object.entries(targets)){
+    for(const [t, [v, cnt, kw]] of Object.entries(targets)){
       const n = dn.find(x => x.title === t);
       if(!n){ bad('内置笔记缺失：' + t); continue; }
-      if(n.v === '2026-10-10' && n.qa.length === cnt && n.content.includes(kw)) ok('内置笔记已升级：' + t + '（v' + n.v + ' · ' + n.qa.length + ' 问答）');
+      if(n.v === v && n.qa.length === cnt && n.content.includes(kw)) ok('内置笔记已升级：' + t + '（v' + n.v + ' · ' + n.qa.length + ' 问答）');
       else bad('内置笔记版本/问答数不符：' + t + '（v=' + n.v + ' qa=' + n.qa.length + '）');
     }
   }catch(e){ bad('data-notes.js 解析失败：' + e.message); }
@@ -276,8 +277,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v93') ok('SW 缓存名 = qi-workbench-v93');
-  else bad('SW 缓存名未递增为 v93');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v94') ok('SW 缓存名 = qi-workbench-v94');
+  else bad('SW 缓存名未递增为 v94');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
