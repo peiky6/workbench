@@ -877,7 +877,6 @@ async function histCleanupOld(){
         for(const s of all){
           if(s.ts < cutoff){ store.delete(s.id); deleted++; }
         }
-        if(deleted) console.log('快照清理：删除', deleted, '条超期快照');
         res();
       };
       allReq.onerror = ()=> rej(allReq.error);
@@ -999,7 +998,7 @@ function seedNotes(){
     }
   });
   state.notesSeed=true; _notesSeeded=true;
-  if(nAdd||nUpd){ save(); console.log('内置笔记同步: +'+nAdd+' 篇 / 升级 '+nUpd+' 篇 / +'+qAdd+' 条问答'); }
+  if(nAdd||nUpd){ save(); }
 }
 
 // 周视图：按周渲染连续打卡（每行一周，周一起始；当前周只画到今天，之后为虚线占位）
@@ -5701,8 +5700,7 @@ render();
 (async function autoSnapshotOnOpen(){
   try{
     await histCleanupOld();
-    const took = await histTakeSnapshotIfToday();
-    if(took) console.log('📅 已自动保存今日历史快照');
+    const took =     await histTakeSnapshotIfToday();
   }catch(e){ console.warn('快照自动保存失败（不影响使用）', e); }
 })();
 </script>
