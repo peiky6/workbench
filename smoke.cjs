@@ -219,8 +219,13 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-10-29a') ok('APP_VERSION = 2026-10-29a');
-  else bad('APP_VERSION 未更新为 2026-10-29a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && verMatch[1]==='2026-11-03a') ok('APP_VERSION = 2026-11-03a');
+  else bad('APP_VERSION 未更新为 2026-11-03a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  // v2026-11-03a：按「饮食指南&训练计划.md」更新体重管理模块
+  if(htmlJs.includes('≈ 1760 kcal · 蛋白 101g')) ok('饮食指南已更新为工作日 1760kcal/101g 方案');
+  else bad('饮食指南未更新为工作日 1760kcal/101g 方案');
+  if(/TRAIN_PLAN[\s\S]*?坐姿弯举/.test(htmlJs)) ok('训练计划已按文档更新（含坐姿弯举等动作）');
+  else bad('训练计划未包含文档动作（坐姿弯举缺失）');
   // v2026-10-10b / v2026-10-29a：内置笔记改版（正文覆盖 + 问答去重追加，旧问答保留）
   try{
     const dn = JSON.parse(dataNotesJs.slice(dataNotesJs.indexOf('['), dataNotesJs.lastIndexOf(']') + 1));
@@ -277,8 +282,8 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v94') ok('SW 缓存名 = qi-workbench-v94');
-  else bad('SW 缓存名未递增为 v94');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v95') ok('SW 缓存名 = qi-workbench-v95');
+  else bad('SW 缓存名未递增为 v95');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
