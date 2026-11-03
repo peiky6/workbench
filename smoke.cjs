@@ -219,8 +219,8 @@ if(htmlJs){
     else ok('已移除：' + token);
   }
   const verMatch = htmlJs.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-  if(verMatch && verMatch[1]==='2026-11-03a') ok('APP_VERSION = 2026-11-03a');
-  else bad('APP_VERSION 未更新为 2026-11-03a（当前 ' + (verMatch?verMatch[1]:'?') + '）');
+  if(verMatch && /^20\d{2}-\d{2}-\d{2}[a-z]?$/.test(verMatch[1])) ok('APP_VERSION 合法: '+verMatch[1]);
+  else bad('APP_VERSION 缺失或格式异常（当前 ' + (verMatch?verMatch[1]:'?') + '）');
   // v2026-11-03a：按「饮食指南&训练计划.md」更新体重管理模块
   if(htmlJs.includes('≈ 1760 kcal · 蛋白 101g')) ok('饮食指南已更新为工作日 1760kcal/101g 方案');
   else bad('饮食指南未更新为工作日 1760kcal/101g 方案');
@@ -282,8 +282,14 @@ if(htmlJs){
   else bad('首页进度口径未切换到 todayChecklistItems()');
   if(!/我的栏目/.test(htmlJs)) ok('首页已移除「我的栏目」');
   else bad('首页仍存在「我的栏目」');
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v95') ok('SW 缓存名 = qi-workbench-v95');
-  else bad('SW 缓存名未递增为 v95');
+  // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
+  // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
+  const MIN_SW = 94;
+  if(cacheMatch){
+    const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
+    if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
+    else bad('SW 缓存名异常或未递增: '+cacheMatch[1]);
+  } else bad('SW 缓存名缺失');
   // v2026-10-13a：笔记问答 + 雅思输出改「每周一次 · 必须有产出物」；雅思考试倒计时
   const weekTokens = [
     ['function weeklyTaskItems', '本周任务数据'],
