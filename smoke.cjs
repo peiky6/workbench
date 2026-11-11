@@ -534,7 +534,7 @@ if(htmlJs){
 // v2026-11-11b 行为级回归：真正执行 aiLearn()，捕获「语法校验 + 字符串断言抓不到」的运行时错误。
 // 事故背景：aiLayerProgressHtml() 漏声明 all → ReferenceError → AI 模块点击后整块不渲染（白屏）。
 // 维护提示：以下为最小化浏览器 API 桩；若日后顶层初始化新增 API 调用，需在此补桩。
-(function runtimeCheckAiLearn(){
+(function runtimeChecks(){
   const vm = require('vm');
   const raw = fs.readFileSync(htmlPath, 'utf8');
   const blocks = raw.match(/<script>([\s\S]*?)<\/script>/g) || [];
@@ -579,14 +579,120 @@ if(htmlJs){
   const ctx = vm.createContext(win);
   const tail = '\n;try{ globalThis.__R=aiLearn(); globalThis.__E=null; }catch(e){ globalThis.__E=e.name+": "+e.message; }'
              + '\n;try{ state.settings.aiDailyQuiz=true; globalThis.__R2=aiLearn(); globalThis.__E2=null; }catch(e){ globalThis.__E2=e.name+": "+e.message; }';
+  // v2026-11-11c P0 行为级断言：在同一个 vm 上下文里真正调用数据链 / CSV / 合并 / 备份 / AI 判定函数，
+  // 而不是只验「字符串在不在」。覆盖 Q1/Q7/Q14/Q15/Q16 的核心口径。
+  const p0Script = `
+;globalThis.__P0ERR=null;
+;try{ (function(){
+  const R={};
   try{
-    vm.runInContext(appJs + tail, ctx, {filename:'index.html', timeout:10000});
+    state.settings.gistToken='SECRET_PAT_X'; state.settings.encPass='SECRET_PASS_X';
+    R.backup=serializeBackup({stripSecrets:true,pretty:false});
+  }catch(e){ R.backupErr=e.name+': '+e.message; }
+  try{
+    state.aiReviewRound=0; state.aiDailyQuizDone={}; state.aiDailyQuiz={}; state.aiDaily={}; state.readDaily={};
+    mergeState({ aiReviewRound:3, aiReviewRoundStartTs:100, aiDailyQuizDone:{'2026-11-11':true},
+      aiDailyQuiz:{'q1':{sel:{}}}, aiDaily:{'2026-11-11':[1,2]},
+      readDaily:{'2026-11-10':{pages:{'A':10},total:{'A':100},ts:1}},
+      readPages:{'2026-11':{bookStart:{'A':0},bookEnd:{'A':12}}} });
+    R.mergeRound=state.aiReviewRound; R.mergeQuiz=!!state.aiDailyQuizDone['2026-11-11'];
+    R.mergeDaily=!!state.aiDaily['2026-11-11']; R.mergeRead=!!state.readDaily['2026-11-10'];
+    R.mergePages=(state.readPages['2026-11']||{}).bookEnd;
+  }catch(e){ R.mergeErr=e.name+': '+e.message; }
+  try{
+    state.readPages={'2026-09':{bookStart:{'B':0},bookEnd:{'B':0}}};
+    state.readDaily={'2026-09-01':{pages:{'B':0},total:{'B':100},ts:1},'2026-09-30':{pages:{'B':30},total:{'B':100},ts:2}};
+    R.pages=computeMonthPages('2026-09').pages;
+    state.readDaily['2026-09-15']={pages:{'B':5},total:{'B':100},ts:3};
+    R.pagesAfterRegression=computeMonthPages('2026-09').pages;
+    state.readPages={'2026-08':{bookStart:{'B':50},bookEnd:{'B':10}}};
+    state.readDaily={'2026-08-02':{pages:{'B':10},total:{'B':100},ts:1}};
+    R.negative=computeMonthPages('2026-08').pages;
+  }catch(e){ R.pagesErr=e.name+': '+e.message; }
+  globalThis.__CSV={};
+  globalThis.showCSVModal=function(name,text){ globalThis.__CSV[name]=text; };
+  try{
+    state.modules.ielts={records:{'2026-11-11':{parts:{},menu:{picks:[1,6],done:{1:true}}}}};
+    exportModuleCSV('ielts'); R.csvIelts=globalThis.__CSV['ielts-'+today()+'.csv']||'';
+  }catch(e){ R.csvIeltsErr=e.name+': '+e.message; }
+  try{
+    state.aiMastered=[0]; state.aiMasteredTs={0:Date.now()}; state.aiMasteredDel={}; state.aiStudy={0:3};
+    exportModuleCSV('ai'); R.csvAi=globalThis.__CSV['ai-terms-'+today()+'.csv']||'';
+  }catch(e){ R.csvAiErr=e.name+': '+e.message; }
+  try{
+    state.readDaily={'2026-11-10':{pages:{'B':10},total:{'B':100},ts:1},'2026-11-11':{pages:{'B':30},total:{'B':100},ts:2}};
+    state.modules.reading={records:{'2026-11-11':{done:true}}};
+    exportModuleCSV('reading'); R.csvReading=globalThis.__CSV['reading-'+today()+'.csv']||'';
+  }catch(e){ R.csvReadingErr=e.name+': '+e.message; }
+  try{
+    state.aiMastered=allAiTerms().map(x=>x.key);
+    state.settings.aiKeepReview=true; state.settings.aiDailyQuiz=false;
+    state.aiDaily={}; state.aiDaily[today()]=[0,1,2];
+    state.aiDailyQuizDone={}; state.aiStudyTs={};
+    R.aiDone=aiDayDone();
+  }catch(e){ R.aiDoneErr=e.name+': '+e.message; }
+  try{ renderReading(); R.renderReading='ok'; }catch(e){ R.renderReadingErr=e.name+': '+e.message; }
+  try{ renderMonthly(); R.renderMonthly='ok'; }catch(e){ R.renderMonthlyErr=e.name+': '+e.message; }
+  try{ ensurePageBaseline(); R.baseline='ok'; }catch(e){ R.baselineErr=e.name+': '+e.message; }
+  globalThis.__P0=R;
+})(); }catch(e){ globalThis.__P0ERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script, ctx, {filename:'index.html', timeout:10000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
     if(ctx.__E2) bad('AI 视图 aiLearn() 运行时异常（每日自测开启）', ctx.__E2);
     else ok('AI 视图 aiLearn() 运行时无异常（每日自测开启）');
   }catch(e){ bad('AI 视图运行时校验未能执行', e.message); }
+
+  // ===== P0 静态锁（凭证外送 + 关键函数/字段存在性）=====
+  const rawFn = htmlJs.match(/async function gistRawWithRetry\([\s\S]*?\n\}/);
+  if(rawFn && !/headers\s*:\s*\{[^}]*Authorization/.test(rawFn[0])) ok('Q4 raw 域请求不再外送 PAT');
+  else bad('Q4 gistRawWithRetry 仍携带 Authorization（凭证外送）');
+  for(const [t,d] of [['recordReadProgress','阅读逐日单一数据源写入'],['computeMonthPages','月报统一页数口径'],
+    ['requirePageProgress','打卡进度门禁'],['MERGE_EXPLICIT','mergeState 未登记字段兜底'],
+    ['阅读后页','CSV 阅读后页码'],['已打卡项目','CSV 雅思中文项目名'],['新掌握明细','CSV AI 掌握明细']]){
+    if(htmlJs.includes(t)) ok('存在：'+d); else bad('缺失：'+d);
+  }
+
+  // ===== P0 行为级判定 =====
+  if(ctx.__P0ERR) bad('P0 行为校验脚本异常', ctx.__P0ERR);
+  const R=ctx.__P0||{};
+  if(R.backupErr) bad('备份序列化异常', R.backupErr);
+  else if(/SECRET_PAT_X|SECRET_PASS_X/.test(R.backup||'')) bad('备份仍含明文密钥');
+  else ok('serializeBackup 脱敏（备份不含 PAT / 加密口令）');
+  if(R.mergeErr) bad('mergeState 执行异常', R.mergeErr);
+  else{
+    if(R.mergeRound===3) ok('mergeState 保留 aiReviewRound（新字段不再静默丢）'); else bad('mergeState 丢失 aiReviewRound', String(R.mergeRound));
+    if(R.mergeQuiz&&R.mergeDaily&&R.mergeRead) ok('mergeState 保留自测记录/当日批次/逐日阅读进度');
+    else bad('mergeState 丢失新增字段', JSON.stringify({quiz:R.mergeQuiz,daily:R.mergeDaily,read:R.mergeRead}));
+    if(R.mergePages&&R.mergePages.A===12) ok('mergeState 保留 readPages 月末快照'); else bad('mergeState 丢失 readPages', JSON.stringify(R.mergePages));
+  }
+  if(R.pagesErr) bad('computeMonthPages 执行异常', R.pagesErr);
+  else{
+    if(R.pages===30) ok('本月阅读页数 = 月末30 − 月初0 = 30'); else bad('阅读页数口径错误', String(R.pages));
+    if(R.pagesAfterRegression===30) ok('进度回退不抹历史增量（单调最大）'); else bad('进度回退抹掉历史增量', String(R.pagesAfterRegression));
+    if(typeof R.negative==='number' && R.negative<0) ok('页数负差不再被夹成 0（走数据异常提示）'); else bad('负差仍被夹 0', String(R.negative));
+  }
+  if(R.csvIeltsErr) bad('雅思 CSV 执行异常', R.csvIeltsErr);
+  else if(/听力·精听/.test(R.csvIelts||'') && /已打卡项目/.test(R.csvIelts||'')) ok('雅思 CSV 导出中文项目名（含已打卡项）');
+  else bad('雅思 CSV 仍是数字 id 或缺少项目名', (R.csvIelts||'').slice(0,120));
+  if(R.csvAiErr) bad('AI CSV 执行异常', R.csvAiErr);
+  else if(/人工智能/.test(R.csvAi||'') && /新掌握明细/.test(R.csvAi||'') && !/undefined/.test(R.csvAi||'')) ok('AI CSV 含术语名/释义/新掌握明细');
+  else bad('AI CSV 术语名为空或状态错误', (R.csvAi||'').slice(0,160));
+  if(R.csvReadingErr) bad('阅读 CSV 执行异常', R.csvReadingErr);
+  else if(/阅读后页/.test(R.csvReading||'') && /,30,/.test(R.csvReading||'')) ok('阅读 CSV 含「阅读后页」数值');
+  else bad('阅读 CSV 缺阅读后页码', (R.csvReading||'').slice(0,160));
+  if(R.aiDoneErr) bad('aiDayDone 执行异常', R.aiDoneErr);
+  else if(R.aiDone===false) ok('全掌握后 AI 待办仍未完成（复习闭环生效，掌握不短路）');
+  else bad('全掌握后 AI 待办被短路为已完成', String(R.aiDone));
+  if(R.renderReadingErr) bad('renderReading 运行时异常', R.renderReadingErr);
+  else ok('renderReading 运行时无异常（阅读视图）');
+  if(R.renderMonthlyErr) bad('renderMonthly 运行时异常', R.renderMonthlyErr);
+  else ok('renderMonthly 运行时无异常（月报视图）');
+  if(R.baselineErr) bad('ensurePageBaseline 运行时异常', R.baselineErr);
+  else ok('ensurePageBaseline 运行时无异常（基准派生）');
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

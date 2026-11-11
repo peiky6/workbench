@@ -683,7 +683,7 @@ function defaultState(){
     planSkip:{},
     planCollapsed:[],
     readingAch:[], readingFinished:[],
-    readPages:{}, monthReminded:'',
+    readPages:{}, readDaily:{}, monthReminded:'',
     customFoods:[],
     customExercises:[],
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
@@ -753,6 +753,7 @@ function load(){
     s.readingAch = Array.isArray(s.readingAch)?s.readingAch:[];
     s.readingFinished = Array.isArray(s.readingFinished)?s.readingFinished:[];
     s.readPages = s.readPages||{};
+    s.readDaily = (s.readDaily && typeof s.readDaily==='object' && !Array.isArray(s.readDaily)) ? s.readDaily : {};
     s.monthReminded = s.monthReminded||'';
     s.customFoods = Array.isArray(s.customFoods)? s.customFoods : [];
     s.customExercises = Array.isArray(s.customExercises)? s.customExercises : [];
@@ -916,6 +917,48 @@ function sumReadingPages(){ return (state.readingBooks||[]).reduce((s,b)=>s+(Num
 function bookKey(b,i){ return (b && (b.name||'').trim()) || ('#'+i); }
 function bookPagesMap(){ const m={}; (state.readingBooks||[]).forEach((b,i)=>{ m[bookKey(b,i)] = Number(b.current)||0; }); return m; }
 function bookSum(o){ return o ? Object.values(o).reduce((s,v)=>s+(Number(v)||0),0) : null; }
+/* ===== 阅读进度单一数据源（Q14/Q16） =====
+   readDaily[date] = { pages:{书名:已读到页}, total:{书名:总页}, ts }
+   打卡门禁与「📈 更新进度」都写这里；bookEnd / 月报 / CSV 统一从这里派生，
+   不再依赖「打开 App 时被动抓 readingBooks.current」的实时快照（旧版会静默抹掉历史增量）。 */
+function recordReadProgress(pages, totals){
+  pages=pages||{}; totals=totals||{};
+  const d=today(), ym=d.slice(0,7);
+  state.readDaily=state.readDaily||{};
+  state.readDaily[d]={ pages:Object.assign({},pages), total:Object.assign({},totals), ts:Date.now() };
+  (state.readingBooks||[]).forEach((b,i)=>{
+    const k=bookKey(b,i);
+    if(pages[k]!=null) b.current=Math.max(0,Math.floor(Number(pages[k])||0));
+    if(totals[k]!=null) b.total=Math.max(0,Math.floor(Number(totals[k])||0));
+  });
+  state.readPages=state.readPages||{};
+  const e=state.readPages[ym]||(state.readPages[ym]={ bookStart:Object.assign({},bookPagesMap()), bookEnd:{} });
+  e.bookEnd=e.bookEnd||{};
+  Object.keys(pages).forEach(k=>{ e.bookEnd[k]=Math.max(Number(e.bookEnd[k])||0,Number(pages[k])||0); });
+  e.start=bookSum(e.bookStart)||0; e.end=bookSum(e.bookEnd)||0;
+  save();
+}
+// 月末值 = 旧快照与当月所有逐日记录取单调最大；进度回退不改小历史
+function deriveBookEnd(ym){
+  const old=(state.readPages[ym]&&state.readPages[ym].bookEnd)||{};
+  const out=Object.assign({},old);
+  Object.keys(state.readDaily||{}).filter(d=>d.slice(0,7)===ym).sort().forEach(d=>{
+    const p=(state.readDaily[d]||{}).pages||{};
+    Object.keys(p).forEach(k=>{ out[k]=Math.max(Number(out[k])||0,Number(p[k])||0); });
+  });
+  return out;
+}
+// 当月与历史月共用同一口径：本月阅读页数 = 月末「已读到第几页」− 月初「已读到第几页」
+function computeMonthPages(ym){
+  migrateReadPagesKey();
+  const rp=state.readPages[ym]||{}, rpPrev=state.readPages[prevMonthKey(ym)]||{};
+  const start=rp.bookStart||(rpPrev.bookEnd?Object.assign({},rpPrev.bookEnd):null);
+  const end=deriveBookEnd(ym);
+  const startV=bookSum(start);
+  const endV=(startV!=null&&Object.keys(end).length)?bookSum(end):(startV!=null?startV:null);
+  const pages=(startV!=null&&endV!=null)?(endV-startV):null;   // 不夹 0：负值走「修正基准」提示
+  return { start, end, startV, endV, pages, abnormal:(pages!=null&&pages<0) };
+}
 // 旧版本按数组下标存快照，增删书会错位导致把别的书页数算进来 → 迁移为书名键
 function migrateReadPagesKey(){
   const rp = state.readPages || {};
@@ -945,8 +988,9 @@ function ensurePageBaseline(){
     state.readPages[ym] = { bookStart: Object.assign({}, bm), bookEnd: Object.assign({}, bm) };
   } else {
     if(!state.readPages[ym].bookStart) state.readPages[ym].bookStart = Object.assign({}, bm);
-    // 合并而非重建：已读完移出书架的书保留最后一次记录的页数，其本月增量不会丢失
-    state.readPages[ym].bookEnd = Object.assign({}, state.readPages[ym].bookEnd, bm);
+    // Q14：bookEnd 不再用实时 current 覆盖（旧版会静默抹掉历史增量），
+    // 改由 deriveBookEnd(ym) 从逐日 readDaily 派生，并与旧快照取单调最大。
+    state.readPages[ym].bookEnd = deriveBookEnd(ym);
   }
   const e = state.readPages[ym];
   e.start = bookSum(e.bookStart) || 0;
@@ -961,7 +1005,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-11b';
+const APP_VERSION = '2026-11-11c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2526,16 +2570,11 @@ function renderMonthly(){
   dates.forEach(d=>{ const r=rec('ielts')[d]; if(r&&r.menu&&r.menu.picks){ const hit=new Set(); r.menu.picks.forEach(id=>{ const it=IELTS_MENU.find(x=>x.id===id); if(it&&it.tag&&tags.indexOf(it.tag)>=0&&r.menu.done&&r.menu.done[id]) hit.add(it.tag); }); hit.forEach(t=>tagDays[t]++); } });
 
   // 4) 阅读页数 = 月末「已读到第几页」 − 月初「已读到第几页」
-  migrateReadPagesKey();
-  const rp = state.readPages[ym] || {};
-  const rpPrev = state.readPages[prevMonthKey(ym)] || {};
+  // Q14：当月与历史月共用 computeMonthPages，不再有「当月用实时值覆盖」的不对称，负值也不夹 0
+  const mp = computeMonthPages(ym);
+  const rpStart = mp.start, rpEnd = mp.end;
+  const startV = mp.startV, endV = mp.endV, pages = mp.pages;
   const isCur = (ym===currentMonthKey());
-  // 月初基准：优先本月快照；缺失时用「上月末」快照（上月末值即本月初值）
-  const rpStart = rp.bookStart || (rpPrev.bookEnd ? Object.assign({}, rpPrev.bookEnd) : null);
-  const rpEnd = isCur ? Object.assign({}, rp.bookEnd||{}, bookPagesMap()) : (rp.bookEnd || rpStart);
-  const startV = bookSum(rpStart);
-  const endV = bookSum(rpEnd);
-  const pages = (startV!=null && endV!=null)? Math.max(0, endV-startV) : null;
 
   const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
   const weightHtml = (wMax==null)
@@ -2546,14 +2585,16 @@ function renderMonthly(){
   const bookRowsHtml = bookKeys.map(k=>{
     const bs = (rpStart && rpStart[k]!=null)? Number(rpStart[k]) : 0;
     const be = (rpEnd && rpEnd[k]!=null)? Number(rpEnd[k]) : bs;
-    const bp = Math.max(0, be-bs);
+    const bp = be-bs;
     const nm = (k.charAt(0)==='#') ? ('未命名' + k.slice(1)) : k;
     return `<div class="brow"><span class="bn">${escapeHtml(nm)}</span><span class="bp">${bs} → ${be}</span><span class="bd">+${bp}</span></div>`;
   }).join('');
-  const pageHtml = (pages!=null)
-    ? `<div class="stats stats2">${stat(startV+' 页','月初已读到')}${stat(endV+' 页',(isCur?'月末(至今)已读到':'月末已读到'))}${stat('+'+pages+' 页','本月阅读页数')}</div>
+  const pageHtml = mp.abnormal
+    ? `<div class="empty">⚠️ 月末页数小于月初基准，数据异常 · 请去「每日阅读 → 📈 更新进度」修正，或检查书目是否改名<span class="hint">本月原始差值 ${pages} 页，不再被强制归零</span></div>`
+    : (pages!=null)
+    ? `<div class="stats stats2">${stat(startV+' 页','月初已读到')}${stat(endV+' 页',(isCur?'月末(至今)已读到':'月末已读到'))}${stat((pages>=0?'+':'')+pages+' 页','本月阅读页数')}</div>
        ${bookRowsHtml?`<div class="bookpages"><div class="bph">📚 各书目（月初 → 月末「已读到第几页」）</div>${bookRowsHtml}</div>`:''}`
-    : `<div class="empty">本月还没有「已读到第几页」的月初基准，无法计算变化量<span class="hint">每月首次打开 App 会自动记录基准，下月起即可统计</span></div>`;
+    : `<div class="empty">本月还没有「已读到第几页」的月初基准，无法计算变化量<span class="hint">每日阅读打卡时会登记进度，次月起即可统计</span></div>`;
 
   document.getElementById('main').innerHTML = `
     <div class="mhead">
@@ -2583,7 +2624,7 @@ function renderMonthly(){
     <div class="dcard">
       <div class="secttitle">📖 阅读页数</div>
       ${pageHtml}
-      <p class="hint">= 月末「已读到第几页」 − 月初「已读到第几页」，按书目分别计算后汇总（月初基准在每月首次打开 App 时自动记录）。</p>
+      <p class="hint">= 月末「已读到第几页」 − 月初「已读到第几页」，按书目分别计算后汇总。进度来自每日打卡时登记的页码，回退不抹历史增量。</p>
     </div>`;
 }
 
@@ -3610,7 +3651,7 @@ function renderReading(){
       </div>
       <input id="readingNote" class="full" placeholder="读了什么 / 一句话感想（可选）" value="${t.note?escapeAttr(t.note):''}" style="margin-top:8px"/>
       <button class="btn ${done?'ghost':'primary'} w100" onclick="toggleDone('reading')" style="margin-top:10px">${done?'✏️ 取消今日完成':'✅ 标记今日完成'}</button>
-      <p class="hint">${done?'📖 已打卡！记得去微信读书领今日书币':'读完填写时长并打卡，连续天数会自动累计 💪'}</p>
+      <p class="hint">${done?'📖 已打卡！记得去微信读书领今日书币':'打卡前会先让你填「读到第几页」，月度统计与导出都以此为准 📈'}</p>
     </div>
     ${takeawayHtml('reading')}
     ${hist}`;
@@ -3652,8 +3693,45 @@ const READ_ACH = [
   {id:'f1',    finished:1, emoji:'🏅', name:'开卷有成'},
   {id:'f5',    finished:5, emoji:'📚', name:'博览群书'}
 ];
+/* 打卡门禁（Q16）：今日没有「读到第几页」记录时，先弹进度 sheet，填完才允许置 done=true */
+let _pendingReadAction=null;
+function requirePageProgress(action){
+  const d=today();
+  if(state.readDaily&&state.readDaily[d]&&state.readDaily[d].pages){ if(typeof action==='function') action(); return; }
+  _pendingReadAction=action;
+  const books=state.readingBooks||[];
+  const rows=books.map((b,i)=>`<div class="field"><label>${escapeHtml(b.name||('书 '+(i+1)))} · 已读到第几页</label><input id="rdp${i}" type="number" min="0" value="${Number(b.current)||0}"/></div>`).join('');
+  document.getElementById('sheet').innerHTML=`
+    <h3>📈 打卡前先更新今日进度</h3>
+    <p class="hint">打卡需先记录「读到第几页」，月度页数统计与 CSV 导出都以此为准。可与原值相同（今日未推进记 0 增量）。</p>
+    ${rows||'<p class="hint">书单为空，请先在「✏️ 编辑 Top 3 书籍」里添加</p>'}
+    <div class="row">
+      <button class="btn ghost" onclick="closeSheet()">取消</button>
+      <button class="btn primary" onclick="submitPageProgress()">保存并完成打卡</button>
+    </div>`;
+  document.getElementById('sheetMask').classList.add('show');
+}
+function submitPageProgress(){
+  const books=state.readingBooks||[], pages={}, totals={};
+  books.forEach((b,i)=>{
+    const el=document.getElementById('rdp'+i); if(!el) return;
+    const k=bookKey(b,i);
+    pages[k]=Math.max(0,Math.floor(Number(el.value)||0));
+    totals[k]=Number(b.total)||0;
+  });
+  if(!Object.keys(pages).length){ toast('请先添加书籍'); return; }
+  recordReadProgress(pages,totals);
+  closeSheet();
+  const fn=_pendingReadAction; _pendingReadAction=null;
+  if(typeof fn==='function') fn();
+}
 // 完成一次阅读打卡：置 done、按目标下限、解锁成就、庆祝
 function readingComplete(minutes){
+  // Q16 强制：无当日进度记录时先弹「更新进度」，填完再回到这里真正打卡
+  const _d=today();
+  if(!(state.readDaily&&state.readDaily[_d]&&state.readDaily[_d].pages)){
+    requirePageProgress(()=>readingComplete(minutes)); return;
+  }
   const goal=state.settings.readGoal||5;
   const mins=Math.max(minutes||0,goal);
   const t=rec('reading')[today()]||{done:false,note:''};
@@ -3784,6 +3862,8 @@ function saveBookProgress(i){
   }
   const na=readingCheckAch();
   if(isLastDayOfMonth()){ state.monthReminded = currentMonthKey(); }
+  // Q14/Q16：把本次「已读到第几页」写入逐日单一数据源，消除书架 current 与统计/CSV 两套数据
+  { const _p={},_t={}; state.readingBooks.forEach((b,j)=>{ const k=bookKey(b,j); _p[k]=Number(b.current)||0; _t[k]=Number(b.total)||0; }); recordReadProgress(_p,_t); }
   ensurePageBaseline();
   closeSheet(); renderReading();
   if(b.finished) readingFinishCelebrate(b.name, state.readingFinished.length, na);
@@ -5256,11 +5336,13 @@ async function pushData(silent){
 let _cloudBroken=false;              // 云端文件结构性损坏（超 1MB 被截断且取不到全文）→ 允许用本机数据覆盖自救
 let _cloudInfo=null;                // 最近一次读到的云端文件信息：{size,truncated,fmt,ts}
 let _lastPullFailAt=0;              // 最近一次静默 pull 失败时间戳（避免同一会话重复打网络请求）
-async function gistRawWithRetry(finfo,token){
-  // raw.githubusercontent.com 在移动端/办公网常不可达：连试 2 次（中间隔 1.5s），带时间戳参数绕开中间缓存
+async function gistRawWithRetry(finfo){
+  // raw.githubusercontent.com 是公开只读域，不需要也不应携带 PAT：
+  // 旧版把 token 塞进 Authorization 头发到该域 = 凭证外送（Q4）。PAT 只允许用于 api.github.com。
+  // 移动端/办公网常不可达：连试 2 次（中间隔 1.5s），带时间戳参数绕开中间缓存
   for(let i=0;i<2;i++){
     try{
-      const rr=await fetch(finfo.raw_url+(finfo.raw_url.includes('?')?'&':'?')+'_t='+Date.now(),{cache:'no-store',headers:{Authorization:`token ${token}`}});
+      const rr=await fetch(finfo.raw_url+(finfo.raw_url.includes('?')?'&':'?')+'_t='+Date.now(),{cache:'no-store'});
       if(rr.ok){ const t=await rr.text(); if(t) return t; }
     }catch(e){ console.warn('gist raw fetch fail',e); }
     if(i===0) await new Promise(r=>setTimeout(r,1500));
@@ -5284,7 +5366,7 @@ async function pullData(silent){
     let content=finfo && finfo.content;
     // GitHub 对超过 1MB 的文件会截断 content（truncated:true），需从 raw_url 取全文
     if(finfo && finfo.truncated){
-      if(finfo.raw_url) content=await gistRawWithRetry(finfo,s.gistToken); else content=null;
+      if(finfo.raw_url) content=await gistRawWithRetry(finfo); else content=null;
       if(!content){
         // 结构性损坏：本机数据反而完整 → 标记后由 doAutoPush / 「覆盖云端」按钮用本机数据重写修复
         _cloudBroken=true;
@@ -5403,6 +5485,47 @@ function mergeState(remote){
     const set={}; (state.outTags||[]).concat(remote.outTags).forEach(t=>{ if(t) set[t]=1; });
     state.outTags=Object.keys(set);
   }
+  // ===== Q1：补漏合并的新字段 + 未登记字段兜底（防「忘了就静默丢数据」）=====
+  // 上一轮新增的 AI 持续复习字段曾完全没进合并清单 → 复习轮次/自测记录跨端必丢
+  state.aiReviewRound=Math.max(Number(state.aiReviewRound)||0, Number(remote.aiReviewRound)||0);
+  state.aiReviewRoundStartTs=Math.max(Number(state.aiReviewRoundStartTs)||0, Number(remote.aiReviewRoundStartTs)||0);
+  state.aiDailyQuizDone=Object.assign({}, remote.aiDailyQuizDone||{}, state.aiDailyQuizDone||{});
+  state.aiDailyQuiz=Object.assign({}, remote.aiDailyQuiz||{}, state.aiDailyQuiz||{});
+  state.aiDaily=Object.assign({}, remote.aiDaily||{}, state.aiDaily||{});   // 当日批次本机优先
+  // 阅读逐日进度：按 ts 的 last-write-wins
+  { const ld=state.readDaily||{}, rdd=remote.readDaily||{}, out=Object.assign({},ld);
+    Object.keys(rdd).forEach(d=>{ const a=out[d], b=rdd[d];
+      if(!a || (b && (b.ts||0)>=(a.ts||0))) out[d]=b; });
+    state.readDaily=out; }
+  // 阅读页数快照：按月份合并，月初基准本机优先、月末值取单调最大
+  { const lp=state.readPages||{}, rpp=remote.readPages||{}, out=Object.assign({},lp);
+    Object.keys(rpp).forEach(ym=>{
+      const a=out[ym]||{}, b=rpp[ym]||{};
+      const be=Object.assign({}, a.bookEnd||{}, b.bookEnd||{});
+      Object.keys(be).forEach(k=>{
+        const av=Number((a.bookEnd||{})[k]), bv=Number((b.bookEnd||{})[k]);
+        if(!isNaN(av)&&!isNaN(bv)) be[k]=Math.max(av,bv);
+      });
+      out[ym]=Object.assign({}, b, a, { bookStart:Object.assign({}, b.bookStart||{}, a.bookStart||{}), bookEnd:be });
+    });
+    state.readPages=out; }
+  // 已显式处理（各自有专门策略），不走兜底
+  const MERGE_EXPLICIT = new Set(['user','profile','newsLinks','readingBooks','readingFinished','readingAch',
+    'aiMastered','aiMasteredTs','aiMasteredDel','aiStudy','aiStudyTs','aiExt','aiPass1','aiReviewCycle',
+    'aiDaily','aiDailyQuiz','aiDailyQuizDone','aiReviewRound','aiReviewRoundStartTs','ieltsListened',
+    'settings','customFoods','customExercises','notes','qa','modules','interviews','outputs','outTags',
+    'readDaily','readPages']);
+  // 未登记字段：默认深合并 + 一次汇总告警，将来新增字段不会再静默丢失
+  const _unregistered=Object.keys(remote||{}).filter(k=>!MERGE_EXPLICIT.has(k));
+  if(_unregistered.length) console.warn('[mergeState] 未登记字段按默认策略合并：'+_unregistered.join(', '));
+  _unregistered.forEach(k=>{
+    const lv=state[k], rv=remote[k];
+    if(rv==null) return;
+    if(Array.isArray(rv)) state[k]=[...new Set([...(Array.isArray(lv)?lv:[]), ...rv])];
+    else if(typeof rv==='object' && !Array.isArray(lv)) state[k]=Object.assign({}, (lv&&typeof lv==='object'?lv:{}), rv);
+    else if(typeof rv==='number') state[k]=Math.max(Number(lv)||0, rv);
+    else if(lv==null || lv==='') state[k]=rv;
+  });
 }
 async function testConn(){
   const s=state.settings;
@@ -5719,48 +5842,75 @@ function exportModuleCSV(mod){
     });
     showCSVModal('exercise-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'ielts'){
-    rows.push(['日期', '听', '说', '读', '写', '菜单完成项']);
+    rows.push(['日期', '听', '说', '读', '写', '当日分配项目', '已打卡项目']);
     const records = rec('ielts');
+    // Q15：菜单列原本导出数字 id（1 / 6 / 10），看不出打卡了什么 → 映射为中文项目名，并区分「分配 / 已打卡」
     Object.keys(records).sort().forEach(d=>{
       const r = records[d]; if(!r) return;
       const parts = r.parts || {};
-      const menu = (r.menu && r.menu.picks && r.menu.picks.length) ? r.menu.picks.join(' / ') : '';
+      const picks = (r.menu && r.menu.picks) ? r.menu.picks : [];
+      const done = (r.menu && r.menu.done) ? r.menu.done : {};
+      const nm = id => { const it=IELTS_MENU.find(x=>x.id===id); return it ? ((it.emoji||'')+it.name) : ('#'+id); };
       rows.push([d,
         parts.listen && parts.listen.done ? '是' : '否',
         parts.speak && parts.speak.done ? '是' : '否',
         parts.read && parts.read.done ? '是' : '否',
         parts.write && parts.write.done ? '是' : '否',
-        menu
+        picks.map(nm).join('；'),
+        picks.filter(id=>done[id]).map(nm).join('；')
       ]);
     });
     showCSVModal('ielts-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'ai'){
-    rows.push(['术语', '已掌握', '掌握时间', '学习遍数', '删除时间']);
-    const terms = (typeof allAiTerms === 'function') ? allAiTerms() : (AI_TERMS||[]);
+    rows.push(['术语', '释义', '已掌握', '掌握时间', '学习遍数', '删除时间']);
+    // Q15：allAiTerms() 返回 {key,t} 包装对象，旧版当成词条直接取 t.term → 术语名/状态整列为空。
+    // idx 必须用 key（与 aiMastered / aiStudy / aiMasteredTs 的键一致）；「学习遍数」取 aiStudy（旧版误取时间戳）。
+    const terms = (typeof allAiTerms === 'function') ? allAiTerms() : (AI_TERMS||[]).map((t,i)=>({key:i,t}));
     const ts = state.aiMasteredTs || {};
     const del = state.aiMasteredDel || {};
-    const study = state.aiStudyTs || {};
+    const study = state.aiStudy || {};
     const masteredSet = new Set(state.aiMastered || []);
-    terms.forEach(t=>{
-      const idx = t.idx != null ? t.idx : (t.id || '');
-      const name = t.term || t.title || '';
-      rows.push([name, masteredSet.has(idx) ? '是' : '否',
+    terms.forEach(x=>{
+      const idx = x.key, t = x.t || x;
+      rows.push([t.term||t.title||'', t.mean||'', masteredSet.has(idx) ? '是' : '否',
         ts[idx] ? new Date(ts[idx]).toLocaleString('zh-CN') : '',
-        study[idx] ? study[idx] : 0,
+        study[idx] || 0,
         del[idx] ? new Date(del[idx]).toLocaleString('zh-CN') : ''
       ]);
     });
+    // 明确「掌握了哪些术语」：按 aiMasteredTs 落日期输出新掌握明细
+    rows.push([]);
+    rows.push(['-- 新掌握明细（按日期）--']);
+    rows.push(['日期', '术语']);
+    Object.keys(ts).sort((a,b)=>(ts[a]||0)-(ts[b]||0)).forEach(k=>{
+      const hit = terms.find(x=>String(x.key)===String(k));
+      const t = hit ? (hit.t||hit) : null;
+      rows.push([ts[k] ? fmt(new Date(ts[k])) : '', t ? (t.term||t.title||'') : ('#'+k)]);
+    });
     showCSVModal('ai-terms-' + td + '.csv', rows.map(r => r.map(csvEscape).join(',')).join('\r\n'));
   } else if(mod === 'reading'){
-    rows.push(['日期', '书名', '当前页', '总页数', '已读完']);
-    const records = rec('reading');
-    Object.keys(records).sort().forEach(d=>{
-      const r = records[d]; if(!r) return;
-      const pages = r.pages || {};
-      Object.keys(pages).forEach(book => {
-        const total = pages[book] && pages[book].total ? pages[book].total : '';
-        const cur = pages[book] && pages[book].current ? pages[book].current : '';
-        rows.push([d, book, cur, total, r.done ? '是' : '否']);
+    rows.push(['日期', '书名', '阅读前页', '阅读后页', '当日增量', '总页数', '打卡状态']);
+    // Q15：旧版读 rec('reading')[d].pages，但该字段从未写入 → 只有表头。改为从 readDaily 逐日导出真实页码。
+    const rd = state.readDaily || {};
+    const prev = {};
+    Object.keys(rd).sort().forEach(d=>{
+      const e = rd[d] || {}, pages = e.pages || {}, totals = e.total || {};
+      const r = rec('reading')[d] || {};
+      Object.keys(pages).forEach(book=>{
+        const after = Number(pages[book])||0;
+        const before = prev[book]!=null ? prev[book] : after;   // 首条无前值，增量记 0
+        rows.push([d, book, before, after, after-before,
+          (totals[book]!=null ? Number(totals[book]) : ''), r.done?'是':'否']);
+        prev[book] = after;
+      });
+    });
+    // 兼容历史：无 readDaily 的旧记录（r.pages）
+    Object.keys(rec('reading')).sort().forEach(d=>{
+      const r = rec('reading')[d];
+      if(rd[d] || !r || !r.pages) return;
+      Object.keys(r.pages).forEach(book=>{
+        const p = r.pages[book]||{};
+        rows.push([d, book, '', p.current||'', '', p.total||'', r.done?'是':'否']);
       });
     });
     // 也导出已读书架
