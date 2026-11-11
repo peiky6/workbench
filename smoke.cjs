@@ -531,5 +531,63 @@ if(htmlJs){
   if(examRead) ok('设置保存时读取考试日期'); else bad('设置保存未读取考试日期');
 }
 
+// v2026-11-11b 行为级回归：真正执行 aiLearn()，捕获「语法校验 + 字符串断言抓不到」的运行时错误。
+// 事故背景：aiLayerProgressHtml() 漏声明 all → ReferenceError → AI 模块点击后整块不渲染（白屏）。
+// 维护提示：以下为最小化浏览器 API 桩；若日后顶层初始化新增 API 调用，需在此补桩。
+(function runtimeCheckAiLearn(){
+  const vm = require('vm');
+  const raw = fs.readFileSync(htmlPath, 'utf8');
+  const blocks = raw.match(/<script>([\s\S]*?)<\/script>/g) || [];
+  const appJs = blocks.length ? blocks[blocks.length-1].replace(/^<script>/,'').replace(/<\/script>$/,'') : '';
+  if(!appJs){ bad('AI 视图运行时校验：未抽取到主脚本'); return; }
+  const p0 = appJs.indexOf('function aiLayerProgressHtml()');
+  const p1 = appJs.indexOf('function aiLearn()');
+  const progBody = p0>=0 && p1>p0 ? appJs.slice(p0, p1) : '';
+  if(/const all\s*=\s*aiTermIdxList\(\)/.test(progBody)) ok('aiLayerProgressHtml 已声明 all（防 ReferenceError 白屏回归）');
+  else bad('aiLayerProgressHtml 缺少 all 声明（AI 视图会白屏）');
+  const gen = t => new Proxy(t, {get:(o,k)=>k in o?o[k]:()=>undefined, set:(o,k,v)=>{o[k]=v;return true}});
+  const mkEl = () => gen({
+    classList:{add(){},remove(){},toggle(){},contains(){return false}},
+    style:new Proxy({},{get:()=>'',set:()=>true}), dataset:{}, children:[], childNodes:[], options:[],
+    value:'', innerHTML:'', textContent:'', checked:false,
+    querySelectorAll:()=>[], querySelector:()=>mkEl(), getBoundingClientRect:()=>({top:0,left:0,width:0,height:0}),
+    appendChild(){}, removeChild(){}, remove(){}, focus(){}, blur(){}, click(){}, setAttribute(){},
+    getAttribute:()=>null, addEventListener(){}, removeEventListener(){}, insertAdjacentHTML(){},
+    closest:()=>null, contains:()=>false, scrollIntoView(){}, cloneNode:()=>mkEl()
+  });
+  const store = {};
+  const Notif = Object.assign(function(){}, {permission:'default', requestPermission:()=>Promise.resolve('default')});
+  const win = {
+    document: gen({getElementById:()=>mkEl(), querySelector:()=>mkEl(), querySelectorAll:()=>[],
+      createElement:()=>mkEl(), body:mkEl(), documentElement:mkEl(), head:mkEl(),
+      addEventListener(){}, removeEventListener(){}, createTextNode:()=>mkEl(), cookie:'', title:''}),
+    localStorage:{getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>{store[k]=String(v)},
+      removeItem:k=>{delete store[k]}, clear:()=>{}, key:()=>null, length:0},
+    console:{log(){},warn(){},error(){}}, addEventListener(){}, removeEventListener(){}, scrollY:0, scrollTo(){},
+    matchMedia:()=>({matches:false,addListener(){},addEventListener(){}}),
+    location: gen({href:'https://x/', protocol:'https:', search:'', reload(){}}),
+    open:()=>null, requestAnimationFrame:()=>0, confirm:()=>true, prompt:()=>'', alert:()=>{},
+    atob:s=>Buffer.from(s,'base64').toString('binary'), btoa:s=>Buffer.from(s,'binary').toString('base64'),
+    Notification:Notif, setTimeout:()=>0, setInterval:()=>0, clearInterval:()=>{}, clearTimeout:()=>{},
+    fetch:()=>Promise.reject(new Error('offline')),
+    navigator: gen({serviceWorker:gen({register:()=>Promise.resolve({}), addEventListener(){}}), onLine:true,
+      clipboard:{writeText:()=>Promise.resolve()}}),
+    crypto: require('crypto').webcrypto, Blob:function(){}, FileReader:function(){},
+    TextEncoder, TextDecoder, URL
+  };
+  win.window=win; win.self=win; win.globalThis=win;
+  const ctx = vm.createContext(win);
+  const tail = '\n;try{ globalThis.__R=aiLearn(); globalThis.__E=null; }catch(e){ globalThis.__E=e.name+": "+e.message; }'
+             + '\n;try{ state.settings.aiDailyQuiz=true; globalThis.__R2=aiLearn(); globalThis.__E2=null; }catch(e){ globalThis.__E2=e.name+": "+e.message; }';
+  try{
+    vm.runInContext(appJs + tail, ctx, {filename:'index.html', timeout:10000});
+    if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
+    else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
+    else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
+    if(ctx.__E2) bad('AI 视图 aiLearn() 运行时异常（每日自测开启）', ctx.__E2);
+    else ok('AI 视图 aiLearn() 运行时无异常（每日自测开启）');
+  }catch(e){ bad('AI 视图运行时校验未能执行', e.message); }
+})();
+
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
 process.exit(fail ? 1 : 0);

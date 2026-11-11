@@ -961,7 +961,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-11a';
+const APP_VERSION = '2026-11-11b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -3153,6 +3153,7 @@ function aiLayerProgressHtml(){
   const ready=aiReadyCount(); const readyPct=total?Math.round(ready/total*100):0;
   const rounds=aiRoundsTotal(); const roundsTarget=total*AI_REVIEW_TARGET;
   const roundPct=roundsTarget?Math.min(100,Math.round(rounds/roundsTarget*100)):0;
+  const all=aiTermIdxList();
   const revRound=(state.aiReviewRound||0);
   const revStart=(state.aiReviewRoundStartTs||0);
   const revDone=all.filter(i=> (state.aiStudyTs[i]||0) > (revStart - 5000)).length;
