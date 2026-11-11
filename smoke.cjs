@@ -634,6 +634,18 @@ if(htmlJs){
   try{ renderReading(); R.renderReading='ok'; }catch(e){ R.renderReadingErr=e.name+': '+e.message; }
   try{ renderMonthly(); R.renderMonthly='ok'; }catch(e){ R.renderMonthlyErr=e.name+': '+e.message; }
   try{ ensurePageBaseline(); R.baseline='ok'; }catch(e){ R.baselineErr=e.name+': '+e.message; }
+  // P1：人为让 aiLearn 抛错，验证 renderModule 会渲染兜底卡片而不是整页白屏
+  try{
+    var __mainEl=document.createElement('div');
+    var __origGet=document.getElementById;
+    document.getElementById=function(id){ return id==='main' ? __mainEl : __origGet(id); };
+    var __origLearn=aiLearn;
+    aiLearn=function(){ throw new Error('模拟模块渲染异常'); };
+    try{ renderModule('ai'); }catch(e){ R.fallbackThrew=e.name+': '+e.message; }
+    R.fallbackHtml=__mainEl.innerHTML;
+    aiLearn=__origLearn;
+    document.getElementById=__origGet;
+  }catch(e){ R.fallbackErr=e.name+': '+e.message; }
   globalThis.__P0=R;
 })(); }catch(e){ globalThis.__P0ERR=e.name+': '+e.message; }
 `;
@@ -693,6 +705,88 @@ if(htmlJs){
   else ok('renderMonthly 运行时无异常（月报视图）');
   if(R.baselineErr) bad('ensurePageBaseline 运行时异常', R.baselineErr);
   else ok('ensurePageBaseline 运行时无异常（基准派生）');
+  if(R.fallbackErr) bad('模块渲染兜底自检异常', R.fallbackErr);
+  else if(R.fallbackThrew) bad('renderModule 未吞掉渲染异常', R.fallbackThrew);
+  else if(/这个模块暂时打不开/.test(R.fallbackHtml||'')) ok('模块渲染抛错时显示兜底卡片（不再白屏）');
+  else bad('模块渲染异常未渲染兜底卡片', (R.fallbackHtml||'').slice(0,120));
+})();
+
+// ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
+(function p1Checks(){
+  const htmlRaw = fs.readFileSync(htmlPath, 'utf8');
+  const cspM = htmlRaw.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/);
+  if(!cspM) bad('P1 缺少 CSP meta');
+  else{
+    const c = cspM[1];
+    ok('存在：CSP meta（最小可用策略）');
+    if(/connect-src[^;]*api\.github\.com/.test(c) && /gist\.githubusercontent\.com/.test(c)) ok('CSP connect-src 覆盖 Gist 实际下载域');
+    else bad('CSP 白名单缺少 gist.githubusercontent.com（会拦断云端同步）');
+    if(/frame-ancestors|report-uri|report-to/.test(c)) bad('CSP 含 meta 无效指令');
+    else ok('CSP 不含 meta 无效指令');
+    if(/script-src[^;]*'unsafe-inline'/.test(c)) ok('CSP 保留 unsafe-inline（内联事件依赖，收紧列下一期）');
+    else bad('CSP 误删 unsafe-inline（内联事件会全部失效）');
+  }
+  if(/allorigins|corsproxy|fetchViaProxy|tryFetchHuxiu|tryFetchIdictation|parseHuxiu|parseGeneric|parseRss/.test(htmlRaw)) bad('仍残留公共代理抓取代码/域名');
+  else ok('Q5 公共代理与自动抓取已彻底移除');
+  if(/自动抓取已停用/.test(htmlRaw)) ok('新闻页改为外链跳转提示'); else bad('缺新闻页停用提示');
+  for(const [t,d] of [['__WB_BOOT_OK','启动标志'],['__wbFatal','全局错误横幅'],
+    ['__wbModuleFail','模块兜底卡片'],['__wbRenderInner','render 包装'],['__wbRenderModuleInner','renderModule 包装'],
+    ['workbench-emergency-','兜底导出文件名'],['window.onerror','全局错误捕获']]){
+    if(htmlRaw.includes(t)) ok('存在：'+d); else bad('缺失：'+d);
+  }
+  if(!fs.existsSync(path.join(root,'bump.cjs'))) bad('缺失：bump.cjs 发布脚本');
+  else ok('存在：bump.cjs 发布脚本');
+  const swTxt = fs.readFileSync(swPath,'utf8');
+  const fm = swTxt.match(/const FILES\s*=\s*\[([^\]]*)\]/);
+  const listed = fm ? fm[1].split(',').map(s=>s.trim().replace(/^['"]|['"]$/g,'')).filter(Boolean) : [];
+  const need = fs.readdirSync(root).filter(f=>{
+    if(!fs.statSync(path.join(root,f)).isFile()) return false;
+    return f==='index.html'||f==='data-notes.js'||f==='manifest.webmanifest'||/^icon.*\.(png|svg)$/.test(f)||/\.html$/.test(f);
+  });
+  const miss = need.filter(f=>!listed.includes(f));
+  if(miss.length) bad('sw.js FILES 缺静态文件：'+miss.join(', '));
+  else ok('sw.js FILES 含全部运行时静态文件（'+listed.length+' 项）');
+
+  // 行为级：真正执行 head 内联错误边界脚本，验证横幅能挂载、导出入口存在
+  const vm = require('vm');
+  const blocks = htmlRaw.match(/<script>([\s\S]*?)<\/script>/g)||[];
+  const headJs = blocks.length>1 ? blocks[0].replace(/^<script>/,'').replace(/<\/script>$/,'') : '';
+  if(!headJs){ bad('未抽取到 head 错误边界脚本'); return; }
+  let appended=0;
+  const mk = () => new Proxy({style:{},children:[],textContent:'',id:'',innerHTML:''},{
+    get(t,k){
+      if(k==='appendChild') return c=>{ t.children.push(c); appended++; };
+      if(k==='remove') return ()=>{};
+      if(k==='setAttribute') return (a,v)=>{ t[a]=v; };
+      if(k==='getAttribute') return ()=>null;
+      if(k==='addEventListener') return ()=>{};
+      return k in t ? t[k] : ()=>undefined;
+    },
+    set(t,k,v){ t[k]=v; return true; }
+  });
+  const body=mk();
+  const doc={createElement:()=>mk(), body:body, documentElement:mk(),
+    getElementById:()=>mk(), querySelector:()=>mk(), querySelectorAll:()=>[],
+    addEventListener(){}, removeEventListener(){}};
+  const win={document:doc, console:{log(){},warn(){},error(){}},
+    addEventListener(){}, removeEventListener(){}, location:{reload(){}},
+    localStorage:{getItem:()=>'{}'}, setTimeout:()=>0, Blob:function(){},
+    URL:{createObjectURL:()=> 'blob:x'}, alert(){}};
+  win.window=win; win.self=win; win.globalThis=win;
+  const ctx2=vm.createContext(win);
+  try{
+    vm.runInContext(headJs,ctx2,{filename:'head-boot.js',timeout:5000});
+    if(typeof win.__wbFatal!=='function') bad('head 脚本未注册 __wbFatal');
+    else ok('head 错误边界脚本可执行（__wbFatal 已注册）');
+    if(win.__WB_BOOT_OK===false) ok('启动标志初始为 false（主脚本挂掉可检出）');
+    else bad('启动标志初始值错误');
+    if(typeof win.onerror==='function') ok('window.onerror 已注册'); else bad('window.onerror 未注册');
+    win.__wbFatal('模拟启动失败');
+    if(appended>0 && body.style && body.style.paddingTop==='96px') ok('错误横幅可渲染且不遮挡内容（body 让位）');
+    else bad('错误横幅未能挂载', 'appended='+appended+' pad='+JSON.stringify(body.style));
+    if(/workbench-emergency-/.test(headJs)) ok('兜底导出读 localStorage，不依赖主脚本');
+    else bad('兜底导出缺失');
+  }catch(e){ bad('head 错误边界脚本运行时异常', e.message); }
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
