@@ -276,6 +276,39 @@ if(htmlJs){
     if(htmlRaw.includes(token)) ok('存在：' + desc);
     else bad('缺失：' + desc);
   }
+  // v2026-11-11a 阶段一：本地备份脱敏 + 真实下载（D1/D2/D3）
+  const stage1Tokens = [
+    ['function serializeBackup', '统一备份序列化（脱敏单一来源）'],
+    ['function purgeSecrets', '剔除 PAT/口令'],
+    ['function downloadBackup', '备份真实下载按钮逻辑'],
+    ["id=\"btnDownloadBackup\"", '备份弹窗「下载文件」按钮（HTML 属性）'],
+    ['delete clone.settings.gistToken', '备份剔除 GitHub Token'],
+    ['delete clone.settings.encPass', '备份剔除加密口令'],
+  ];
+  for(const [token, desc] of stage1Tokens){
+    if(htmlJs.includes(token) || htmlRaw.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  if(!/JSON\.stringify\(state,null,2\)/.test(htmlJs)) ok('本地备份已不再裸序列化整个 state（密钥不再泄露）');
+  else bad('本地备份仍裸序列化整个 state（密钥泄露风险）');
+  // v2026-11-11a 阶段二：AI 持续复习闭环（A 为主 + C 可选每日自测）
+  for(const [token, desc] of [
+    ['aiReviewActive', '永续复习模式开关'],
+    ['aiAllMastered', '全掌握判定'],
+    ['aiCheckRound', '复习轮次计数'],
+    ['aiDailyQuizDone', '每日自测完成判定'],
+    ['function aiDailyQuizRender', '每日自测渲染'],
+    ['function aiDailyQuizQuestions', '每日自测抽题'],
+    ['function aiToggleDailyQuiz', '每日自测开关'],
+    ['function aiToggleKeepReview', '持续复习开关'],
+    ['aiReviewRound:0', '复习轮次默认字段'],
+    ['aiDailyQuiz:{}', '每日自测状态字段'],
+    ['aiKeepReview:true', '持续复习默认开'],
+    ['复习今日 AI 术语', '首页待办复习文案'],
+  ]){
+    if(htmlJs.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
   // 首页顶部进度必须取「今日待办清单」的完成情况，不能再按 ACTIVE_MODULES 计数
   const homeBody = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
   if(homeBody && /todayChecklistItems\(\)/.test(homeBody[0]) && !/ACTIVE_MODULES\.filter\(m=>dayDone/.test(homeBody[0])) ok('首页进度取待办清单完成情况');
