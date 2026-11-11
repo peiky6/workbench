@@ -4,7 +4,61 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#89CFF0" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://gist.githubusercontent.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; worker-src 'self'" />
 <title>祈 · 自律工作台</title>
+<script>
+/* 全局错误兜底：主脚本整体挂掉时仍能看到提示并导出本地数据，不依赖主脚本任何函数 */
+(function(){
+  var KEY='qi_workbench_v2', pending=null, shown=false, waiting=false, prevPad='';
+  window.__WB_BOOT_OK=false;
+  function css(el,s){ el.setAttribute('style',s); return el; }
+  function btn(label,fn){
+    var b=document.createElement('button'); b.textContent=label;
+    css(b,'border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer');
+    b.onclick=fn; return b;
+  }
+  function mount(){
+    if(shown||!pending) return;
+    if(!document.body){ if(!waiting){ waiting=true; document.addEventListener('DOMContentLoaded',mount,{once:true}); } return; }
+    shown=true;
+    var bar=document.createElement('div'); bar.id='wbFatalBar';
+    css(bar,'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 14px;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-sizing:border-box');
+    var t=document.createElement('div'); t.textContent='⚠️ 页面加载出错，显示的可能不是最新内容'; bar.appendChild(t);
+    var s=document.createElement('div'); css(s,'font-size:11px;opacity:.85;margin-top:2px;word-break:break-all');
+    s.textContent=String(pending).slice(0,180); bar.appendChild(s);
+    var row=document.createElement('div'); css(row,'margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center');
+    row.appendChild(btn('🔄 重新加载',function(){ location.reload(); }));
+    row.appendChild(btn('💾 导出本地数据',function(){
+      try{
+        var raw=localStorage.getItem(KEY)||'{}';
+        var blob=new Blob([raw],{type:'application/json'});
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+        a.download='workbench-emergency-'+new Date().toISOString().slice(0,10)+'.json';
+        document.body.appendChild(a); a.click(); a.remove();
+      }catch(e){ alert('导出失败：'+((e&&e.message)||e)); }
+    }));
+    row.appendChild(btn('✕ 收起',function(){ bar.remove(); document.body.style.paddingTop=prevPad; }));
+    bar.appendChild(row);
+    prevPad=document.body.style.paddingTop;
+    document.body.style.paddingTop='96px';
+    document.body.appendChild(bar);
+  }
+  window.__wbFatal=function(msg){ pending=msg||'未知错误'; mount(); };
+  window.onerror=function(msg,src,line,col,err){
+    if(!window.__WB_BOOT_OK) window.__wbFatal((err&&err.message)||msg);
+    else console.error('[onerror]',msg,src,line,col,err);
+    return false;
+  };
+  window.addEventListener('unhandledrejection',function(e){
+    var r=e&&e.reason;
+    if(!window.__WB_BOOT_OK) window.__wbFatal('异步错误：'+((r&&r.message)||r||'未知'));
+    else console.error('[unhandledrejection]',r);
+  });
+  function bootCheck(){ if(!window.__WB_BOOT_OK) window.__wbFatal('启动未完成：主脚本可能加载或执行失败'); }
+  window.addEventListener('load',bootCheck);
+  setTimeout(bootCheck,3000);
+})();
+</script>
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" type="image/svg+xml" href="icon.svg" />
 <style>
@@ -1005,7 +1059,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-11c';
+const APP_VERSION = '2026-11-11d';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2058,7 +2112,21 @@ const IELTS_READING = [
 ];
 
 /* ===================== 渲染 ===================== */
-function render(){ renderSidebar(); if(currentView==='home') renderHome(); else if(currentView==='__monthly') renderMonthly(); else if(currentView==='__notes') renderNotes(); else if(currentView==='__outputs') renderOutputs(); else if(currentView==='interview') renderInterview(); else renderModule(currentView); }
+function render(){
+  try{ __wbRenderInner(); }
+  catch(e){ console.error('[render] 渲染失败', e); __wbModuleFail(e); }
+}
+function __wbRenderInner(){ renderSidebar(); if(currentView==='home') renderHome(); else if(currentView==='__monthly') renderMonthly(); else if(currentView==='__notes') renderNotes(); else if(currentView==='__outputs') renderOutputs(); else if(currentView==='interview') renderInterview(); else renderModule(currentView); }
+function __wbModuleFail(e){
+  try{
+    var m=document.getElementById('main'); if(!m) return;
+    var msg=String((e&&e.message)||e).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    m.innerHTML='<div class="dcard" style="text-align:center;padding:24px">'
+      +'<div style="font-size:28px">😕</div><div style="font-weight:700;margin:8px 0">这个模块暂时打不开</div>'
+      +'<p class="hint">页面其他功能仍可用，可点下方返回总览。错误摘要：'+msg+'</p>'
+      +'<button class="mini accent" onclick="setView(\'home\')">返回总览</button></div>';
+  }catch(_){ }
+}
 
 function renderSidebar(){
   const items = [{view:'home', emi:'🏠', label:'总览'}]
@@ -2520,6 +2588,10 @@ function recentCheckinsHtml(key){
   return `<div class="secttitle">📅 打卡日期（最近 ${dates.length} 天${key==='ielts'?' · 点击查看当天内容':''}）</div><div class="datelist">${dates.map(d=>`<span class="dchip"${key==='ielts'?` onclick="showIeltsDay('${d}')" style="cursor:pointer"`:''}>${d.slice(5)}</span>`).join('')}</div>`;
 }
 function renderModule(key){
+  try{ __wbRenderModuleInner(key); }
+  catch(e){ console.error('[renderModule] 模块渲染失败', e); __wbModuleFail(e); }
+}
+function __wbRenderModuleInner(key){
   const m=MODULES.find(x=>x.key===key);
   if(key==='mana'){ renderMana(); return; }
   if(key==='reading'){ renderReading(); return; }
@@ -2948,16 +3020,6 @@ function showIeltsDay(ds){
   document.getElementById('ieltsDayModal').classList.add('show');
 }
 function closeIeltsDay(){ document.getElementById('ieltsDayModal').classList.remove('show'); }
-async function tryFetchIdictation(){
-  const box=document.getElementById('idictResult'); if(!box) return;
-  box.innerHTML='<p class="hint">抓取中…</p>';
-  try{
-    const html=await fetchViaProxy('https://www.idictation.cn/');
-    const titles=parseGeneric(html,['听力','听写','阅读','dictation']);
-    if(titles.length){ box.innerHTML='<div class="ltitle">🔎 抓取到的内容</div>'+titles.slice(0,10).map(t=>`<div class="hitem"><span class="hn">${escapeHtml(t)}</span></div>`).join('')+'<p class="hint">via 公共CORS代理，可能不完整。</p>'; }
-    else box.innerHTML='<p class="hint">未能从页面提取到具体题目，建议直接点开上方链接练习。</p>';
-  }catch(e){ box.innerHTML='<p class="hint">自动抓取失败（代理受限），直接点开上方链接即可。</p>'; }
-}
 function toggleListened(tag){
   const arr=state.ieltsListened;
   const i=arr.indexOf(tag);
@@ -2971,23 +3033,12 @@ function newsLearn(){
   return `<div class="learn">
     <div class="ltitle">🐯 今日虎嗅早报</div>
     <a class="lcard" href="https://www.huxiu.com/" target="_blank" rel="noopener"><div class="lc-main">▶ 打开虎嗅 · 24小时/早报</div><div class="lc-sub">每日商业科技热点，点开即读</div></a>
-    <button class="mini line" onclick="tryFetchHuxiu()">🔄 尝试抓取虎嗅早报</button>
-    <div id="huxiuResult"></div>
+    <p class="hint">自动抓取已停用（避免阅读地址经第三方代理），点开上方链接阅读即可。</p>
     <div class="ltitle">🔗 我的其他新闻源</div>
     ${links || '<p class="hint">还没添加，去 ⚙️ 设置里加几个吧</p>'}
     ${takeawayHtml('news')}
     <button class="btn ${isDone('news',today())?'ghost':'primary'} w100" onclick="toggleDone('news')">${isDone('news',today())?'✏️ 取消今日完成':'✅ 标记今日已读虎嗅'}</button>
   </div>`;
-}
-async function tryFetchHuxiu(){
-  const box=document.getElementById('huxiuResult'); if(!box) return;
-  box.innerHTML='<p class="hint">抓取中…</p>';
-  try{
-    const html=await fetchViaProxy('https://www.huxiu.com/');
-    const titles=parseHuxiu(html);
-    if(titles.length){ box.innerHTML='<div class="ltitle">🔎 抓取到的早报标题</div>'+titles.slice(0,12).map(t=>`<div class="hitem"><span class="hn">${escapeHtml(t)}</span></div>`).join('')+'<a class="llink" href="https://www.huxiu.com/" target="_blank" rel="noopener">打开虎嗅看全文 ↗</a><p class="hint">via 公共CORS代理，可能不完整。</p>'; }
-    else box.innerHTML='<p class="hint">未能提取到标题（页面为JS渲染），直接点开上方链接阅读即可。</p>';
-  }catch(e){ box.innerHTML='<p class="hint">自动抓取失败（代理/跨域受限），直接点开上方链接即可。</p>'; }
 }
 
 /* ---- AI 知识卡 ---- */
@@ -5126,34 +5177,6 @@ function toggleDone(key){
   const r=rec(key)[today()]||{}; r.done=!r.done; r.ts=Date.now(); rec(key)[today()]=r; save(); render(); toast(r.done?'已标记完成 ✅':'已取消');
 }
 
-/* ===================== CORS 代理抓取 ===================== */
-async function fetchViaProxy(url){
-  const proxies=['https://api.allorigins.win/raw?url=','https://corsproxy.io/?url='];
-  let lastErr;
-  for(const p of proxies){
-    try{
-      const r=await fetch(p+encodeURIComponent(url),{headers:{'User-Agent':'Mozilla/5.0'}});
-      if(r.ok){ const t=await r.text(); if(t&&t.length>200) return t; }
-    }catch(e){ lastErr=e; }
-  }
-  throw lastErr||new Error('proxy 空响应');
-}
-function parseHuxiu(html){
-  const titles=[]; const re=/<a[^>]+href="[^"]*\/article\/[^"]*"[^>]*>([^<]{6,40})<\/a>/gi; let m;
-  while((m=re.exec(html))&&titles.length<15){ const t=m[1].replace(/\s+/g,' ').trim(); if(t&&!titles.includes(t)) titles.push(t); }
-  return titles;
-}
-function parseGeneric(html,keys){
-  const titles=[]; const re=/<a[^>]+href="[^"]*"[^>]*>([^<]{4,40})<\/a>/gi; let m;
-  while((m=re.exec(html))&&titles.length<20){ const t=m[1].replace(/\s+/g,' ').trim(); if(t&&keys.some(k=>t.includes(k))&&!titles.includes(t)) titles.push(t); }
-  return titles;
-}
-function parseRss(xml){
-  const titles=[]; const re=/<title>([\s\S]*?)<\/title>/gi; let m,first=true;
-  while((m=re.exec(xml))&&titles.length<15){ if(first){first=false;continue;} const t=m[1].replace(/<!\[CDATA\[|\]\]>/g,'').replace(/\s+/g,' ').trim(); if(t&&!titles.includes(t)) titles.push(t); }
-  return titles;
-}
-
 /* ===================== 设置面板 ===================== */
 function openSettings(){
   const vt=document.getElementById('verTag'); if(vt) vt.textContent='版本 '+APP_VERSION;
@@ -6014,6 +6037,7 @@ function showUpdateBar(){ const b=document.getElementById('updateBar'); if(b) b.
 ensurePageBaseline();
 if(isLastDayOfMonth() && state.monthReminded !== currentMonthKey()){ toast('📅 本月最后一天，记得更新阅读书目的最新进度'); }
 render();
+window.__WB_BOOT_OK=true;   // 启动完成：此后 window.onerror 只记控制台，不再弹加载失败横幅
 
 // 历史快照：每天首次打开自动打一份全量快照到 IndexedDB（异步，不阻塞渲染）
 (async function autoSnapshotOnOpen(){
