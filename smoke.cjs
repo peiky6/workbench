@@ -291,23 +291,48 @@ if(htmlJs){
   }
   if(!/JSON\.stringify\(state,null,2\)/.test(htmlJs)) ok('本地备份已不再裸序列化整个 state（密钥不再泄露）');
   else bad('本地备份仍裸序列化整个 state（密钥泄露风险）');
-  // v2026-11-11a 阶段二：AI 持续复习闭环（A 为主 + C 可选每日自测）
+  // v2026-11-12：AI 本轮遍数分层轮次（每轮每卡刷满 3 遍）+ 配置持久化 + 每日自测移除
   for(const [token, desc] of [
-    ['aiReviewActive', '永续复习模式开关'],
-    ['aiAllMastered', '全掌握判定'],
-    ['aiCheckRound', '复习轮次计数'],
-    ['aiDailyQuizDone', '每日自测完成判定'],
+    ['aiRoundStudy:{}', '本轮遍数字段'],
+    ['aiQueueTs:{}', '入队时间戳字段'],
+    ['aiMasteredEver:0', '累计达成次数字段'],
+    ['function aiRoundCount', '本轮遍数读取'],
+    ['function aiRoundLayer', '当前遍数层'],
+    ['function aiRoundDone', '本轮完成判定'],
+    ['function aiQueuePending', '插队未消解判定'],
+    ['function aiAdvanceRound', '轮次推进'],
+    ['function aiCheckRound', '轮次计数'],
+    ['function aiTodayPicks', '每日抽卡'],
+    ['function aiDayDone', '当日打卡判定'],
+    ['aiReviewRound:0', '复习轮次默认字段'],
+    ['复习今日 AI 术语', '首页待办复习文案'],
+    ['id="gistRemembered"', '设置页「已记住」提示'],
+    ['_def, _rem, _cur', 'mergeState 本机 settings 优先'],
+    ["state.aiQueueTs[k]=Date.now()", 'feed 新词入队'],
+    ["'aiRoundStudy','aiQueueTs','aiMasteredEver'", 'mergeState 新字段登记'],
+    ['全部词各刷满 3 遍', '轮次完成文案'],
+  ]){
+    if(htmlJs.includes(token) || htmlRaw.includes(token)) ok('存在：' + desc);
+    else bad('缺失：' + desc + '（token: ' + token + '）');
+  }
+  // 反向锁：已删除的旧模式不得复活（残留键 aiDailyQuiz/aiDailyQuizDone 允许存在，但函数与控件必须清零）
+  for(const [token, desc] of [
+    ['function aiReviewActive', '持续复习模式判定'],
+    ['function aiAllMastered', '全掌握判定'],
+    ['function aiToggleKeepReview', '持续复习开关'],
+    ['function aiToggleDailyQuiz', '每日自测开关'],
     ['function aiDailyQuizRender', '每日自测渲染'],
     ['function aiDailyQuizQuestions', '每日自测抽题'],
-    ['function aiToggleDailyQuiz', '每日自测开关'],
-    ['function aiToggleKeepReview', '持续复习开关'],
-    ['aiReviewRound:0', '复习轮次默认字段'],
-    ['aiDailyQuiz:{}', '每日自测状态字段'],
-    ['aiKeepReview:true', '持续复习默认开'],
-    ['复习今日 AI 术语', '首页待办复习文案'],
+    ['function aiDailyQuizAnswer', '每日自测答题'],
+    ['function aiDailyQuizReset', '每日自测重做'],
+    ['function markTerm', '卡片掌握按钮'],
+    ['aiKeepReview:true', '持续复习默认开配置'],
+    ['📝 每日自测', '每日自测 chip'],
+    ['🎯 持续复习', '持续复习 chip'],
+    ['aiDailyQuizRender()', '每日自测渲染调用'],
   ]){
-    if(htmlJs.includes(token)) ok('存在：' + desc);
-    else bad('缺失：' + desc + '（token: ' + token + '）');
+    if(!htmlJs.includes(token) && !htmlRaw.includes(token)) ok('已移除：' + desc);
+    else bad('残留：' + desc + '（token: ' + token + '）');
   }
   // 首页顶部进度必须取「今日待办清单」的完成情况，不能再按 ACTIVE_MODULES 计数
   const homeBody = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
@@ -578,7 +603,7 @@ if(htmlJs){
   win.window=win; win.self=win; win.globalThis=win;
   const ctx = vm.createContext(win);
   const tail = '\n;try{ globalThis.__R=aiLearn(); globalThis.__E=null; }catch(e){ globalThis.__E=e.name+": "+e.message; }'
-             + '\n;try{ state.settings.aiDailyQuiz=true; globalThis.__R2=aiLearn(); globalThis.__E2=null; }catch(e){ globalThis.__E2=e.name+": "+e.message; }';
+             + '\n;try{ state.aiQueueTs={}; state.aiQueueTs[0]=Date.now(); globalThis.__R2=aiLearn(); globalThis.__E2=null; }catch(e){ globalThis.__E2=e.name+": "+e.message; }';
   // v2026-11-11c P0 行为级断言：在同一个 vm 上下文里真正调用数据链 / CSV / 合并 / 备份 / AI 判定函数，
   // 而不是只验「字符串在不在」。覆盖 Q1/Q7/Q14/Q15/Q16 的核心口径。
   const p0Script = `
@@ -649,13 +674,89 @@ if(htmlJs){
   globalThis.__P0=R;
 })(); }catch(e){ globalThis.__P0ERR=e.name+': '+e.message; }
 `;
+  // v2026-11-12 行为级断言：本轮遍数分层轮次、插队/出队、累计达成次数、配置持久化
+  const v7Script = `
+;globalThis.__V7ERR=null;
+;try{ (function(){
+  const V={};
+  const oList=aiTermIdxList, oRerender=aiRerender, oSave=save, oToast=toast, oCheck=aiCheckRound, oRenderModule=renderModule;
+  aiRerender=function(){}; save=function(){}; toast=function(){}; renderModule=function(){};
   try{
-    vm.runInContext(appJs + tail + p0Script, ctx, {filename:'index.html', timeout:10000});
+    const idx=[0,1,2,3,4,5,6,7,8,9,10,11];
+    aiTermIdxList=function(){ return idx.slice(); };
+    let advance=0; aiCheckRound=function(){ if(aiRoundDone()) advance++; };
+    state.aiRoundStudy={}; state.aiQueueTs={}; state.aiStudyTs={}; state.aiStudy={};
+    state.aiMastered=[]; state.aiMasteredTs={}; state.aiMasteredDel={};
+    state.aiMasteredEver=0; state.aiReviewRound=0; state.aiDaily={};
+    let day=0, dup=0;
+    while(day<20 && !aiRoundDone()){
+      day++; state.aiDaily={};
+      const p=aiTodayPicks();
+      if(new Set(p).size!==p.length) dup++;
+      p.forEach(i=>aiStudyTerm(i));
+    }
+    V.days=day; V.dup=dup; V.full=aiRoundDone();
+    V.counts=idx.map(i=>aiRoundCount(i));
+    V.ever=state.aiMasteredEver; V.advance=advance;
+    aiStudyTerm(0); V.everAfterExtra=state.aiMasteredEver;
+    const masteredBefore=(state.aiMastered||[]).length;
+    state.aiReviewRound=0; aiAdvanceRound();
+    V.roundAfter=state.aiReviewRound; V.countsAfter=idx.map(i=>aiRoundCount(i));
+    V.masteredKept=(state.aiMastered||[]).length===masteredBefore;
+  }catch(e){ V.t43Err=e.name+': '+e.message; }
+  try{
+    state.aiRoundStudy={0:3}; state.aiStudy={0:3}; state.aiStudyTs={0:Date.now()}; state.aiMasteredEver=5;
+    aiStudyUndo(0); V.undoCount=aiRoundCount(0); V.undoEver=state.aiMasteredEver;
+  }catch(e){ V.t46Err=e.name+': '+e.message; }
+  try{
+    state.aiRoundStudy={}; state.aiQueueTs={}; state.aiStudyTs={}; state.aiStudy={}; state.aiDaily={};
+    const n=Date.now(); state.aiQueueTs[3]=n; state.aiQueueTs[11]=n;
+    const p=aiTodayPicks();
+    V.priorBoth=p.indexOf(3)>=0 && p.indexOf(11)>=0;
+    V.priorFront=p.slice(0,2).every(i=>i===3||i===11);
+    aiStudyTerm(11); V.out=!aiQueuePending(11);
+  }catch(e){ V.t47Err=e.name+': '+e.message; }
+  try{
+    const n=Date.now();
+    state.aiQueueTs={0:n}; state.aiStudyTs={0:n-100000}; state.aiRoundStudy={0:1}; state.aiMasteredEver=7;
+    mergeState({aiStudyTs:{0:n-200000}, aiQueueTs:{}, aiRoundStudy:{0:2}, aiMasteredEver:9});
+    V.antiPending=aiQueuePending(0); V.mRound=aiRoundCount(0); V.mEver=state.aiMasteredEver;
+  }catch(e){ V.t48Err=e.name+': '+e.message; }
+  // T28：直接调用周测答错入口，验证不改掌握/不写复习时间/次日必进前 5
+  try{
+    aiTermIdxList=oList;
+    const qs=aiQuizQuestions();
+    if(!qs.length) V.t28Err='no questions';
+    else{
+      const q=qs[0], wrong=(q.correctOpt+1)%q.opts.length;
+      state.aiRoundStudy={}; state.aiQueueTs={}; state.aiStudyTs={}; state.aiStudy={}; state.aiDaily={};
+      state.aiMastered=[7,8]; state.aiMasteredTs={}; state.aiMasteredDel={};
+      const before=(state.aiMastered||[]).slice().sort().join(',');
+      aiQuizAnswer(0, wrong);
+      V.q28Queue=!!(state.aiQueueTs||{})[q.correct];
+      V.q28Mastered=(state.aiMastered||[]).slice().sort().join(',')===before;
+      V.q28Ts=!((state.aiStudyTs||{})[q.correct]);
+      const p2=aiTodayPicks(); V.q28Next=p2.indexOf(q.correct)===0;
+      V.q28Wrong=wrong!==q.correctOpt;
+    }
+  }catch(e){ V.t28Err=e.name+': '+e.message; }
+  try{
+    state.settings={gistToken:'TK',gistId:'GID123',encPass:'PW',readGoal:9,reminderHour:7,actFactor:1.65};
+    mergeState({settings:{readGoal:5,reminderHour:21}});
+    V.cfgId=state.settings.gistId; V.cfgGoal=state.settings.readGoal; V.cfgHour=state.settings.reminderHour;
+    V.cfgToken=state.settings.gistToken; V.cfgPass=state.settings.encPass; V.cfgAct=state.settings.actFactor;
+  }catch(e){ V.cfgErr=e.name+': '+e.message; }
+  aiTermIdxList=oList; aiRerender=oRerender; save=oSave; toast=oToast; aiCheckRound=oCheck; renderModule=oRenderModule;
+  globalThis.__V7=V;
+})(); }catch(e){ globalThis.__V7ERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script, ctx, {filename:'index.html', timeout:10000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
-    if(ctx.__E2) bad('AI 视图 aiLearn() 运行时异常（每日自测开启）', ctx.__E2);
-    else ok('AI 视图 aiLearn() 运行时无异常（每日自测开启）');
+    if(ctx.__E2) bad('AI 视图 aiLearn() 运行时异常（插队标记态）', ctx.__E2);
+    else ok('AI 视图 aiLearn() 运行时无异常（插队标记态）');
   }catch(e){ bad('AI 视图运行时校验未能执行', e.message); }
 
   // ===== P0 静态锁（凭证外送 + 关键函数/字段存在性）=====
@@ -709,6 +810,35 @@ if(htmlJs){
   else if(R.fallbackThrew) bad('renderModule 未吞掉渲染异常', R.fallbackThrew);
   else if(/这个模块暂时打不开/.test(R.fallbackHtml||'')) ok('模块渲染抛错时显示兜底卡片（不再白屏）');
   else bad('模块渲染异常未渲染兜底卡片', (R.fallbackHtml||'').slice(0,120));
+
+  // ===== V7 行为级判定 =====
+  if(ctx.__V7ERR) bad('V7 行为校验脚本异常', ctx.__V7ERR);
+  const V=ctx.__V7||{};
+  if(V.t43Err) bad('T43 轮次模型执行异常', V.t43Err);
+  else{
+    if(V.full && Array.isArray(V.counts) && V.counts.every(x=>x===3)) ok('T43 一轮每卡正好刷满 3 遍（12 词 / '+V.days+' 天）');
+    else bad('T43 一轮遍数不达标', JSON.stringify(V.counts));
+    if(V.dup===0) ok('T43 每日抽卡零重复'); else bad('T43 抽卡出现重复', String(V.dup));
+    if(V.ever===12) ok('T43 累计达成次数 = 每词 1 次（12）'); else bad('累计达成次数错误', String(V.ever));
+    if(V.everAfterExtra===12) ok('T44 已刷满后再刷不重复 +1'); else bad('T44 累计次数被重复计数', String(V.everAfterExtra));
+    if(V.roundAfter===1 && Array.isArray(V.countsAfter) && V.countsAfter.every(x=>x===0) && V.masteredKept) ok('T45 轮次推进后遍数清零、掌握状态不清空');
+    else bad('T45 轮次推进异常', JSON.stringify({r:V.roundAfter,c:V.countsAfter,m:V.masteredKept}));
+  }
+  if(V.t46Err) bad('T46 撤销执行异常', V.t46Err);
+  else if(V.undoCount===2 && V.undoEver===5) ok('T46 撤销回 2 遍、累计达成次数不减');
+  else bad('T46 撤销口径错误', JSON.stringify({c:V.undoCount,e:V.undoEver}));
+  if(V.t47Err) bad('T47 插队执行异常', V.t47Err);
+  else if(V.priorBoth && V.priorFront && V.out) ok('T47 答错/新词次日排最前，刷一次即出队');
+  else bad('T47 插队或出队失效', JSON.stringify({b:V.priorBoth,f:V.priorFront,o:V.out}));
+  if(V.t48Err) bad('T48 合并执行异常', V.t48Err);
+  else if(V.antiPending && V.mRound===2 && V.mEver===9) ok('T48 跨端合并不复活答错标记、遍数取较大值');
+  else bad('T48 合并口径错误', JSON.stringify({p:V.antiPending,r:V.mRound,e:V.mEver}));
+  if(V.t28Err) bad('T28 周测答错入口执行异常', V.t28Err);
+  else if(V.q28Wrong && V.q28Queue && V.q28Mastered && V.q28Ts && V.q28Next) ok('T28 周测答错：不动掌握/不写复习时间，次日排最前');
+  else bad('T28 周测答错口径错误', JSON.stringify({w:V.q28Wrong,q:V.q28Queue,m:V.q28Mastered,t:V.q28Ts,n:V.q28Next}));
+  if(V.cfgErr) bad('FR-1 配置合并执行异常', V.cfgErr);
+  else if(V.cfgId==='GID123' && V.cfgGoal===9 && V.cfgHour===7 && V.cfgToken==='TK' && V.cfgPass==='PW' && V.cfgAct===1.65) ok('FR-1 pull 后本机 settings 不被覆盖（Gist ID 免重填）');
+  else bad('FR-1 配置仍被覆盖', JSON.stringify({id:V.cfgId,g:V.cfgGoal,h:V.cfgHour,t:V.cfgToken,p:V.cfgPass,a:V.cfgAct}));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
