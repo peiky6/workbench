@@ -67,8 +67,8 @@ const required = [
   ['IELTS_MENU', '雅思菜单数据'],
   ['ieltsMenuPick', '雅思点菜'],
   ['showBarTip', '图表柱子点击数值'],
-  ['historyByDate', '历史回顾'],
-  ['monthlyReviewHtml', '月度复盘'],
+  ['function homeReviewHtml', '首页数据速览'],
+  ['function checkRate', '统一打卡率口径（首页 7 天 / 月报 30 天）'],
   ['predictGoalDays', '目标达成日预测'],
   ['togglePlanCollapseAll', '计划全部收起'],
   ['planFocusTerm', '计划关联术语'],
@@ -564,8 +564,8 @@ if(htmlJs){
   if(driftBody && /Math\.abs\(d\.pct\)<10/.test(driftBody[0])) ok('热量漂移预警阈值为 ±10%');
   else bad('热量漂移预警阈值不是 ±10%');
   const homeBody3 = htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
-  if(homeBody3 && /kcalDriftHtml\(\)/.test(homeBody3[0]) && /weightEnergyCardHtml\(\)/.test(homeBody3[0])) ok('首页已挂漂移预警 + 综合卡');
-  else bad('首页未挂漂移预警或综合卡');
+  if(homeBody3 && /kcalDriftHtml\(\)/.test(homeBody3[0]) && /homeReviewHtml\(\)/.test(homeBody3[0]) && !/weightEnergyCardHtml\(\)/.test(homeBody3[0])) ok('首页已挂漂移预警 + 数据速览（体重综合卡只在体重页）');
+  else bad('首页未挂漂移预警 / 数据速览，或仍挂体重综合卡');
   const examRead = htmlJs.match(/s\.ieltsExamDate=\(document\.getElementById\('setIeltsExamDate'\)\.value\|\|''\)\.trim\(\);/);
   if(examRead) ok('设置保存时读取考试日期'); else bad('设置保存未读取考试日期');
 }
@@ -792,8 +792,47 @@ if(htmlJs){
   globalThis.__V7=V;
 })(); }catch(e){ globalThis.__V7ERR=e.name+': '+e.message; }
 `;
+  // v2026-11-12c 首页精简行为级校验：真正执行 renderHome / homeReviewHtml / renderMonthly，
+  // 而不只是查字符串在不在。覆盖空态、部分数据、老数据缺轮数、200 天历史不撑长首页。
+  const homeScript = `
+;globalThis.__HOMEERR=null;
+;try{ (function(){
+  const H={};
+  const oGet=document.getElementById;
+  const el=document.createElement('div');
+  document.getElementById=function(id){ return id==='main'?el:oGet(id); };
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script, ctx, {filename:'index.html', timeout:10000});
+    state.modules={}; state.aiDaily={}; state.aiStudyTs={}; state.aiReviewRound=0;
+    state.readingFinished=[]; state.readDaily={}; state.readPages={};
+    state.settings=Object.assign({}, state.settings||{}, {goal:{}});
+    H.empty=homeReviewHtml();
+    H.rateEmpty=[checkRate(7).rate, checkRate(30).rate];
+    renderHome(); H.emptyHome=el.innerHTML;
+  }catch(e){ H.emptyErr=e.name+': '+e.message; }
+  try{
+    state.modules.mana={records:{}}; state.modules.mana.records[today()]={done:true,weight:60};
+    delete state.aiReviewRound;
+    H.partial=homeReviewHtml();
+    H.rateP=[checkRate(7).rate, checkRate(30).rate];
+    renderHome(); H.partialHome=el.innerHTML;
+  }catch(e){ H.partialErr=e.name+': '+e.message; }
+  try{
+    state.modules.mana={records:{}};
+    for(let i=0;i<200;i++) state.modules.mana.records[addDays(today(),-i)]={done:true,weight:60,exercises:[],meals:{}};
+    renderHome(); H.long=el.innerHTML;
+    H.lenDiff=Math.abs(H.long.length-(H.partialHome||'').length);
+    H.manaHistory=typeof manaHistoryHtml==='function' ? manaHistoryHtml().length : -1;
+    H.recent=typeof recentCheckinsHtml==='function' ? recentCheckinsHtml('mana').length : -1;
+  }catch(e){ H.longErr=e.name+': '+e.message; }
+  try{
+    renderMonthly(); H.monthly=el.innerHTML;
+  }catch(e){ H.monthlyErr=e.name+': '+e.message; }
+  document.getElementById=oGet;
+  globalThis.__HOME=H;
+})(); }catch(e){ globalThis.__HOMEERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript, ctx, {filename:'index.html', timeout:10000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -906,6 +945,30 @@ if(htmlJs){
   if(V.t65Err) bad('T65 真实 load 基线执行异常', V.t65Err);
   else if(V.ld1===1 && V.ldMark1===1 && V.ldPersist===1 && V.ld2===1) ok('T65 load() 基线立即落盘，重复启动不重复 +1');
   else bad('T65 基线落盘/幂等错误', JSON.stringify({a:V.ld1,m:V.ldMark1,p:V.ldPersist,b:V.ld2}));
+
+  // ===== V9：首页精简（数据速览 / 历史回顾移除）行为级判定 =====
+  if(ctx.__HOMEERR) bad('V9 首页行为校验脚本异常', ctx.__HOMEERR);
+  const H=ctx.__HOME||{};
+  if(H.emptyErr) bad('T6 空态渲染异常', H.emptyErr);
+  else if(/还没有足够数据/.test(H.empty||'') && !/class="stat"/.test(H.empty||'')) ok('T6 全新用户显示数据速览空态，不摆 0% / — 误导数字');
+  else bad('T6 空态文案或数字格错误', (H.empty||'').slice(0,160));
+  if(H.partialErr) bad('T7/T9/T10 部分数据渲染异常', H.partialErr);
+  else if(/本周打卡率/.test(H.partial||'') && /7 日均较上周/.test(H.partial||'') && /AI 累计完成轮数/.test(H.partial||'')
+          && !/NaN|undefined/.test(H.partial||'') && /0 轮/.test(H.partial||'')) ok('T7/T9/T10 部分数据缺字段不白屏、老数据无轮数显示 0 轮');
+  else bad('T7/T9/T10 部分数据或老数据异常', (H.partial||'').slice(0,200));
+  if(H.rateEmpty && H.rateEmpty[0]===0 && H.rateEmpty[1]===0 && H.rateP && H.rateP[0]===3 && H.rateP[1]===1) ok('T2 统一口径：0 次打卡 0% / 0%，1 次打卡 → 近 7 天 3% / 近 30 天 1%');
+  else bad('T2 打卡率口径错误', JSON.stringify({empty:H.rateEmpty,partial:H.rateP}));
+  const homeStale=['历史回顾','还没有历史记录','查看月度复盘','体重趋势与能量收支','本周复盘','阅读本周复盘','月度复盘','<details class="fold">'].filter(t=>(H.partialHome||'').includes(t));
+  if(!homeStale.length && /📊 数据速览/.test(H.partialHome||'') && /setView\('__monthly'\)/.test(H.partialHome||'')) ok('T13/T15 首页旧四块与历史长列表零残留，含数据速览与下钻入口');
+  else bad('T15 首页仍有旧内容或缺新卡', homeStale.join(',')+' | '+(H.partialHome||'').slice(0,160));
+  if(H.longErr) bad('T18 200 天历史渲染异常', H.longErr);
+  else if(typeof H.lenDiff==='number' && H.lenDiff<400) ok('T18 首页长度不随 200 天历史增长（差值 '+H.lenDiff+' 字符）');
+  else bad('T18 首页仍随历史记录变长', String(H.lenDiff));
+  if(H.manaHistory>0 && H.recent>0) ok('T17 体重页 20 天明细 / 模块页打卡日期仍在（未误删）');
+  else bad('T17 明细视图被误删', JSON.stringify({m:H.manaHistory,r:H.recent}));
+  if(H.monthlyErr) bad('T5 每月统计渲染异常', H.monthlyErr);
+  else if(/近 30 天整体打卡率/.test(H.monthly||'')) ok('T5 每月统计补上近 30 天整体打卡率，渲染无异常');
+  else bad('T5 每月统计缺新增打卡率', (H.monthly||'').slice(0,160));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -984,6 +1047,24 @@ if(htmlJs){
     if(/workbench-emergency-/.test(headJs)) ok('兜底导出读 localStorage，不依赖主脚本');
     else bad('兜底导出缺失');
   }catch(e){ bad('head 错误边界脚本运行时异常', e.message); }
+})();
+
+// ===== 首页精简静态锁（v2026-11-12c）：旧复盘/历史视图零残留，新视图与下钻入口齐全 =====
+(function homeStaticChecks(){
+  const stale=['historyByDate','historyByDateHtml','monthlyReviewHtml','weeklyReviewHtml','monthlyOpen',
+    '查看月度复盘','阅读本周复盘','📅 月度复盘（近','还没有历史记录，从今天的打卡开始吧'];
+  const hit=stale.filter(t=>htmlJs.includes(t));
+  if(!hit.length) ok('T16 旧周/月复盘 / 首页历史回顾 / 折叠状态零残留');
+  else bad('T16 仍有旧代码残留', hit.join(', '));
+  for(const [t,d] of [['function homeReviewHtml','首页数据速览'],['function checkRate','统一打卡率口径'],
+    ['function manaHistoryHtml','体重页历史明细'],['function recentCheckinsHtml','模块页打卡日期'],
+    ['近 30 天整体打卡率','每月统计新增指标'],['⚖️ 体重明细','体重下钻入口'],['📅 每月统计','月度下钻入口']]){
+    if(htmlJs.includes(t)) ok('存在：'+d); else bad('缺失：'+d);
+  }
+  const hb=htmlJs.match(/function renderHome\(\)\{[\s\S]*?\n\}/);
+  if(hb && /homeReviewHtml\(\)/.test(hb[0]) && /kcalDriftHtml\(\)/.test(hb[0])
+     && !/weightEnergyCardHtml\(\)/.test(hb[0]) && !/const hist|\$\{hist\}|historyByDateHtml/.test(hb[0])) ok('renderHome 只挂数据速览与条件提醒，不再挂体重综合卡 / 历史列表');
+  else bad('renderHome 仍含已移除的视图调用');
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

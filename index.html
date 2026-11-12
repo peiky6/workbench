@@ -1064,7 +1064,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-12b';
+const APP_VERSION = '2026-11-12c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -1453,7 +1453,6 @@ function planDayExtra(mmdd){
 }
 let aiFocusTerm=null;
 let aiOnlyUnmastered=false; // AI术语卡：默认优先未掌握(false) / 含已掌握(true)
-let monthlyOpen=false;
 function openTerm(idx){ aiFocusTerm=idx; setView('ai'); }
 function planSkipped(n){ return !!(state.planSkip && state.planSkip[String(n)]); }
 function planCurrentSeq(){ for(let i=0;i<STUDY_PLAN.length;i++){ const n=i+1; if(!planSeqDone(n) && !planSkipped(n)) return n; } return 0; }
@@ -2181,7 +2180,7 @@ function renderHome(){
   const now=new Date(); const wd=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   // 顶部进度与「今日待办清单」共用同一份完成情况，避免两处口径不一致
   const cl=todayChecklistItems(); const done=cl.filter(i=>i.done).length; const total=cl.length;
-  const hist = historyByDateHtml();
+  // 首页只回答「今天做什么」+「一眼数」：周期回顾压成 1 张数据速览，明细去各模块页看
   document.getElementById('main').innerHTML = `
     <div class="mhead">
       <h1>你好，${escapeHtml(state.user.name)} 👋</h1>
@@ -2198,14 +2197,10 @@ function renderHome(){
     ${todayChecklistHtml()}
     ${weeklyTasksHtml()}
     ${kcalDriftHtml()}
-    ${weightEnergyCardHtml()}
     ${takeawayBlankAlertHtml()}
-    ${weeklyReviewHtml()}
     ${monthReminderBanner()}
-    <div class="mini-row" style="margin:2px 0 10px"><button class="mini line" onclick="monthlyOpen=!monthlyOpen;render()">${monthlyOpen?'📅 收起月度复盘':'📅 查看月度复盘（近30天）'}</button></div>
-    ${monthlyOpen?monthlyReviewHtml():''}
-    ${interviewHomeCardHtml()}
-    ${hist}`;
+    ${homeReviewHtml()}
+    ${interviewHomeCardHtml()}`;
 }
 
 function planDoneOnDate(ds){ return Object.keys(rec('plan')).some(k=>{ const r=rec('plan')[k]; return r && r.done && r.date===ds; }); }
@@ -2499,93 +2494,45 @@ function takeawayBlankAlertHtml(){
   if(n<3) return '';
   return `<div class="reminder warn" style="cursor:default"><span class="ri">🫙</span><div class="rm"><div class="rt">连续 ${n} 天读完还是空的</div><div class="rs">这不是你不够努力，多半是这个信息源本身没给到东西。考虑换个源，或者干脆降低频率。</div></div></div>`;
 }
-function weeklyReviewHtml(){
-  const td=today();
-  const mods=ACTIVE_MODULES;
-  const modRows=mods.map(mk=>{ let c=0; for(let i=6;i>=0;i--){ if(dayDone(mk.key,addDays(td,-i))) c++; } return {name:mk.name, c}; });
-  const totalChecks=modRows.reduce((s,r)=>s+r.c,0); const maxChecks=mods.length*7;
-  const rate=Math.round(totalChecks/maxChecks*100);
-  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b));
-  let wt='—';
-  if(items.length>=2){ const ws=startOfWeek(new Date()); const inWeek=items.filter(i=>new Date(i.d)>=ws); const a=inWeek.length>=2?inWeek:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
-  const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
-  const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
-  const goalLine=weightGoalLine();
-  const summary= rate>=80?'本周节奏很稳，继续保持 💪' : (rate>=50?'本周完成过半，再加把劲 🔥':'本周有点松懈，明天从小事捡起就好 🍃');
-  const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
+/* ---- 首页「数据速览」（v2026-11-12c）----
+   合并原周复盘 / 阅读周复盘 / 月度复盘 / 首页体重趋势卡：首页只留 4 个能驱动判断的数字
+   + 1 行模块 chips + 1 行评语 + 2 个下钻入口。体重明细在体重页（含 8 周折线），
+   月度明细在「每月统计」页，阅读明细在阅读页。纯视图改动，不动任何打卡数据。 */
+function checkRate(days){
+  const td=today(); const mods=ACTIVE_MODULES;
+  const rows=mods.map(mk=>{ let c=0; for(let i=days-1;i>=0;i--){ if(dayDone(mk.key,addDays(td,-i))) c++; } return {name:mk.name, c}; });
+  const total=rows.reduce((s,r)=>s+r.c,0);
+  return { rate: Math.round(total/(mods.length*days)*100), rows };
+}
+function homeReviewHtml(){
+  const r7=checkRate(7);
+  const ma=weightMA(7,0), prev=weightMA(7,7);
+  const delta=(ma!=null&&prev!=null)? ma-prev : null;
+  const dTxt=delta==null?'—':(delta>0?'+':'−')+Math.abs(delta).toFixed(2)+' kg';
+  const dCol=delta==null?'var(--sub)':(delta<-0.05?'var(--good)':(delta>0.05?'var(--warn)':'var(--sub)'));
   const rw=readingWeekStats();
-  return `<div class="dcard">
-    <div class="ltitle">📊 本周复盘（近 7 天）</div>
-    <div class="stats">
-      <div class="stat"><b>${rate}%</b><span>整体打卡率</span></div>
-      <div class="stat"><b>${wt}</b><span>体重变化</span></div>
-      <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
-      <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
+  const rounds=Number(state.aiReviewRound)||0;
+  const head=`<div class="ltitle">📊 数据速览 <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 天</span></div>`;
+  const nav=`<div class="mini-row" style="margin:8px 0 2px"><button class="mini line" onclick="setView('mana')">⚖️ 体重明细</button><button class="mini line" onclick="setView('__monthly')">📅 每月统计</button></div>`;
+  const hasAny=r7.rows.some(r=>r.c>0)||delta!=null||rw.days>0||rw.streak>0||rounds>0||ma!=null;
+  if(!hasAny) return `<div class="dcard">${head}<p class="hint">还没有足够数据，先完成一次打卡吧 🌱</p>${nav}</div>`;
+  const chips=r7.rows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
+  const summary= r7.rate>=80?'本周节奏很稳，继续保持 💪' : (r7.rate>=50?'本周完成过半，再加把劲 🔥':'本周有点松懈，明天从小事捡起就好 🍃');
+  return `<div class="dcard">${head}
+    <div class="stats stats2">
+      <div class="stat"><b>${r7.rate}%</b><span>本周打卡率</span></div>
+      <div class="stat"><b style="color:${dCol}">${dTxt}</b><span>7 日均较上周</span></div>
+      <div class="stat"><b>${rw.days}天 · 🔥${rw.streak}</b><span>近 7 天阅读</span></div>
+      <div class="stat"><b>${rounds} 轮</b><span>AI 累计完成轮数</span></div>
     </div>
     <div class="ichips" style="margin-top:6px">${chips}</div>
-    <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
-  </div>
-  <div class="dcard">
-    <div class="ltitle">📖 阅读本周复盘（近 7 天）</div>
-    <div class="stats">
-      <div class="stat"><b>${rw.days}天</b><span>阅读天数</span></div>
-      <div class="stat"><b>${rw.mins}′</b><span>阅读分钟</span></div>
-      <div class="stat"><b>${rw.finished}本</b><span>本周读完</span></div>
-      <div class="stat"><b>🔥${rw.streak}</b><span>当前连续</span></div>
-    </div>
-    <div class="motivate" style="margin-top:8px">${readingWeekGoal(rw.days,rw.mins,rw.finished)}</div>
+    <div class="motivate" style="margin-top:10px">${summary}${weightGoalLine()}</div>
+    ${nav}
   </div>`;
 }
-function monthlyReviewHtml(){
-  const td=today();
-  const days=30;
-  const mods=ACTIVE_MODULES;
-  const modRows=mods.map(mk=>{ let c=0; for(let i=days-1;i>=0;i--){ if(dayDone(mk.key,addDays(td,-i))) c++; } return {name:mk.name, c}; });
-  const totalChecks=modRows.reduce((s,r)=>s+r.c,0); const maxChecks=mods.length*days;
-  const rate=Math.round(totalChecks/maxChecks*100);
-  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b));
-  let wt='—';
-  if(items.length>=2){ const inMonth=items.filter(i=>new Date(i.d) >= addDays(td,-(days-1))); const a=inMonth.length>=2?inMonth:items; wt=(+(a[a.length-1].w-a[0].w).toFixed(1)>0?'+':'')+(a[a.length-1].w-a[0].w).toFixed(1)+' kg'; }
-  const planDone=STUDY_PLAN.filter((d,i)=>planSeqDone(i+1)).length;
-  const totalMastered=(state.aiMastered||[]).length; const aiTot=AI_TERMS.length;
-  const goalLine=weightGoalLine();
-  const summary= rate>=75?'这一个月很稳，习惯已经长出来了 💪' : (rate>=45?'这一个月完成近半，节奏不错，下个月再紧一点 🔥':'这个月有点松，下个月从「每天只做一件最小的事」捡起就好 🍃');
-  const chips=modRows.map(r=>`<span class="ichip ${r.c>0?'on':''}">${escapeHtml(r.name)} ${r.c}天</span>`).join('');
-  return `<div class="dcard">
-    <div class="ltitle">📅 月度复盘（近 ${days} 天）</div>
-    <div class="stats">
-      <div class="stat"><b>${rate}%</b><span>整体打卡率</span></div>
-      <div class="stat"><b>${wt}</b><span>体重变化</span></div>
-      <div class="stat"><b>${planDone}/${STUDY_PLAN.length}</b><span>计划进度</span></div>
-      <div class="stat"><b>${totalMastered}/${aiTot}</b><span>AI掌握</span></div>
-    </div>
-    <div class="ichips" style="margin-top:6px">${chips}</div>
-    <div class="motivate" style="margin-top:10px">${summary}${goalLine}</div>
-  </div>`;
-}
-function historyByDate(){
-  const map={};
-  ACTIVE_MODULES.forEach(m=>{
-    Object.keys(rec(m)).forEach(d=>{
-      const r=rec(m)[d]; if(!r||!r.done) return;
-      const ds = (m.key==='plan') ? (r.date||null) : d; // 学习计划按序号存，需用真实完成日期而非序号
-      if(!ds) return;
-      (map[ds]=map[ds]||[]).push(m.name);
-    });
-  });
-  return Object.keys(map).sort((a,b)=>b.localeCompare(a));
-}
-function historyByDateHtml(){
-  const dates=historyByDate();
-  if(!dates.length) return '<div class="secttitle">📅 历史回顾</div><p class="hint">还没有历史记录，从今天的打卡开始吧～</p>';
-  const body = dates.map(d=>{
-    const mods=ACTIVE_MODULES.filter(m=>isDone(m.key,d)).map(m=>m.emoji+' '+m.name).join('、');
-    const allDone = ACTIVE_MODULES.every(m=>isDone(m.key,d));
-    return `<details class="fold"><summary>${d} · ${allDone?'✅ 全部完成':'部分完成'}</summary>
-      <div class="body"><div class="term-b">${mods||'（无）'}</div></div></details>`;
-  }).join('');
-  return `<div class="secttitle">📅 历史回顾（按日期折叠）</div>${body}`;
-}
+/* 首页按日期折叠的跨模块流水账已移除（v2026-11-12c）：
+   收日期用 r.done、列模块却走 isDone()，AI 打卡压根不写 done 字段，口径分裂且内容残缺；
+   明细本来就在体重页与各模块页，首页只保留行动区 + 数据速览，不再随使用天数变长。 */
 
 function recentCheckinsHtml(key){
   const dates=Object.keys(rec(key)).filter(d=>rec(key)[d]&&rec(key)[d].done).sort((a,b)=>b.localeCompare(a)).slice(0,16);
@@ -2683,7 +2630,8 @@ function renderMonthly(){
         <label style="margin:0;font-size:13px;color:var(--sub)">统计月份</label>
         <input type="month" id="msel" value="${ym}" onchange="renderMonthly()" style="flex:1;max-width:200px"/>
       </div>
-      <p class="hint">统计范围：当月 1 日 ~ 月末（含今日）。</p>
+      <div class="stats">${stat(checkRate(30).rate+'%','近 30 天整体打卡率')}</div>
+      <p class="hint">统计范围：当月 1 日 ~ 月末（含今日）。整体打卡率为近 30 天滚动窗口，与上方月份选择无关。</p>
     </div>
     <div class="dcard">
       <div class="secttitle">⚖️ 体重</div>
