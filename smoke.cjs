@@ -59,7 +59,7 @@ const required = [
   ['planCurrentSeq', '计划进度计算'],
   ['ieltsGoalHtml', '雅思目标露出'],
   ['weekGridHtml', '打卡周视图'],
-  ['weightWeekRows', '体重周环比'],
+  ['manaTrendSeries', '体重体脂统一取数'],
   ['APP_VERSION', '版本常量'],
   ['showUpdateBar', 'SW 更新提示'],
   ['PLAN_ANS', '计划参考答案'],
@@ -182,10 +182,10 @@ if(htmlJs){
     ['function restoreInputs', '输入保护-恢复'],
     ["raw[0]==='0'", '防吞小数点(05→0.5)'],
     ['function weekGridHtml', '打卡周视图渲染'],
-    ['function weightWeekRows', '体重周环比'],
+    ['function bodyFatSeries', '体脂序列取数'],
     ['训练打卡周视图', '训练周视图卡片'],
     ['雅思打卡周视图', '雅思周视图卡片'],
-    ['体重周环比', '体重周环比卡片'],
+    ['📈 趋势分析', '趋势分析卡'],
     ['function renderNotes', '笔记问答视图渲染'],
     ['function qaAnswer', '问答自测反馈'],
     ['function qaBulk', '问答批量导入'],
@@ -831,8 +831,100 @@ if(htmlJs){
   globalThis.__HOME=H;
 })(); }catch(e){ globalThis.__HOMEERR=e.name+': '+e.message; }
 `;
+  // v2026-11-12d 体重页 P2 行为级校验：实跑 renderMana / renderMonthly / setManaTrend / closeSettings
+  const p2Script = `
+;globalThis.__P2ERR=null;
+;try{ (function(){
+  const P={};
+  const oGet=document.getElementById;
+  const el=document.createElement('div');
+  const mk=(id)=>({ id:id||'', innerHTML:'', value:'', checked:false, textContent:'',
+    style:{}, className:'', classList:{add(){},remove(){}},
+    appendChild(){}, remove(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){} });
+  const nodes={main:el};
+  document.getElementById=function(id){ if(!nodes[id]) nodes[id]=mk(id); return nodes[id]; };
+  const emptyMeals=()=>({breakfast:[],lunch:[],snack:[],dinner:[]});
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript, ctx, {filename:'index.html', timeout:10000});
+    state.modules={mana:{records:{}}, ielts:{records:{}}, reading:{records:{}}};
+    state.settings=Object.assign({}, state.settings||{}, {goal:{weight:null,bodyFat:null,ielts:null}, autoEncrypt:false, encPass:''});
+    state.readDaily={}; state.readPages={}; state.readingFinished=[];
+    const ym=currentMonthKey();
+    [['01',60,29.8],['05',59.5,29.2],['28',59,28.6]].forEach(function(a){
+      state.modules.mana.records[ym+'-'+a[0]]={done:true,weight:a[1],bodyFat:a[2],exercises:[],meals:emptyMeals(),note:''};
+    });
+    P.series=manaTrendSeries().length;
+    P.bf=bodyFatSeries(ym).map(function(p){return p.bf;}).join(',');
+    renderMonthly(); P.monthly=el.innerHTML;
+    // 补足能量域数据，让 7 日均卡与 8 周折线都能渲染，才能验证完整顺序
+    for(let k=0;k<8;k++){
+      const d=addDays(today(), -(k*7+1));
+      const r=state.modules.mana.records[d]||{done:true,exercises:[],meals:emptyMeals(),note:''};
+      r.weight=60+k*0.1; r.bodyFat=29;
+      r.meals.breakfast=[{n:'测试餐',k:500,qty:1}];
+      r.exercises=[{n:'测试运动',kcal:200}];
+      state.modules.mana.records[d]=r;
+    }
+    renderMana(); P.mana=el.innerHTML;
+    P.firstCard=(P.mana.split('<div class="dcard">')[1]||'').split('<div class="dcard">')[0];
+  }catch(e){ P.baseErr=e.name+': '+e.message; }
+  try{
+    const keys=['⚖️ 记录今日身体指标','🍽️ 饮食（输入即算卡路里）','🍽️ 今日饮食指南',
+      '🏃 运动（输入即算卡路里','🏋️ 训练计划（下班后）','📊 今日热量结算',
+      '📈 趋势分析','⚖️ 体重趋势与能量收支','📈 近 8 周摄入','🏋️ 训练打卡周视图','📅 历史回顾'];
+    P.order=keys.map(function(k){return (P.mana||'').indexOf(k);});
+  }catch(e){ P.orderErr=e.name+': '+e.message; }
+  try{
+    let renders=0; const oRender=render;
+    render=function(){ renders++; };
+    setManaTrend('bodyFat');
+    P.bDisp=nodes['manaTrendB']?nodes['manaTrendB'].style.display:'?';
+    P.wDisp=nodes['manaTrendW']?nodes['manaTrendW'].style.display:'?';
+    P.bBtn=nodes['manaTrendBtnB']?nodes['manaTrendBtnB'].className:'?';
+    setManaTrend('weight');
+    render=oRender; P.renders=renders;
+  }catch(e){ P.switchErr=e.name+': '+e.message; }
+  try{
+    const ym=currentMonthKey();
+    state.modules.mana.records={};
+    state.modules.mana.records[ym+'-03']={done:true,weight:60,bodyFat:29.8,exercises:[],meals:emptyMeals(),note:''};
+    renderMonthly(); P.oneBf=el.innerHTML;
+    state.modules.mana.records={};
+    renderMonthly(); P.zeroBf=el.innerHTML;
+    const r={};
+    r[ym+'-02']={done:true,weight:60,bodyFat:'',exercises:[],meals:emptyMeals(),note:''};
+    r[ym+'-03']={done:true,weight:60,bodyFat:'abc',exercises:[],meals:emptyMeals(),note:''};
+    r[ym+'-04']={done:true,weight:60,bodyFat:null,exercises:[],meals:emptyMeals(),note:''};
+    r[ym+'-05']={done:true,weight:60,bodyFat:28.6,exercises:[],meals:emptyMeals(),note:''};
+    state.modules.mana.records=r; P.dirty=bodyFatSeries(ym).length;
+  }catch(e){ P.bfEdgeErr=e.name+': '+e.message; }
+  try{
+    const oSave=save, oR=render, oT=toast;
+    save=function(){}; render=function(){}; toast=function(){};
+    const vals={setGoalWeight:'60',setGoalBodyFat:'28',setGoalIelts:'6.5',setReadGoal:'5',
+      setReminderHour:'21',setRemind:'on',setActFactor:'1.40',setBmrFormula:'mifflin'};
+    const oGet2=document.getElementById;
+    document.getElementById=function(id){ const n=mk(id); n.value=(vals[id]!=null)?vals[id]:''; n.checked=false; return n; };
+    state.settings.goal={weight:null,bodyFat:null,ielts:null};
+    closeSettings();
+    P.goalBf=state.settings.goal.bodyFat; P.goalW=state.settings.goal.weight;
+    document.getElementById=oGet2; save=oSave; render=oR; toast=oT;
+  }catch(e){ P.settingsErr=e.name+': '+e.message; }
+  try{
+    const oS=save, oR=renderMana, oT=toast;
+    save=function(){}; renderMana=function(){}; toast=function(){};
+    const bvals={weightInput:'60.5',bodyFatInput:'28.0',bmiInput:'',bmrInput:''};
+    const oGet3=document.getElementById;
+    document.getElementById=function(id){ const n=mk(id); n.value=(bvals[id]!=null)?bvals[id]:''; return n; };
+    bodyFieldsManual=false; saveBody();
+    P.savedW=manaToday().weight; P.savedBf=manaToday().bodyFat;
+    document.getElementById=oGet3; save=oS; renderMana=oR; toast=oT;
+  }catch(e){ P.saveErr=e.name+': '+e.message; }
+  document.getElementById=oGet;
+  globalThis.__P2=P;
+})(); }catch(e){ globalThis.__P2ERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -969,6 +1061,35 @@ if(htmlJs){
   if(H.monthlyErr) bad('T5 每月统计渲染异常', H.monthlyErr);
   else if(/近 30 天整体打卡率/.test(H.monthly||'')) ok('T5 每月统计补上近 30 天整体打卡率，渲染无异常');
   else bad('T5 每月统计缺新增打卡率', (H.monthly||'').slice(0,160));
+
+  // ===== P2：体重页两段重排 / 数据区精简 / 月报体脂率 行为级判定 =====
+  if(ctx.__P2ERR) bad('P2 行为校验脚本异常', ctx.__P2ERR);
+  const P2=ctx.__P2||{};
+  if(P2.baseErr) bad('T1/T6/T8 体重页与月报实跑异常', P2.baseErr);
+  else if(P2.series===3 && P2.bf==='29.8,29.2,28.6') ok('T3/T6 统一取数：3 天记录 / 体脂序列按日期升序且数值正确');
+  else bad('T3 序列取数错误', JSON.stringify({s:P2.series,bf:P2.bf}));
+  if(P2.orderErr) bad('P2 顺序取索引异常', P2.orderErr);
+  else if(Array.isArray(P2.order) && P2.order.length===11 && P2.order.every(x=>x>=0)
+     && P2.order.every((x,i)=>i===0||x>P2.order[i-1]) && P2.order[5]<P2.order[6]) ok('T1/AC1 录入区 6 项顺序严格，结算卡在全部 5 张数据卡之前');
+  else bad('T1/AC1 体重页顺序错误', JSON.stringify(P2.order));
+  if(P2.firstCard && /⚖️ 记录今日身体指标/.test(P2.firstCard) && !/<svg/.test(P2.firstCard)
+     && /onclick="saveBody\(\)"/.test(P2.firstCard) && !/openAntafuImport/.test(P2.firstCard)) ok('T2/AC2 记录卡为第一张、无图表无导入按钮，仅 1 个记录按钮');
+  else bad('T2/AC2 记录卡结构错误', (P2.firstCard||'').slice(0,180));
+  if(P2.switchErr) bad('T5 趋势切换执行异常', P2.switchErr);
+  else if(P2.renders===0 && P2.bDisp==='block' && P2.wDisp==='none' && P2.bBtn==='mini accent') ok('T5/AC5 体脂切换只改 DOM 显隐，render() 调用 0 次');
+  else bad('T5 趋势切换口径错误', JSON.stringify({r:P2.renders,b:P2.bDisp,w:P2.wDisp,btn:P2.bBtn}));
+  if(!P2.baseErr && /🎯 体脂率/.test(P2.monthly||'') && /29\.8%/.test(P2.monthly||'') && /28\.6%/.test(P2.monthly||'')
+     && /1\.2%/.test(P2.monthly||'') && /var\(--good\)/.test(P2.monthly||'') && /最高 ·/.test(P2.monthly||'')) ok('T8/AC6 月报体脂：月初 29.8 / 月末 28.6 / Δ −1.2%（绿）/ 最高最低及日期');
+  else bad('T8 月报体脂数值错误', (P2.monthly||'').slice(0,240));
+  if(P2.bfEdgeErr) bad('T10/T12 体脂边界执行异常', P2.bfEdgeErr);
+  else if(/本月暂无体脂记录/.test(P2.zeroBf||'') && /<b[^>]*>—<\/b><span>本月变化/.test(P2.oneBf||'') && P2.dirty===1) ok('T10/T12 0 条显示空态 / 1 条 Δ 为「—」/ 脏值被过滤');
+  else bad('T10/T12 体脂边界错误', JSON.stringify({z:(P2.zeroBf||'').includes('本月暂无体脂记录'),one:/<b[^>]*>—<\/b><span>本月变化/.test(P2.oneBf||''),d:P2.dirty}));
+  if(P2.settingsErr) bad('T13 设置保存执行异常', P2.settingsErr);
+  else if(P2.goalBf===28 && P2.goalW===60) ok('T13/AC7 closeSettings() 重建 goal 不抹掉目标体脂');
+  else bad('T13 目标体脂被抹掉', JSON.stringify({bf:P2.goalBf,w:P2.goalW}));
+  if(P2.saveErr) bad('T7 记录身体指标执行异常', P2.saveErr);
+  else if(P2.savedW===60.5 && P2.savedBf===28) ok('T7/AC4 无导入按钮下 saveBody() 仍可正常写入');
+  else bad('T7 记录写入错误', JSON.stringify({w:P2.savedW,bf:P2.savedBf}));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -1065,6 +1186,27 @@ if(htmlJs){
   if(hb && /homeReviewHtml\(\)/.test(hb[0]) && /kcalDriftHtml\(\)/.test(hb[0])
      && !/weightEnergyCardHtml\(\)/.test(hb[0]) && !/const hist|\$\{hist\}|historyByDateHtml/.test(hb[0])) ok('renderHome 只挂数据速览与条件提醒，不再挂体重综合卡 / 历史列表');
   else bad('renderHome 仍含已移除的视图调用');
+})();
+
+// ===== 体重页 P2 静态锁（v2026-11-12d）：删卡/删导入零残留，保留项与设置项齐全 =====
+(function p2StaticChecks(){
+  const stale=['weightWeekRows','periodLoss','manaMotivation','openAntafuImport','doAntafuImport',
+    'importAntafu','导入蚂蚁阿福','体重周环比','不作趋势依据','最新单日'];
+  const hit=stale.filter(t=>htmlJs.includes(t));
+  if(!hit.length) ok('T3/AC3 周均体重 / 减重卡 / 阿福导入 / 单日噪声文案零残留');
+  else bad('T3 仍有旧代码残留', hit.join(', '));
+  for(const [t,d] of [['function manaTrendSeries','统一取数'],['function bodyFatSeries','体脂序列'],
+    ['function setManaTrend','趋势切换'],['🎯 体脂率','月报体脂卡'],['setGoalBodyFat','目标体脂设置项'],
+    ['bodyFat:null','默认 goal 体脂字段'],['bodyFat: document.getElementById','closeSettings 重建 goal 含体脂'],
+    ['function weekGridHtml','训练打卡周视图'],['function manaHistoryHtml','历史明细'],
+    ['function kcalWeeksHtml','8 周摄入'],['function weightEnergyCardHtml','体重能量卡'],
+    ['btnImport','设置页备份导入'],['btnExportCsv','CSV 导出']]){
+    if(htmlJs.includes(t)) ok('存在：'+d); else bad('缺失：'+d);
+  }
+  const mb=htmlJs.match(/function renderMana\(\)\{[\s\S]*?\n\}/);
+  if(mb && /weightEnergyCardHtml\(\)/.test(mb[0]) && /kcalWeeksHtml\(\)/.test(mb[0])
+     && /\$\{trendHtml\}/.test(mb[0]) && /\$\{hist\}/.test(mb[0])) ok('T4 体重页仍挂能量卡 / 8 周折线 / 趋势分析 / 历史明细');
+  else bad('T4 体重页保留视图被误删');
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');

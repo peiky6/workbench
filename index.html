@@ -571,6 +571,7 @@
       <h3>🎯 目标设定</h3>
       <p class="hint">设定目标后，体重图会显示目标线、首页清单与复盘会追踪进度。先留空也可随时回来填。</p>
       <div class="field"><label>目标体重(kg)</label><input id="setGoalWeight" type="number" step="0.1" placeholder="如 60" /></div>
+      <div class="field"><label>目标体脂率(%)</label><input id="setGoalBodyFat" type="number" step="0.1" placeholder="如 28 · 留空则不显示达标进度" /></div>
       <div class="field"><label>目标雅思总分(如 6.5 / 7.0)</label><input id="setGoalIelts" type="number" step="0.1" placeholder="如 6.5" /></div>
       <div class="field"><label>雅思考试日期（没报名就填自定的模拟考日期 · 首页显示倒计时）</label><input id="setIeltsExamDate" type="date" /></div>
       <div class="field"><label>每日阅读目标(分钟 · 微习惯，默认 5)</label><input id="setReadGoal" type="number" min="1" max="240" placeholder="如 5" /></div>
@@ -744,7 +745,7 @@ function defaultState(){
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
     outputs:[], outTags:[],
-    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, bodyFat:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
   };
 }
 let state = load();
@@ -1064,7 +1065,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-12c';
+const APP_VERSION = '2026-11-12d';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -1126,24 +1127,8 @@ function weekGridHtml(getDone, weeks){
   }
   return `<div class="wgrid">${rows.join('')}</div>`;
 }
-// 体重周环比：近 weeks 周，每行「周起 · 周均体重 · 较上周变化」
-function weightWeekRows(weeks){
-  const td=new Date(); const dow=(td.getDay()+6)%7;
-  const curStart=new Date(td); curStart.setDate(td.getDate()-dow);
-  const weekAvg=(start)=>{ let sum=0,n=0; for(let i=0;i<7;i++){ const r=rec('mana')[fmt(start)]; if(r&&r.weight!=null){ sum+=r.weight; n++; } start.setDate(start.getDate()+1); } return n? sum/n : null; };
-  const avgs=[];
-  for(let w=0; w<weeks; w++){
-    const start=new Date(curStart); start.setDate(curStart.getDate()-(weeks-1-w)*7);
-    avgs.push({label:(w===weeks-1)?'本周':((start.getMonth()+1)+'/'+start.getDate()), v:weekAvg(new Date(start))});
-  }
-  return avgs.map((a,i)=>{
-    const prev=(i>0)?avgs[i-1].v:null;
-    const d=(a.v!=null&&prev!=null)?(a.v-prev):null;
-    const delta=(d==null)?'—':(Math.abs(d)<0.05?'±0':(d>0?'▲ +'+d.toFixed(1):'▼ '+d.toFixed(1)));
-    const color=(d==null)?'var(--sub)':(d<=0?'var(--good)':'var(--warn)');
-    return `<div class="wrow"><span class="wl">${a.label}</span><span class="wv">${a.v!=null? a.v.toFixed(1)+' kg':'—'}</span><span class="wc" style="color:${color}">${delta}</span></div>`;
-  }).join('');
-}
+/* 周均体重视图已移除（v2026-11-12d）：与 7 日均口径重复且可能方向相反；
+   训练出勤格子保留在「训练打卡周视图」，由 weekGridHtml 提供。 */
 
 /* ===================== 学习计划（2026年8月 · AI 转型）数据 ===================== */
 const PLAN_WEEKS = [{"n":1,"label":"第一周","title":"AI 通识扫盲 + 术语体系搭建","range":"8.1–8.3"},{"n":2,"label":"第二周","title":"AI 项目研发流程 + 关键环节把控","range":"8.4–8.10"},{"n":3,"label":"第三周","title":"AI 行业应用 + 解决方案设计基础","range":"8.11–8.17"},{"n":4,"label":"第四周","title":"项目管理适配 + 实战演练 + 证书准备","range":"8.18–8.24"}];
@@ -2601,6 +2586,31 @@ function renderMonthly(){
   const isCur = (ym===currentMonthKey());
 
   const stat=(b,s)=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`;
+
+  // 1.5) 体脂率：月初 / 月末 / Δ / 最高·最低及日期；口径 = 月末 − 月初（负值即下降）
+  const bfSeries=bodyFatSeries(ym);
+  let bfHtml='';
+  if(!bfSeries.length){
+    bfHtml='<div class="empty">本月暂无体脂记录</div>';
+  }else{
+    const first=bfSeries[0], last=bfSeries[bfSeries.length-1];
+    let hi=bfSeries[0], lo=bfSeries[0];
+    bfSeries.forEach(p=>{ if(p.bf>hi.bf) hi=p; if(p.bf<lo.bf) lo=p; });
+    const delta=bfSeries.length>=2 ? +(last.bf-first.bf).toFixed(1) : null;
+    const dTxt=delta==null?'—':((delta>0?'+':(delta<0?'−':''))+Math.abs(delta).toFixed(1)+'%');
+    const dCol=delta==null?'var(--sub)':(delta<0?'var(--good)':(delta>0?'var(--warn)':'var(--sub)'));
+    const goalBf=(state.settings.goal&&state.settings.goal.bodyFat!=null&&isFinite(Number(state.settings.goal.bodyFat)))?Number(state.settings.goal.bodyFat):null;
+    const gap=goalBf!=null?+(last.bf-goalBf).toFixed(1):null;
+    const progress=goalBf==null?'':(gap>0
+      ? `<p class="hint">🎯 目标体脂 <b>${goalBf}%</b>，还差 <b>${gap}%</b> 要降 💪</p>`
+      : `<p class="hint">🎯 目标体脂 <b>${goalBf}%</b>，已达成 🎉</p>`);
+    bfHtml=`<div class="stats stats2">
+      ${stat(first.bf+'%','月初体脂率')}${stat(last.bf+'%','月末体脂率')}
+      <div class="stat"><b style="color:${dCol}">${dTxt}</b><span>本月变化</span></div>
+      ${stat(goalBf!=null?goalBf+'%':'—','目标体脂率')}
+      ${stat(hi.bf+'%','最高 · '+hi.d)}${stat(lo.bf+'%','最低 · '+lo.d)}
+    </div>${progress}`;
+  }
   const weightHtml = (wMax==null)
     ? '<div class="empty">本月暂无体重记录</div>'
     : `<div class="stats stats2">${stat(wMax+' kg','最高体重')}${stat(wMaxD,'达成日期')}${stat(wMin+' kg','最低体重')}${stat(wMinD,'达成日期')}</div>`;
@@ -2636,6 +2646,10 @@ function renderMonthly(){
     <div class="dcard">
       <div class="secttitle">⚖️ 体重</div>
       ${weightHtml}
+    </div>
+    <div class="dcard">
+      <div class="secttitle">🎯 体脂率</div>
+      ${bfHtml}
     </div>
     <div class="dcard">
       <div class="secttitle">🏋️ 训练计划达成</div>
@@ -4091,6 +4105,16 @@ function weightSeries(){
   return Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null)
     .map(d=>({d, w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
 }
+/* 体重/体脂统一取数：一次遍历 rec('mana')，供体重页柱图、体脂图与月报体脂卡共用。
+   ym 传 'YYYY-MM' 时只取该月；'' / 非数字 / null 一律归 null，脏值不污染 min/max。 */
+function manaTrendSeries(ym){
+  const num=v=>(v==null||v===''||!isFinite(Number(v)))?null:Number(v);
+  return Object.keys(rec('mana')).filter(d=>!ym||d.slice(0,7)===ym).sort((a,b)=>a.localeCompare(b))
+    .map(d=>{ const r=rec('mana')[d]; return {d, w:num(r.weight), bf:num(r.bodyFat)}; });
+}
+function bodyFatSeries(ym){
+  return manaTrendSeries(ym).filter(p=>p.bf!=null&&p.bf>0).map(p=>({d:p.d, bf:p.bf}));
+}
 // 最近 n 天体重均值（offset=7 即「上一个 n 天」，用于对比）
 function weightMA(n, offset){
   const s=weightSeries(); if(!s.length) return null;
@@ -4114,7 +4138,6 @@ function kcalDriftHtml(){  // 需求①：漂移 ≥±10% 才打扰
 function weightEnergyCardHtml(){  // 需求②③：7 日均值 + 盈余直给 + 需求④停滞指向
   const ma=weightMA(7,0), prev=weightMA(7,7);
   const en=energyAvg(7,0);
-  const s=weightSeries(); const lastW=s.length? s[s.length-1].w : null;
   if(ma==null && en.gap==null) return '';
   const delta=(ma!=null&&prev!=null)? ma-prev : null;
   const dTxt = delta==null? '—' : (delta>0?'+':'−')+Math.abs(delta).toFixed(2)+' kg';
@@ -4142,7 +4165,6 @@ function weightEnergyCardHtml(){  // 需求②③：7 日均值 + 盈余直给 +
     <div class="ltitle">⚖️ 体重趋势与能量收支 <span style="margin-left:auto;font-size:12px;color:var(--sub)">近 7 日</span></div>
     ${statsHtml}
     ${en.gap!=null?`<p class="hint">日均${en.gap>0?'盈余':'缺口'} ${Math.abs(en.gap)} kcal ${monTxt} · TDEE 按 BMR×${actFactor()}（${actFactorLabel()}）+ 已记录运动估算</p>`:''}
-    ${lastW!=null?`<p class="hint">最新单日 ${lastW} kg（仅供记录，不作趋势依据）</p>`:''}
     ${tip}
   </div>`;
 }
@@ -4197,19 +4219,8 @@ function kcalWeeksHtml(){
   </div>`;
 }
 
-function periodLoss(kind){
-  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight)})).sort((a,b)=>a.d.localeCompare(b.d));
-  if(items.length<1) return null;
-  const now=new Date(); let start;
-  if(kind==='week') start=startOfWeek(now);
-  else if(kind==='month') start=new Date(now.getFullYear(),now.getMonth(),1);
-  else if(kind==='quarter'){ const q=Math.floor(now.getMonth()/3); start=new Date(now.getFullYear(),q*3,1); }
-  else start=new Date(now.getFullYear(),0,1);
-  const inP=items.filter(i=>new Date(i.d)>=start);
-  if(!inP.length) return null;
-  const first=inP[0].w, last=inP[inP.length-1].w;
-  return +(first-last).toFixed(1);
-}
+/* 期间首末单日体重差视图已移除（v2026-11-12d）：四个窗口同源、受单日噪声影响，
+   与「7 日均较上周」方向可能相反。趋势判断统一以 7 日均 + 逐日柱图为准。 */
 function predictGoalDays(){
   const goalW=(state.settings.goal&&state.settings.goal.weight!=null)?Number(state.settings.goal.weight):null;
   if(goalW==null) return null;
@@ -4254,13 +4265,7 @@ function weightGoalLine(){
   if(ps) s+=' · '+ps;
   return s;
 }
-function manaMotivation(){
-  const w=periodLoss('week');
-  if(w==null) return '记录下今天的体重，开启你的蜕变之旅吧 🌱 哪怕只是开始，也已经赢过昨天的自己。';
-  if(w>0) return `本周已减 ${w} kg，太棒了！脂肪正在悄悄离开，继续保持节奏，你离目标越来越近 💪`;
-  if(w===0) return '本周体重持平，说明身体在适应期。别灰心，坚持运动和饮食记录，拐点马上就来 🔥';
-  return `本周 +${(-w).toFixed(1)} kg，可能是水分或饮食波动。别慌，回顾下饮食热量，明天轻一点就好 🍃`;
-}
+/* 由单日体重差派生的激励文案随该口径一并移除，不再另写新激励。 */
 
 /* ---- 训练计划 / 饮食计划 ---- */
 // 训练日：同样守 16+8（9:00-17:00 窗口），晚餐 17:00 吃完再去训练（参照减脂饮食指南·乐刻版）
@@ -4531,17 +4536,35 @@ function trainPlanHtml(){
     <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button>
     <button class="btn ${tsk?'ghost':'line'} w100" style="margin-top:8px" onclick="toggleTrainSkip()">${tsk?'🚫 今日不训练（点此撤销）':'🚫 今日不训练（跳过）'}</button></div>`;
 }
+let manaTrendMode='weight';
+function setManaTrend(mode){
+  manaTrendMode=(mode==='bodyFat')?'bodyFat':'weight';
+  const isBf=manaTrendMode==='bodyFat';
+  const w=document.getElementById('manaTrendW'), b=document.getElementById('manaTrendB');
+  const bw=document.getElementById('manaTrendBtnW'), bb=document.getElementById('manaTrendBtnB');
+  if(w) w.style.display=isBf?'none':'block';
+  if(b) b.style.display=isBf?'block':'none';
+  if(bw) bw.className=isBf?'mini line':'mini accent';
+  if(bb) bb.className=isBf?'mini accent':'mini line';
+}
 function renderMana(){
   const t=manaToday();
-  const losses=[
-    {k:'week',label:'本周'}, {k:'month',label:'本月'}, {k:'quarter',label:'本季度'}, {k:'year',label:'本年度'}
-  ].map(o=>{ const v=periodLoss(o.k); return `<div class="stat"><b>${v==null?'—':(v>0?'−'+v:(v<0?'+'+(-v):'0'))}</b><span>${o.label}减重(kg)</span></div>`; }).join('');
 
-  // 柱状图
-  const items=Object.keys(rec('mana')).filter(d=>rec('mana')[d].weight!=null).map(d=>({d,w:Number(rec('mana')[d].weight),bf:rec('mana')[d].bodyFat!=null?Number(rec('mana')[d].bodyFat):null})).sort((a,b)=>a.d.localeCompare(b.d));
+  // 趋势分析：一次取数供体重柱图 / 体脂图共用；切换只改 DOM 显隐，不整页重渲染（不丢未保存输入）
+  const items=manaTrendSeries().filter(p=>p.w!=null&&p.w>0);
   const chart = items.length<1 ? '<p class="hint">记录体重后，这里会显示柱状趋势图～</p>' : barChart(items);
-  const bfItems=Object.keys(rec('mana')).filter(d=>rec('mana')[d].bodyFat!=null).map(d=>({d,bf:Number(rec('mana')[d].bodyFat)})).sort((a,b)=>a.d.localeCompare(b.d));
-  const bfChart = bfItems.length<2 ? '' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
+  const bfItems=bodyFatSeries();
+  const bfChart = bfItems.length<2 ? '<p class="hint">至少记录 2 天体脂率才能画趋势</p>' : `<div class="chart"><div class="clabel">📉 体脂率趋势（${bfItems.length} 天）</div>${bodyFatChart(bfItems)}</div>`;
+  const isBf=manaTrendMode==='bodyFat';
+  const trendHtml=`<div class="dcard">
+      <div class="ltitle">📈 趋势分析 <span style="margin-left:auto;font-size:12px;color:var(--sub)">${items.length} 天体重 · ${bfItems.length} 天体脂</span></div>
+      <div class="mini-row" style="margin:6px 0 8px">
+        <button class="mini ${isBf?'line':'accent'}" id="manaTrendBtnW" onclick="setManaTrend('weight')">⚖️ 体重</button>
+        <button class="mini ${isBf?'accent':'line'}" id="manaTrendBtnB" onclick="setManaTrend('bodyFat')">📉 体脂率</button>
+      </div>
+      <div id="manaTrendW" style="display:${isBf?'none':'block'}"><div class="chart">${chart}</div></div>
+      <div id="manaTrendB" style="display:${isBf?'block':'none'}">${bfChart}</div>
+    </div>`;
   const goalTip=(()=>{ const gw=state.settings.goal&&state.settings.goal.weight!=null?Number(state.settings.goal.weight):null; const lw=latestWeight(); if(gw==null) return ''; if(lw==null){ return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b> 已设定。还没记录体重——在上方输入框填今天的体重，系统会自动算出离目标还差多少 💡</p>`; }     const diff=+(lw-gw).toFixed(1);
     const pstr=goalPredictStr();
     return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。${pstr?(' · '+pstr):''}</p>`; })();
@@ -4575,12 +4598,6 @@ function renderMana(){
       <h2>⚖️ 体重管理</h2>
     </div>
     <div class="dcard">
-      <div class="stats stats2">${losses}</div>
-      <div class="motivate">💡 ${manaMotivation()}</div>
-    </div>
-    ${weightEnergyCardHtml()}
-    ${kcalWeeksHtml()}
-    <div class="dcard">
       <div class="ltitle">⚖️ 记录今日身体指标</div>
       <div class="bgrid">
         <div class="field"><label>体重(kg)</label><input id="weightInput" type="number" step="0.1" placeholder="如 68.5" value="${t.weight!=null?t.weight:''}" oninput="liveBody()" /></div>
@@ -4591,27 +4608,16 @@ function renderMana(){
       <p class="hint" style="margin:8px 2px 10px">BMI / 基础代谢按体重 + 个人信息自动计算，可手动修改（如体脂秤数值不同）。体脂率需手动填写。${state.settings.bmrFormula==='katch'?'当前用 Katch–McArdle 公式：基础代谢基于去脂体重（体重×（1−体脂率）），请尽量填体脂率，未填时退回 Mifflin 估算。':''}</p>
       <div class="inline">
         <button class="mini accent" onclick="saveBody()">💾 记录</button>
-        <button class="mini line" onclick="openAntafuImport()">📥 导入蚂蚁阿福</button>
       </div>
-      <div class="chart">${chart}</div>
-      ${bfChart}
       ${goalTip}
     </div>
     <div class="dcard">
-      <div class="ltitle">⚖️ 体重周环比（近 4 周）</div>
-      <div class="wgrid">${weightWeekRows(4)}</div>
-      <p class="hint">周均体重 = 该周有记录的体重取平均；▼ 下降（绿）· ▲ 上升（橙）· — 无对比。</p>
+      <div class="ltitle">🍽️ 饮食（输入即算卡路里）</div>
+      ${mealsHtml}
+      <p class="hint" style="margin:4px 2px 8px">🍽️ 按今日饮食指南走：训练日 4 餐（含 16:30 加餐），休息日 3 餐不加餐；周末不训练为「自由吃」，家常菜正常吃、不套指南。点「今日不训练」会自动切换方案。</p>
+      <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
     </div>
-    <div class="dcard">
-      <div class="ltitle">🏋️ 训练计划（下班后）</div>
-      ${trainPlanHtml()}
-      <button class="btn line w100" style="margin-top:10px" onclick="openBatchTrain()">🗓️ 批量补训练达成（补历史漏打卡）</button>
-    </div>
-    <div class="dcard">
-      <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
-      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; if(r&&r.trainDone) return 'on'; if(r&&r.trainSkip) return 'skip'; return false; }, 4)}
-      <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；斜线灰=当天标记不训练；空白=未打卡；今天之后为虚线占位。</p>
-    </div>
+    ${dietGuideHtml()}
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
       <p class="hint" style="margin:2px 2px 8px">⚠️ 左手腱鞘炎：掌撑/握重动作做不了，课前说明换前臂支撑。</p>
@@ -4625,12 +4631,10 @@ function renderMana(){
       ${exHtml}
       <div class="mrow" style="font-weight:800"><span>运动消耗合计</span><span>${exTotal} kcal</span></div>
     </div>
-    ${dietGuideHtml()}
     <div class="dcard">
-      <div class="ltitle">🍽️ 饮食（输入即算卡路里）</div>
-      ${mealsHtml}
-      <p class="hint" style="margin:4px 2px 8px">🍽️ 按今日饮食指南走：训练日 4 餐（含 16:30 加餐），休息日 3 餐不加餐；周末不训练为「自由吃」，家常菜正常吃、不套指南。点「今日不训练」会自动切换方案。</p>
-      <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
+      <div class="ltitle">🏋️ 训练计划（下班后）</div>
+      ${trainPlanHtml()}
+      <button class="btn line w100" style="margin-top:10px" onclick="openBatchTrain()">🗓️ 批量补训练达成（补历史漏打卡）</button>
     </div>
     <div class="dcard">
       <div class="ltitle">📊 今日热量结算</div>
@@ -4641,6 +4645,14 @@ function renderMana(){
       </div>
       <div class="motivate">${willDrop}<br>${predict}</div>
       <button class="btn ${t.done?'ghost':'primary'} w100" onclick="toggleDone('mana')">${t.done?'✏️ 取消今日完成':'✅ 标记今日完成'}</button>
+    </div>
+    ${trendHtml}
+    ${weightEnergyCardHtml()}
+    ${kcalWeeksHtml()}
+    <div class="dcard">
+      <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
+      ${weekGridHtml(ds=>{ const r=rec('mana')[ds]; if(r&&r.trainDone) return 'on'; if(r&&r.trainSkip) return 'skip'; return false; }, 4)}
+      <p class="hint">每格=一天（周一~周日），绿=当天完成训练计划；斜线灰=当天标记不训练；空白=未打卡；今天之后为虚线占位。</p>
     </div>
     ${hist}`;
 }
@@ -4748,61 +4760,8 @@ function liveBody(){
     bmrI.value=Math.round(bmrCalc(wv,bf));
   }
 }
-function openAntafuImport(){
-  document.getElementById('sheet').innerHTML = `
-    <h3>📥 导入蚂蚁阿福体重数据</h3>
-    <p class="desc">把蚂蚁阿福导出的数据粘贴进来即可（支持 CSV / 文本）。每行识别「日期 + 体重」；<b>带「体脂 / 脂肪」字样的数值会一并导入体脂率</b>。<br>
-    能识别的格式示例：<br><code>2024-05-01,68.5</code> · <code>2024/5/1 体重68.5 体脂24.5</code> · <code>2024年5月1日 体重 68.5 脂肪 24.5%</code></p>
-    <textarea id="antafuText" rows="9" placeholder="在此粘贴导出的数据，每行一条…"></textarea>
-    <div class="row">
-      <button class="btn ghost" onclick="closeSheet()">取消</button>
-      <button class="btn primary" onclick="doAntafuImport()">导入</button>
-    </div>`;
-  document.getElementById('sheetMask').classList.add('show');
-}
-function doAntafuImport(){
-  const text=document.getElementById('antafuText')?document.getElementById('antafuText').value:'';
-  importAntafu(text); closeSheet();
-}
-function importAntafu(text){
-  const lines=(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const map={}; // ds -> {weight, bodyFat, bmi}
-  for(const line of lines){
-    const dm=line.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/); if(!dm) continue;
-    const y=dm[1], mo=String(+dm[2]).padStart(2,'0'), da=String(+dm[3]).padStart(2,'0');
-    const ds=`${y}-${mo}-${da}`;
-    let weight=null, bodyFat=null, bmi=null;
-    const wm=line.match(/(?:体重|weight|kg|重)[^\d]*?(\d+(?:\.\d+)?)/i);
-    if(wm) weight=Number(wm[1]);
-    const bm=line.match(/(?:体脂|脂肪|body[\s_-]?fat|bf|fat|脂)[^\d]*?(\d+(?:\.\d+)?)/i);
-    if(bm) bodyFat=Number(bm[1]);
-    const im=line.match(/(?:bmi)[^\d]*?(\d+(?:\.\d+)?)/i);
-    if(im) bmi=Number(im[1]);
-    if(weight==null && bodyFat==null){
-      const nums=(line.match(/\d+(?:\.\d+)?/g)||[]).map(Number).filter(n=> n!==+y && n!==+dm[2] && n!==+dm[3]);
-      const w=nums.find(n=> n>20 && n<350);
-      if(w!=null) weight=w;
-    }
-    if(weight==null && bodyFat==null) continue;
-    map[ds]=map[ds]||{};
-    if(weight!=null) map[ds].weight=weight;
-    if(bodyFat!=null) map[ds].bodyFat=bodyFat;
-    if(bmi!=null) map[ds].bmi=bmi;
-  }
-  if(!Object.keys(map).length){ toast('没有识别到数据，检查下格式'); return; }
-  let added=0;
-  Object.keys(map).forEach(ds=>{
-    const o=map[ds];
-    const t=rec('mana')[ds]||{done:false,trainDone:false,weight:null,bodyFat:null,bmi:null,bmr:null,exercises:[],meals:{breakfast:[],lunch:[],snack:[],dinner:[]},note:''};
-    if(o.weight!=null) t.weight=o.weight;
-    if(o.bodyFat!=null) t.bodyFat=o.bodyFat;
-    if(o.bmi!=null) t.bmi=o.bmi;
-    if(t.weight!=null||t.bodyFat!=null) t.done=true;
-    t.ts=Date.now();
-    rec('mana')[ds]=t; added++;
-  });
-  save(); renderMana(); toast(`已导入 ${added} 条记录（含体脂率） ⚖️`);
-}
+/* 蚂蚁阿福数据粘贴流程已移除（v2026-11-12d）：全站唯一入口原在体重页记录卡，用户反馈从未使用且步骤繁琐。
+   仅删入口与解析代码，已写入 rec('mana') 的历史体重/体脂记录全部保留；需要批量补历史时可用设置页 JSON 备份导入。 */
 function allExercises(){ return (state.customExercises||[]).concat(EXERCISES); }
 function saveCustomExercise(name,kcal){
   const ce=state.customExercises||(state.customExercises=[]);
@@ -5048,6 +5007,7 @@ function openSettings(){
   afSel.value=actFactor().toFixed(2);
   if(afSel.selectedIndex<0) afSel.value='1.40';   // 兜底：绝不留下空白下拉
   document.getElementById('setGoalWeight').value=(state.settings.goal&&state.settings.goal.weight!=null)?state.settings.goal.weight:'';
+  document.getElementById('setGoalBodyFat').value=(state.settings.goal&&state.settings.goal.bodyFat!=null)?state.settings.goal.bodyFat:'';
   document.getElementById('setGoalIelts').value=(state.settings.goal&&state.settings.goal.ielts!=null)?state.settings.goal.ielts:'';
   document.getElementById('setIeltsExamDate').value=state.settings.ieltsExamDate||'';
   document.getElementById('setReadGoal').value=(state.settings.readGoal!=null)?state.settings.readGoal:5;
@@ -5106,7 +5066,7 @@ function closeSettings(){
   s.autoEncrypt=document.getElementById('setAutoEncrypt').checked;
   s.encPass=document.getElementById('setEncPass').value;
   if(s.autoEncrypt && !s.encPass){ toast('⚠️ 加密已开启但未设口令，云端仍是明文，请填口令后重存'); }
-  s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
+  s.goal={ weight: document.getElementById('setGoalWeight').value.trim()?Number(document.getElementById('setGoalWeight').value.trim()):null, bodyFat: document.getElementById('setGoalBodyFat').value.trim()?Number(document.getElementById('setGoalBodyFat').value.trim()):null, ielts: document.getElementById('setGoalIelts').value.trim()?Number(document.getElementById('setGoalIelts').value.trim()):null };
   s.ieltsExamDate=(document.getElementById('setIeltsExamDate').value||'').trim();
   s.reminderEnabled = document.getElementById('setRemind').value==='on';
   s.reminderHour = Number(document.getElementById('setRemindHour').value)||21;
