@@ -82,7 +82,7 @@ const required = [
   ['aiStudyCount', '刷卡遍数读取'],
   ['aiStudyTerm', '点已学习记一遍'],
   ['aiStudyUndo', '误点撤销一遍'],
-  ['aiReadyCount', '刷满目标遍数统计'],
+  ['function aiEnsureRoundBaseline', '轮次基线幂等'],
   ['aiReviewCycle', '复习周期迁移标记'],
   ['aiPass1', '首轮成绩存档'],
   ['aiExtEntries', '外部术语枚举'],
@@ -295,7 +295,11 @@ if(htmlJs){
   for(const [token, desc] of [
     ['aiRoundStudy:{}', '本轮遍数字段'],
     ['aiQueueTs:{}', '入队时间戳字段'],
-    ['aiMasteredEver:0', '累计达成次数字段'],
+    ['aiRoundBaselineV2:0', '轮次基线标记字段'],
+    ['function aiEnsureRoundBaseline', '轮次基线幂等'],
+    ['本轮已完成 ', '进度卡标题轮次+词数'],
+    ['🏁 累计完成 ', '累计完成轮数文案'],
+    ['答错排进优先复习，次日出现在今日卡片', '周测答错新文案'],
     ['function aiRoundCount', '本轮遍数读取'],
     ['function aiRoundLayer', '当前遍数层'],
     ['function aiRoundDone', '本轮完成判定'],
@@ -309,7 +313,7 @@ if(htmlJs){
     ['id="gistRemembered"', '设置页「已记住」提示'],
     ['_def, _rem, _cur', 'mergeState 本机 settings 优先'],
     ["state.aiQueueTs[k]=Date.now()", 'feed 新词入队'],
-    ["'aiRoundStudy','aiQueueTs','aiMasteredEver'", 'mergeState 新字段登记'],
+    ["'aiRoundStudy','aiQueueTs','aiRoundBaselineV2'", 'mergeState 新字段登记'],
     ['全部词各刷满 3 遍', '轮次完成文案'],
   ]){
     if(htmlJs.includes(token) || htmlRaw.includes(token)) ok('存在：' + desc);
@@ -330,6 +334,16 @@ if(htmlJs){
     ['📝 每日自测', '每日自测 chip'],
     ['🎯 持续复习', '持续复习 chip'],
     ['aiDailyQuizRender()', '每日自测渲染调用'],
+    ['aiMasteredEver', '累计达成次数字段'],
+    ['function aiReadyCount', '刷满目标遍数统计'],
+    ['function aiRoundsTotal', '总刷卡遍数统计'],
+    ['累计达成', '累计达成文案'],
+    ['总刷卡遍数', '总刷卡遍数进度条'],
+    ['刷满 ${AI_REVIEW_TARGET} 遍的词', '刷满3遍的词进度条'],
+    ['首轮已学完', '首轮成绩展示'],
+    ['下面按层级', '层级分布引导句'],
+    ['答错会自动把该术语标记为未掌握', '周测旧答错文案'],
+    ['已掌握 ${totalDone}', '标题静态已掌握比例'],
   ]){
     if(!htmlJs.includes(token) && !htmlRaw.includes(token)) ok('已移除：' + desc);
     else bad('残留：' + desc + '（token: ' + token + '）');
@@ -674,7 +688,7 @@ if(htmlJs){
   globalThis.__P0=R;
 })(); }catch(e){ globalThis.__P0ERR=e.name+': '+e.message; }
 `;
-  // v2026-11-12 行为级断言：本轮遍数分层轮次、插队/出队、累计达成次数、配置持久化
+  // v2026-11-12 行为级断言：本轮遍数分层轮次、插队/出队、轮次基线、配置持久化
   const v7Script = `
 ;globalThis.__V7ERR=null;
 ;try{ (function(){
@@ -687,7 +701,7 @@ if(htmlJs){
     let advance=0; aiCheckRound=function(){ if(aiRoundDone()) advance++; };
     state.aiRoundStudy={}; state.aiQueueTs={}; state.aiStudyTs={}; state.aiStudy={};
     state.aiMastered=[]; state.aiMasteredTs={}; state.aiMasteredDel={};
-    state.aiMasteredEver=0; state.aiReviewRound=0; state.aiDaily={};
+    state.aiReviewRound=0; state.aiDaily={};
     let day=0, dup=0;
     while(day<20 && !aiRoundDone()){
       day++; state.aiDaily={};
@@ -697,16 +711,16 @@ if(htmlJs){
     }
     V.days=day; V.dup=dup; V.full=aiRoundDone();
     V.counts=idx.map(i=>aiRoundCount(i));
-    V.ever=state.aiMasteredEver; V.advance=advance;
-    aiStudyTerm(0); V.everAfterExtra=state.aiMasteredEver;
+    V.advance=advance;
+    aiStudyTerm(0); V.extraCount=aiRoundCount(0);
     const masteredBefore=(state.aiMastered||[]).length;
     state.aiReviewRound=0; aiAdvanceRound();
     V.roundAfter=state.aiReviewRound; V.countsAfter=idx.map(i=>aiRoundCount(i));
     V.masteredKept=(state.aiMastered||[]).length===masteredBefore;
   }catch(e){ V.t43Err=e.name+': '+e.message; }
   try{
-    state.aiRoundStudy={0:3}; state.aiStudy={0:3}; state.aiStudyTs={0:Date.now()}; state.aiMasteredEver=5;
-    aiStudyUndo(0); V.undoCount=aiRoundCount(0); V.undoEver=state.aiMasteredEver;
+    state.aiRoundStudy={0:3}; state.aiStudy={0:3}; state.aiStudyTs={0:Date.now()};
+    aiStudyUndo(0); V.undoCount=aiRoundCount(0); V.undoStudy=aiStudyCount(0);
   }catch(e){ V.t46Err=e.name+': '+e.message; }
   try{
     state.aiRoundStudy={}; state.aiQueueTs={}; state.aiStudyTs={}; state.aiStudy={}; state.aiDaily={};
@@ -718,9 +732,9 @@ if(htmlJs){
   }catch(e){ V.t47Err=e.name+': '+e.message; }
   try{
     const n=Date.now();
-    state.aiQueueTs={0:n}; state.aiStudyTs={0:n-100000}; state.aiRoundStudy={0:1}; state.aiMasteredEver=7;
-    mergeState({aiStudyTs:{0:n-200000}, aiQueueTs:{}, aiRoundStudy:{0:2}, aiMasteredEver:9});
-    V.antiPending=aiQueuePending(0); V.mRound=aiRoundCount(0); V.mEver=state.aiMasteredEver;
+    state.aiQueueTs={0:n}; state.aiStudyTs={0:n-100000}; state.aiRoundStudy={0:1};
+    mergeState({aiStudyTs:{0:n-200000}, aiQueueTs:{}, aiRoundStudy:{0:2}});
+    V.antiPending=aiQueuePending(0); V.mRound=aiRoundCount(0);
   }catch(e){ V.t48Err=e.name+': '+e.message; }
   // T28：直接调用周测答错入口，验证不改掌握/不写复习时间/次日必进前 5
   try{
@@ -747,6 +761,34 @@ if(htmlJs){
     V.cfgToken=state.settings.gistToken; V.cfgPass=state.settings.encPass; V.cfgAct=state.settings.actFactor;
   }catch(e){ V.cfgErr=e.name+': '+e.message; }
   aiTermIdxList=oList; aiRerender=oRerender; save=oSave; toast=oToast; aiCheckRound=oCheck; renderModule=oRenderModule;
+  // T60-T62：轮次基线幂等（老用户 +1 / 重复不加 / 新设备不加）
+  try{
+    const legacy={aiPass1:[1,2], aiMastered:[1,2], aiStudy:{}, aiReviewRound:0};
+    V.b60First=aiEnsureRoundBaseline(legacy); V.b60Round=legacy.aiReviewRound; V.b60Mark=legacy.aiRoundBaselineV2;
+    V.b61Again=aiEnsureRoundBaseline(legacy); V.b61Round=legacy.aiReviewRound;
+    const fresh={aiPass1:[], aiMastered:[], aiStudy:{}, aiReviewRound:0};
+    V.b62First=aiEnsureRoundBaseline(fresh); V.b62Round=fresh.aiReviewRound; V.b62Mark=fresh.aiRoundBaselineV2;
+  }catch(e){ V.t60Err=e.name+': '+e.message; }
+  // T51：标题「本轮已完成 X/N 词」随本轮遍数变化
+  try{
+    state.aiRoundStudy={0:3,1:3}; state.aiReviewRound=1;
+    V.titleHtml=aiLayerProgressHtml();
+  }catch(e){ V.t51Err=e.name+': '+e.message; }
+  // T63：跨端合并基线标记取 max，旧端数据不把已完成基线复活再加一次
+  try{
+    state.aiReviewRound=1; state.aiRoundBaselineV2=1;
+    mergeState({aiReviewRound:0, aiRoundBaselineV2:0});
+    V.mBaseRound=state.aiReviewRound; V.mBaseMark=state.aiRoundBaselineV2;
+  }catch(e){ V.t63Err=e.name+': '+e.message; }
+  // T65：真实 load() 路径下基线立即落盘，重复启动不重复 +1
+  try{
+    const base=defaultState();
+    base.aiRoundBaselineV2=0; base.aiPass1=[1,2]; base.aiMastered=[1,2]; base.aiReviewRound=0;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(base));
+    const s1=load(); V.ld1=s1.aiReviewRound; V.ldMark1=s1.aiRoundBaselineV2;
+    const raw1=JSON.parse(localStorage.getItem(STORAGE_KEY)); V.ldPersist=raw1.aiRoundBaselineV2;
+    const s2=load(); V.ld2=s2.aiReviewRound;
+  }catch(e){ V.t65Err=e.name+': '+e.message; }
   globalThis.__V7=V;
 })(); }catch(e){ globalThis.__V7ERR=e.name+': '+e.message; }
 `;
@@ -811,7 +853,7 @@ if(htmlJs){
   else if(/这个模块暂时打不开/.test(R.fallbackHtml||'')) ok('模块渲染抛错时显示兜底卡片（不再白屏）');
   else bad('模块渲染异常未渲染兜底卡片', (R.fallbackHtml||'').slice(0,120));
 
-  // ===== V7 行为级判定 =====
+  // ===== V7/V8 行为级判定 =====
   if(ctx.__V7ERR) bad('V7 行为校验脚本异常', ctx.__V7ERR);
   const V=ctx.__V7||{};
   if(V.t43Err) bad('T43 轮次模型执行异常', V.t43Err);
@@ -819,26 +861,51 @@ if(htmlJs){
     if(V.full && Array.isArray(V.counts) && V.counts.every(x=>x===3)) ok('T43 一轮每卡正好刷满 3 遍（12 词 / '+V.days+' 天）');
     else bad('T43 一轮遍数不达标', JSON.stringify(V.counts));
     if(V.dup===0) ok('T43 每日抽卡零重复'); else bad('T43 抽卡出现重复', String(V.dup));
-    if(V.ever===12) ok('T43 累计达成次数 = 每词 1 次（12）'); else bad('累计达成次数错误', String(V.ever));
-    if(V.everAfterExtra===12) ok('T44 已刷满后再刷不重复 +1'); else bad('T44 累计次数被重复计数', String(V.everAfterExtra));
+    if(V.advance===1) ok('T43 一轮完成后触发轮次推进'); else bad('T43 轮次推进未触发', String(V.advance));
+    if(V.extraCount===3) ok('T44 已刷满 3 遍后再刷仍封顶 3'); else bad('T44 本轮遍数未封顶', String(V.extraCount));
     if(V.roundAfter===1 && Array.isArray(V.countsAfter) && V.countsAfter.every(x=>x===0) && V.masteredKept) ok('T45 轮次推进后遍数清零、掌握状态不清空');
     else bad('T45 轮次推进异常', JSON.stringify({r:V.roundAfter,c:V.countsAfter,m:V.masteredKept}));
   }
   if(V.t46Err) bad('T46 撤销执行异常', V.t46Err);
-  else if(V.undoCount===2 && V.undoEver===5) ok('T46 撤销回 2 遍、累计达成次数不减');
-  else bad('T46 撤销口径错误', JSON.stringify({c:V.undoCount,e:V.undoEver}));
+  else if(V.undoCount===2 && V.undoStudy===2) ok('T46 撤销回 2 遍、累计遍数同步 -1');
+  else bad('T46 撤销口径错误', JSON.stringify({c:V.undoCount,s:V.undoStudy}));
   if(V.t47Err) bad('T47 插队执行异常', V.t47Err);
   else if(V.priorBoth && V.priorFront && V.out) ok('T47 答错/新词次日排最前，刷一次即出队');
   else bad('T47 插队或出队失效', JSON.stringify({b:V.priorBoth,f:V.priorFront,o:V.out}));
   if(V.t48Err) bad('T48 合并执行异常', V.t48Err);
-  else if(V.antiPending && V.mRound===2 && V.mEver===9) ok('T48 跨端合并不复活答错标记、遍数取较大值');
-  else bad('T48 合并口径错误', JSON.stringify({p:V.antiPending,r:V.mRound,e:V.mEver}));
+  else if(V.antiPending && V.mRound===2) ok('T48 跨端合并不复活答错标记、遍数取较大值');
+  else bad('T48 合并口径错误', JSON.stringify({p:V.antiPending,r:V.mRound}));
   if(V.t28Err) bad('T28 周测答错入口执行异常', V.t28Err);
   else if(V.q28Wrong && V.q28Queue && V.q28Mastered && V.q28Ts && V.q28Next) ok('T28 周测答错：不动掌握/不写复习时间，次日排最前');
   else bad('T28 周测答错口径错误', JSON.stringify({w:V.q28Wrong,q:V.q28Queue,m:V.q28Mastered,t:V.q28Ts,n:V.q28Next}));
   if(V.cfgErr) bad('FR-1 配置合并执行异常', V.cfgErr);
   else if(V.cfgId==='GID123' && V.cfgGoal===9 && V.cfgHour===7 && V.cfgToken==='TK' && V.cfgPass==='PW' && V.cfgAct===1.65) ok('FR-1 pull 后本机 settings 不被覆盖（Gist ID 免重填）');
   else bad('FR-1 配置仍被覆盖', JSON.stringify({id:V.cfgId,g:V.cfgGoal,h:V.cfgHour,t:V.cfgToken,p:V.cfgPass,a:V.cfgAct}));
+  // ===== V8：进度卡精简 + 轮次基线 =====
+  if(V.t60Err) bad('T60-T62 基线执行异常', V.t60Err);
+  else{
+    if(V.b60First===true && V.b60Round===1 && V.b60Mark===1) ok('T60 老用户基线：历史刷满 3 遍算完成 1 轮');
+    else bad('T60 老用户基线错误', JSON.stringify({f:V.b60First,r:V.b60Round,m:V.b60Mark}));
+    if(V.b61Again===false && V.b61Round===1) ok('T61 基线幂等：重复调用不重复 +1');
+    else bad('T61 基线不幂等', JSON.stringify({a:V.b61Again,r:V.b61Round}));
+    if(V.b62First===true && V.b62Round===0 && V.b62Mark===1) ok('T62 新设备基线：不加轮、标记置 1');
+    else bad('T62 新设备基线错误', JSON.stringify({f:V.b62First,r:V.b62Round,m:V.b62Mark}));
+  }
+  if(V.t51Err) bad('T51 进度卡渲染异常', V.t51Err);
+  else if(/第 2 轮 · 本轮已完成 2\/\d+ 词/.test(V.titleHtml||'') && /累计完成 <b>1<\/b> 轮/.test(V.titleHtml||'')) ok('T51 标题与累计轮数随本轮进度变化');
+  else bad('T51 标题/轮数文案错误', (V.titleHtml||'').slice(0,180));
+  if(V.t63Err) bad('T63 跨端合并基线执行异常', V.t63Err);
+  else if(V.mBaseRound===1 && V.mBaseMark===1) ok('T63 跨端合并基线取 max，旧端不复活重复 +1');
+  else bad('T63 跨端合并基线错误', JSON.stringify({r:V.mBaseRound,m:V.mBaseMark}));
+  const aiHtml=ctx.__R||'';
+  if(/第 \d+ 轮 · 本轮已完成 \d+\/\d+ 词/.test(aiHtml) && /🏁 累计完成/.test(aiHtml) && /答错排进优先复习，次日出现在今日卡片/.test(aiHtml)) ok('T50 AI 页含新轮次/词数/周测文案，渲染无异常');
+  else bad('T50 AI 页新文案缺失', aiHtml.slice(0,160));
+  const stale=['总刷卡遍数','累计达成','首轮已学完','下面按层级','刷满 3 遍的词','答错会自动把该术语标记为未掌握'].filter(t=>aiHtml.includes(t));
+  if(!stale.length) ok('T64/T67 AI 页旧统计文案零残留');
+  else bad('T64 AI 页仍有旧文案', stale.join(','));
+  if(V.t65Err) bad('T65 真实 load 基线执行异常', V.t65Err);
+  else if(V.ld1===1 && V.ldMark1===1 && V.ldPersist===1 && V.ld2===1) ok('T65 load() 基线立即落盘，重复启动不重复 +1');
+  else bad('T65 基线落盘/幂等错误', JSON.stringify({a:V.ld1,m:V.ldMark1,p:V.ldPersist,b:V.ld2}));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
