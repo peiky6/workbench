@@ -778,6 +778,46 @@ function migrateOutputs(s){
     });
   });
 }
+/* ===================== 本地凭证独立存储（P2 / v2026-11-13a）=====================
+   凭证（PAT / Gist ID / 加密口令）不再写进主存 qi_workbench_v2，改存独立键 qi_wb_creds。
+   内存里的 state.settings 仍是完整镜像 → 设置页回填 / _cfgOK / push / pull / mergeState
+   等 20+ 个读取点零改动、用户操作方式零变化、升级后无需重填任何凭证。
+   所有落盘与导出出口统一走 persistSafe()，杜绝「云端安全、本地副本裸奔」分叉。 */
+const CREDS_KEY = 'qi_wb_creds';
+const CREDS_MIGRATED_KEY = 'qi_wb_creds_v1';
+function persistSafe(s){
+  const c=JSON.parse(JSON.stringify(s));
+  return purgeSecrets(c, true);   // full=true 连 Gist ID 一并剔除；正式备份另走默认档保留 Gist ID
+}
+function readCredsInto(settings){
+  try{
+    const raw=localStorage.getItem(CREDS_KEY); if(!raw) return;
+    const c=JSON.parse(raw); if(!c||typeof c!=='object') return;
+    if(c.gistToken!=null) settings.gistToken=c.gistToken;
+    if(c.gistId!=null) settings.gistId=c.gistId;
+    if(c.encPass!=null) settings.encPass=c.encPass;
+  }catch(e){}
+}
+function writeCreds(){
+  try{
+    const s=(state&&state.settings)||{};
+    localStorage.setItem(CREDS_KEY, JSON.stringify({gistToken:s.gistToken||'',gistId:s.gistId||'',encPass:s.encPass||''}));
+    return true;
+  }catch(e){ return false; }
+}
+function credsMigrated(){ try{ return localStorage.getItem(CREDS_MIGRATED_KEY)==='1'; }catch(e){ return false; } }
+function markCredsMigrated(){ try{ localStorage.setItem(CREDS_MIGRATED_KEY,'1'); return true; }catch(e){ return false; } }
+// 老设备一次性静默迁移：先写独立键 → 再重写主存为脱敏版 → 都成功才写幂等标记。
+// 任一步失败都不写标记、下次启动自动重试；主存原样保留，绝不提示用户重填。
+function migrateCreds(s){
+  try{
+    if(credsMigrated()) return;
+    const c={gistToken:s.settings.gistToken||'', gistId:s.settings.gistId||'', encPass:s.settings.encPass||''};
+    if(c.gistToken||c.gistId||c.encPass) localStorage.setItem(CREDS_KEY, JSON.stringify(c));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistSafe(s)));
+    markCredsMigrated();
+  }catch(e){ console.warn('凭证迁移未完成，下次启动自动重试（不影响使用）', e); }
+}
 function load(){
   try{
     // 旧版「覆盖前回滚备份」只写不读，且是含完整凭证的全量副本 → 升级时清一次，避免永久滞留本机
@@ -789,7 +829,8 @@ function load(){
       }
     }catch(_pe){}
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw){ const s0=defaultState(); s0.aiRoundBaselineV2=1; return s0; } // 新设备直接标记「已初始化」，避免首次刷卡后重启被误判为老用户
+    // 新设备直接标记「已初始化」，避免首次刷卡后重启被误判为老用户；顺带把独立键里的凭证读回（若有）
+    if(!raw){ const s0=defaultState(); s0.aiRoundBaselineV2=1; readCredsInto(s0.settings); markCredsMigrated(); return s0; }
     const s = JSON.parse(raw);
     const d = defaultState();
     s.user = s.user || d.user;
@@ -817,6 +858,7 @@ function load(){
     s.readingBooks = s.readingBooks && s.readingBooks.length ? s.readingBooks : d.readingBooks;
     s.readingBooks.forEach(b=>{ b.total=b.total||0; b.current=b.current||0; if(b.finished==null) b.finished=false; if(b.finishedDate==null) b.finishedDate=''; });
     s.settings = Object.assign(d.settings, s.settings||{});
+    readCredsInto(s.settings);   // 独立键覆盖回内存镜像：所有读取函数拿到的仍是完整凭证
     s.modules = s.modules || {};
     MODULES.forEach(m=>{ if(!s.modules[m.key]) s.modules[m.key] = {records:{}}; });
     s.trainCancel = (s.trainCancel && s.trainCancel.log) ? s.trainCancel : {total:0, log:{}};
@@ -840,12 +882,20 @@ function load(){
     migrateOutputs(s);
     s.settings.readGoal = s.settings.readGoal||5;
     // 基线标记立即落盘（不触发 save/自动上传）：否则打开后未操作就关闭，下次启动会重复 +1
-    if(_baselineFresh){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }catch(e){ console.warn('baseline persist fail', e); } }
+    if(_baselineFresh){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(persistSafe(s))); }catch(e){ console.warn('baseline persist fail', e); } }
+    migrateCreds(s);   // 老设备一次性静默迁移，幂等、失败自检重试
     return s;
-  }catch(e){ console.error('load 失败，已回退默认状态（本地数据可能已损坏）', e); const s0=defaultState(); s0.aiRoundBaselineV2=1; return s0; }
+  }catch(e){
+    console.error('load 失败，已回退默认状态（本地数据可能已损坏）', e);
+    const s0=defaultState(); s0.aiRoundBaselineV2=1; readCredsInto(s0.settings); return s0;
+  }
 }
 function save(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  try{
+    // 独立键必须先写成功：否则主存一旦写成脱敏版，凭证就真的没了
+    if(!writeCreds()) throw new Error('凭证独立键写入失败');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistSafe(state)));
+  }
   catch(e){ console.error('本地保存失败', e); toast('⚠️ 本地保存失败：'+(e&&e.name==='QuotaExceededError'?'存储空间已满（请清理浏览器数据）':'存储不可用')+'，本次修改可能丢失'); }
   scheduleAutoPush();
 }
@@ -1079,7 +1129,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-13a';
+const APP_VERSION = '2026-11-13b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){

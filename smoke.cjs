@@ -936,8 +936,51 @@ if(htmlJs){
   globalThis.__P1=P;
 })(); }catch(e){ globalThis.__P1ERR=e.name+': '+e.message; }
 `;
+  // ===== P2 行为级：老设备静默迁移 / 幂等 / 失败重试 / 主存损坏 / 清空语义 =====
+  const credsScript = `
+;globalThis.__CERR=null;
+;try{ (function(){
+  const C={};
+  const KEY='qi_workbench_v2', CK='qi_wb_creds', MK='qi_wb_creds_v1';
+  const old=defaultState();
+  old.settings.gistToken='OLD_PAT_123'; old.settings.gistId='OLD_GIST_456'; old.settings.encPass='OLD_PASS_789';
+  old.settings.reminderHour=22; old.notes=[{title:'keep-note'}];
+  // ① 老设备首次升级
+  localStorage.setItem(KEY, JSON.stringify(old)); localStorage.removeItem(CK); localStorage.removeItem(MK);
+  const s1=load();
+  C.v1={t:s1.settings.gistToken,g:s1.settings.gistId,p:s1.settings.encPass,h:s1.settings.reminderHour};
+  C.main1=localStorage.getItem(KEY); C.creds1=localStorage.getItem(CK); C.mark1=localStorage.getItem(MK);
+  const m1=JSON.parse(C.main1);
+  C.biz1=(m1.notes.length===1 && m1.notes[0].title==='keep-note' && m1.settings.reminderHour===22);
+  // ② 再打开一次（幂等）
+  const s2=load();
+  C.v2={t:s2.settings.gistToken,g:s2.settings.gistId,p:s2.settings.encPass};
+  C.mark2=localStorage.getItem(MK); C.main2=localStorage.getItem(KEY);
+  // ③ 改任意设置后 save()
+  state=s2; state.settings.reminderHour=21; save();
+  C.main3=localStorage.getItem(KEY); C.creds3=localStorage.getItem(CK);
+  C.afterSave=(state.settings.gistToken==='OLD_PAT_123');
+  // ④ 清空凭证（设置页清空输入框）语义保持不变
+  state.settings.gistToken=''; save();
+  C.cleared=localStorage.getItem(CK);
+  const s4=load(); C.v4=s4.settings.gistToken;
+  // ⑤ 迁移中途失败：主存写入抛错 → 标记不写、原主存保留、下次重试
+  localStorage.setItem(KEY, JSON.stringify(old)); localStorage.removeItem(MK); localStorage.removeItem(CK);
+  const origSet=localStorage.setItem;
+  localStorage.setItem=function(k,v){ if(k===KEY) throw new Error('quota'); return origSet(k,v); };
+  load();
+  localStorage.setItem=origSet;
+  C.failMain=localStorage.getItem(KEY); C.failMark=localStorage.getItem(MK); C.failCreds=localStorage.getItem(CK);
+  const s6=load(); C.retryMark=localStorage.getItem(MK); C.retryV=s6.settings.gistToken;
+  // ⑥ 主存损坏：凭证仍从独立键恢复，不要求重填
+  localStorage.setItem(KEY,'{broken-json');
+  const s7=load();
+  C.brokenV={t:s7.settings.gistToken,g:s7.settings.gistId,p:s7.settings.encPass};
+  globalThis.__C=C;
+})(); }catch(e){ globalThis.__CERR=e.name+': '+e.message; }
+`;
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script, ctx, {filename:'index.html', timeout:15000});
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -957,6 +1000,33 @@ if(htmlJs){
   else if(secRe.test(P1.full||'')||secRe.test(P1.snap||'')) bad('P1 落盘副本 / 旧快照导出仍含凭证');
   else if(!/keep-me/.test(P1.snap||'')) bad('P1 脱敏误删业务数据');
   else ok('P1 落盘副本与旧快照导出均零凭证，业务数据保留');
+
+  // ===== P2 行为级判定 =====
+  if(ctx.__CERR) bad('P2 凭证迁移脚本执行异常', ctx.__CERR);
+  const C=ctx.__C||{};
+  const hasSec=s=>/OLD_PAT_123|OLD_GIST_456|OLD_PASS_789/.test(s||'');
+  if(C.v1&&C.v1.t==='OLD_PAT_123'&&C.v1.g==='OLD_GIST_456'&&C.v1.p==='OLD_PASS_789'&&C.v1.h===22)
+    ok('P2/T1 老设备升级后内存凭证与业务设置原样保留');
+  else bad('P2/T1 升级后凭证或设置丢失', JSON.stringify(C.v1));
+  if(C.main1&&!hasSec(C.main1)&&C.creds1&&/OLD_PAT_123/.test(C.creds1)&&C.mark1==='1'&&C.biz1)
+    ok('P2/T1 主存零凭证、独立键有值、迁移幂等标记写入、业务数据不变');
+  else bad('P2/T1 迁移结果不符', JSON.stringify({noSec:C.main1&&!hasSec(C.main1),creds:!!C.creds1,mark:C.mark1,biz:C.biz1}));
+  if(C.v2&&C.v2.t==='OLD_PAT_123'&&C.main2===C.main1&&C.mark2==='1')
+    ok('P2/T1 第二次打开不重复迁移、凭证仍在');
+  else bad('P2/T1 迁移不幂等或二次打开丢凭证', JSON.stringify(C.v2));
+  if(C.main3&&!hasSec(C.main3)&&C.creds3&&/OLD_PAT_123/.test(C.creds3)&&C.afterSave)
+    ok('P2/T3 save() 后主存仍脱敏、独立键仍有凭证、同步配置可用');
+  else bad('P2/T3 save() 破坏凭证', JSON.stringify({noSec:C.main3&&!hasSec(C.main3),creds:!!C.creds3,after:C.afterSave}));
+  if(C.cleared&&!/OLD_PAT_123/.test(C.cleared)&&C.v4==='') ok('P2/T4 清空凭证语义与改前一致（清空仍生效）');
+  else bad('P2/T4 清空凭证语义被改', JSON.stringify({c:C.cleared,v4:C.v4}));
+  if(C.failMain&&hasSec(C.failMain)&&C.failMark!=='1'&&C.failCreds&&/OLD_PAT_123/.test(C.failCreds))
+    ok('P2/T8 迁移中途失败：原主存保留、标记未写、独立键已有凭证');
+  else bad('P2/T8 迁移失败会破坏凭证', JSON.stringify({main:!!C.failMain,mark:C.failMark,creds:!!C.failCreds}));
+  if(C.retryMark==='1'&&C.retryV==='OLD_PAT_123') ok('P2/T8 下次启动自动重试成功，全程不提示重填');
+  else bad('P2/T8 重试失败', JSON.stringify({mark:C.retryMark,v:C.retryV}));
+  if(C.brokenV&&C.brokenV.t==='OLD_PAT_123'&&C.brokenV.g==='OLD_GIST_456'&&C.brokenV.p==='OLD_PASS_789')
+    ok('P2/T8 主存损坏时凭证仍从独立键恢复（不需重填）');
+  else bad('P2/T8 主存损坏连带丢凭证', JSON.stringify(C.brokenV));
 
   // ===== P0 静态锁（凭证外送 + 关键函数/字段存在性）=====
   const rawFn = htmlJs.match(/async function gistRawWithRetry\([\s\S]*?\n\}/);
@@ -1277,6 +1347,21 @@ if(htmlJs){
     ['setToken:v=>state.settings.gistToken=v.trim()','实时保存语义不变']]){
     if(rawHtml.includes(t)) ok('P1 操作方式不变：'+d); else bad('P1 设置页被改动：'+d);
   }
+})();
+
+// ===== P2 静态锁：凭证拆键 + 云端载荷零变化 =====
+(function p2CredsStatic(){
+  const rawHtml=fs.readFileSync(htmlPath,'utf8');
+  for(const [t,d] of [["const CREDS_KEY = 'qi_wb_creds'",'凭证独立键'],
+    ['function persistSafe','统一落盘脱敏'],['function migrateCreds','一次性静默迁移'],
+    ['readCredsInto(s.settings)','load 合并凭证回内存镜像'],
+    ['if(!writeCreds()) throw new Error','独立键写失败时不写脱敏主存'],
+    ['delete clone.settings;','云端载荷仍剔除 settings']]){
+    if(rawHtml.includes(t)) ok('P2 '+d); else bad('P2 缺失：'+d);
+  }
+  if(!/localStorage\.setItem\(STORAGE_KEY, JSON\.stringify\(state\)\)/.test(rawHtml))
+    ok('P2 主存写入点已全部走 persistSafe（无裸 state 落盘）');
+  else bad('P2 仍有裸 state 写入主存');
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
