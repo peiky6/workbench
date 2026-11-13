@@ -31,6 +31,12 @@
     row.appendChild(btn('💾 导出本地数据',function(){
       try{
         var raw=localStorage.getItem(KEY)||'{}';
+        // 兜底导出同样脱敏：head 是独立脚本，不能引用主脚本函数，这里内联一份最小剔除
+        try{
+          var obj=JSON.parse(raw);
+          if(obj && obj.settings){ delete obj.settings.gistToken; delete obj.settings.gistId; delete obj.settings.encPass; }
+          raw=JSON.stringify(obj,null,2);
+        }catch(_pe){ /* 原始数据损坏时保留原文，优先保住可导出的内容 */ }
         var blob=new Blob([raw],{type:'application/json'});
         var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
         a.download='workbench-emergency-'+new Date().toISOString().slice(0,10)+'.json';
@@ -774,6 +780,14 @@ function migrateOutputs(s){
 }
 function load(){
   try{
+    // 旧版「覆盖前回滚备份」只写不读，且是含完整凭证的全量副本 → 升级时清一次，避免永久滞留本机
+    // 用独立幂等标记，保证 forcePush 之后新写的脱敏备份不会被下次启动误删
+    try{
+      if(!localStorage.getItem('qi_wb_prebak_cleaned')){
+        localStorage.removeItem('qi_workbench_preoverwrite');
+        localStorage.setItem('qi_wb_prebak_cleaned','1');
+      }
+    }catch(_pe){}
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw){ const s0=defaultState(); s0.aiRoundBaselineV2=1; return s0; } // 新设备直接标记「已初始化」，避免首次刷卡后重启被误判为老用户
     const s = JSON.parse(raw);
@@ -880,7 +894,7 @@ async function histTakeSnapshotIfToday(){
       id: todayStr + '_' + Date.now(),
       date: todayStr,
       ts: Date.now(),
-      state: JSON.parse(JSON.stringify(state))
+      state: purgeSecrets(JSON.parse(JSON.stringify(state)), true)
     };
     const wtx = db.transaction(HIST_STORE, 'readwrite');
     wtx.objectStore(HIST_STORE).add(snap);
@@ -1065,7 +1079,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-12d';
+const APP_VERSION = '2026-11-13a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -5413,7 +5427,7 @@ async function forcePush(silent){
   if(!silent){
     if(!confirm('将用本机数据完整覆盖云端：记录 '+d.records+' 天 / 笔记 '+d.notes+' 篇 / 面试 '+d.interviews+' 条。\n\n如果另一台设备上还有没同步下来的新内容，会被覆盖丢失（本机已留一份回滚备份）。\n\n确定继续？')) return false;
   }
-  try{ localStorage.setItem('qi_workbench_preoverwrite', JSON.stringify({ts:Date.now(), state})); }catch(e){ console.warn('回滚备份写入失败',e); }
+  try{ localStorage.setItem('qi_workbench_preoverwrite', JSON.stringify({ts:Date.now(), state:purgeSecrets(JSON.parse(JSON.stringify(state)), true)})); }catch(e){ console.warn('回滚备份写入失败',e); }
   const okPush=await pushData(silent);
   if(okPush!==false) _pulledThisSession=true;
   return true;
@@ -5483,7 +5497,9 @@ function cleanGistId(v){
 
 /* ===================== 导入导出 ===================== */
 // 统一备份序列化：本地与云端都从这里走脱敏规则，杜绝「云端安全、本地裸奔」分叉（D3）
-function purgeSecrets(clone){ if(clone && clone.settings){ delete clone.settings.gistToken; delete clone.settings.encPass; } return clone; }
+// full=true 用于「落盘副本 / 快照 / 兜底导出」：连 Gist ID 一并剔除；
+// 正式备份（serializeBackup）默认保留 Gist ID，新设备导入备份后不用重新填。
+function purgeSecrets(clone, full){ if(clone && clone.settings){ delete clone.settings.gistToken; delete clone.settings.encPass; if(full) delete clone.settings.gistId; } return clone; }
 function serializeBackup({stripSecrets=true, pretty=true}={}){
   const safe = JSON.parse(JSON.stringify(state));
   if(stripSecrets) purgeSecrets(safe);
@@ -5557,7 +5573,9 @@ function snapToggleAll(){ snapShowAll = !snapShowAll; renderSnapshotList(); }
 async function viewSnapshot(id){
   const snap = await histGetSnapshot(id);
   if(!snap) return toast('快照读取失败');
-  const blob = new Blob([JSON.stringify(snap.state, null, 2)], {type:'application/json'});
+  // 历史快照可能由旧版本写入（含完整凭证），下载前再脱敏一次
+  const safeState = purgeSecrets(JSON.parse(JSON.stringify(snap.state||{})), true);
+  const blob = new Blob([JSON.stringify(safeState, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'snapshot-' + snap.id + '.json';

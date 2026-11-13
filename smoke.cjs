@@ -923,14 +923,40 @@ if(htmlJs){
   globalThis.__P2=P;
 })(); }catch(e){ globalThis.__P2ERR=e.name+': '+e.message; }
 `;
+  // ===== P1 行为级：正式备份保留 Gist ID，落盘副本/旧快照全量脱敏 =====
+  const p1Script = `
+;globalThis.__P1ERR=null;
+;try{ (function(){
+  const P={};
+  state.settings.gistToken='P1_PAT_X'; state.settings.gistId='P1_GIST_X'; state.settings.encPass='P1_PASS_X';
+  try{ P.backup=serializeBackup({stripSecrets:true,pretty:false}); }catch(e){ P.backupErr=e.name+': '+e.message; }
+  try{ P.full=JSON.stringify(purgeSecrets(JSON.parse(JSON.stringify(state)),true)); }catch(e){ P.fullErr=e.name+': '+e.message; }
+  try{ const old={settings:{gistToken:'OLD_PAT_X',gistId:'OLD_GIST_X',encPass:'OLD_PASS_X'},notes:[{title:'keep-me'}]};
+        P.snap=JSON.stringify(purgeSecrets(JSON.parse(JSON.stringify(old)),true)); }catch(e){ P.snapErr=e.name+': '+e.message; }
+  globalThis.__P1=P;
+})(); }catch(e){ globalThis.__P1ERR=e.name+': '+e.message; }
+`;
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script, ctx, {filename:'index.html', timeout:15000});
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
     if(ctx.__E2) bad('AI 视图 aiLearn() 运行时异常（插队标记态）', ctx.__E2);
     else ok('AI 视图 aiLearn() 运行时无异常（插队标记态）');
   }catch(e){ bad('AI 视图运行时校验未能执行', e.message); }
+
+  // ===== P1 行为级判定 =====
+  if(ctx.__P1ERR) bad('P1 脱敏脚本执行异常', ctx.__P1ERR);
+  const P1=ctx.__P1||{};
+  if(P1.backupErr) bad('P1 正式备份序列化异常', P1.backupErr);
+  else if(/P1_PAT_X|P1_PASS_X/.test(P1.backup||'')) bad('P1 正式备份仍含 PAT / 加密口令');
+  else if(!/P1_GIST_X/.test(P1.backup||'')) bad('P1 正式备份丢了 Gist ID（导入备份会要求重填）');
+  else ok('P1 正式备份剔除 PAT/口令、保留 Gist ID（导入免重填）');
+  const secRe=/P1_PAT_X|P1_GIST_X|P1_PASS_X|OLD_PAT_X|OLD_GIST_X|OLD_PASS_X/;
+  if(P1.fullErr||P1.snapErr) bad('P1 全量脱敏执行异常', P1.fullErr||P1.snapErr);
+  else if(secRe.test(P1.full||'')||secRe.test(P1.snap||'')) bad('P1 落盘副本 / 旧快照导出仍含凭证');
+  else if(!/keep-me/.test(P1.snap||'')) bad('P1 脱敏误删业务数据');
+  else ok('P1 落盘副本与旧快照导出均零凭证，业务数据保留');
 
   // ===== P0 静态锁（凭证外送 + 关键函数/字段存在性）=====
   const rawFn = htmlJs.match(/async function gistRawWithRetry\([\s\S]*?\n\}/);
@@ -1133,7 +1159,8 @@ if(htmlJs){
   const blocks = htmlRaw.match(/<script>([\s\S]*?)<\/script>/g)||[];
   const headJs = blocks.length>1 ? blocks[0].replace(/^<script>/,'').replace(/<\/script>$/,'') : '';
   if(!headJs){ bad('未抽取到 head 错误边界脚本'); return; }
-  let appended=0;
+  let appended=0, lastBlob=null;
+  const created=[];
   const mk = () => new Proxy({style:{},children:[],textContent:'',id:'',innerHTML:''},{
     get(t,k){
       if(k==='appendChild') return c=>{ t.children.push(c); appended++; };
@@ -1146,12 +1173,13 @@ if(htmlJs){
     set(t,k,v){ t[k]=v; return true; }
   });
   const body=mk();
-  const doc={createElement:()=>mk(), body:body, documentElement:mk(),
+  const doc={createElement:()=>{ const e=mk(); created.push(e); return e; }, body:body, documentElement:mk(),
     getElementById:()=>mk(), querySelector:()=>mk(), querySelectorAll:()=>[],
     addEventListener(){}, removeEventListener(){}};
   const win={document:doc, console:{log(){},warn(){},error(){}},
     addEventListener(){}, removeEventListener(){}, location:{reload(){}},
-    localStorage:{getItem:()=>'{}'}, setTimeout:()=>0, Blob:function(){},
+    localStorage:{getItem:()=>JSON.stringify({settings:{gistToken:'HEAD_PAT_X',gistId:'HEAD_GIST_X',encPass:'HEAD_PASS_X'},notes:[{title:'head-keep'}]})},
+    setTimeout:()=>0, Blob:function(parts){ lastBlob=String((parts&&parts[0])||''); },
     URL:{createObjectURL:()=> 'blob:x'}, alert(){}};
   win.window=win; win.self=win; win.globalThis=win;
   const ctx2=vm.createContext(win);
@@ -1167,6 +1195,16 @@ if(htmlJs){
     else bad('错误横幅未能挂载', 'appended='+appended+' pad='+JSON.stringify(body.style));
     if(/workbench-emergency-/.test(headJs)) ok('兜底导出读 localStorage，不依赖主脚本');
     else bad('兜底导出缺失');
+    // P1：真正点一次「💾 导出本地数据」，捕获 Blob 内容验零凭证
+    const exp=created.find(e=>e && e.textContent==='💾 导出本地数据');
+    if(!exp || typeof exp.onclick!=='function') bad('P1 兜底导出按钮未生成 / 未绑定');
+    else{
+      try{ exp.onclick(); }catch(_ce){ bad('P1 兜底导出点击异常', _ce.message); }
+      if(lastBlob==null) bad('P1 兜底导出未产生 Blob');
+      else if(/HEAD_PAT_X|HEAD_GIST_X|HEAD_PASS_X/.test(lastBlob)) bad('P1 兜底导出仍含完整凭证');
+      else if(!/head-keep/.test(lastBlob)) bad('P1 兜底导出误删业务数据');
+      else ok('P1 兜底紧急导出零凭证（业务数据保留）');
+    }
   }catch(e){ bad('head 错误边界脚本运行时异常', e.message); }
 })();
 
@@ -1207,6 +1245,38 @@ if(htmlJs){
   if(mb && /weightEnergyCardHtml\(\)/.test(mb[0]) && /kcalWeeksHtml\(\)/.test(mb[0])
      && /\$\{trendHtml\}/.test(mb[0]) && /\$\{hist\}/.test(mb[0])) ok('T4 体重页仍挂能量卡 / 8 周折线 / 趋势分析 / 历史明细');
   else bad('T4 体重页保留视图被误删');
+})();
+
+// ===== P1 快赢批静态锁（v2026-11-13）：Q10 格式化 + 4 条副本脱敏 + 设置页零改动 =====
+(function p1StaticChecks(){
+  const rawHtml=fs.readFileSync(htmlPath,'utf8');
+  const lines=(dataNotesJs||'').split(/\r?\n/).length;
+  let notesOk=false, notesLen=0;
+  try{
+    const m=(dataNotesJs||'').match(/const BUILTIN_NOTES = (\[[\s\S]*\]);/);
+    const arr=JSON.parse(m[1]); notesLen=arr.length;
+    notesOk=arr.length===10 && arr.every(n=>n&&n.title&&n.content) && arr.filter(n=>n.v).length>=4;
+  }catch(e){}
+  if(lines>100 && /^const BUILTIN_NOTES = \[/.test((dataNotesJs||'').split(/\r?\n/)[1]||'') && notesOk)
+    ok('Q10 data-notes.js 已格式化为 '+lines+' 行，10 篇笔记语义完整');
+  else bad('Q10 格式化或笔记数据异常', 'lines='+lines+' notes='+notesLen);
+  const exits=[
+    [/delete obj\.settings\.gistToken; delete obj\.settings\.gistId; delete obj\.settings\.encPass;/,'head 兜底导出内联脱敏'],
+    [/purgeSecrets\(JSON\.parse\(JSON\.stringify\(snap\.state\|\|\{\}\)\), true\)/,'旧快照下载二次脱敏'],
+    [/if\(full\) delete clone\.settings\.gistId;/,'purgeSecrets full 模式剔除 Gist ID'],
+    [/qi_wb_prebak_cleaned/,'旧 preoverwrite 明文副本一次性清理'],
+  ];
+  for(const [re,d] of exits){ if(re.test(rawHtml)) ok('P1 '+d); else bad('P1 缺失：'+d); }
+  const fullCnt=(rawHtml.match(/purgeSecrets\(JSON\.parse\(JSON\.stringify\(state\)\), ?true\)/g)||[]).length;
+  if(fullCnt>=2) ok('P1 回滚备份 + 快照落盘两条出口均全量脱敏（'+fullCnt+' 处）');
+  else bad('P1 回滚备份 / 快照落盘脱敏不足 2 处', String(fullCnt));
+  if(/if\(stripSecrets\) purgeSecrets\(safe\);/.test(rawHtml)) ok('P1 正式备份走默认脱敏（保留 Gist ID，导入免重填）');
+  else bad('P1 正式备份脱敏调用异常');
+  for(const [t,d] of [["document.getElementById('setToken').value=state.settings.gistToken||''",'设置页仍回填完整值'],
+    ["s.gistToken=document.getElementById('setToken').value.trim()",'closeSettings 保存语义不变'],
+    ['setToken:v=>state.settings.gistToken=v.trim()','实时保存语义不变']]){
+    if(rawHtml.includes(t)) ok('P1 操作方式不变：'+d); else bad('P1 设置页被改动：'+d);
+  }
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
