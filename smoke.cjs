@@ -979,8 +979,53 @@ if(htmlJs){
   globalThis.__C=C;
 })(); }catch(e){ globalThis.__CERR=e.name+': '+e.message; }
 `;
+  // ===== P3 行为级：4 处用户自由文本改 data-* 传参，实跑渲染 + 模拟点击验语义不变 =====
+  const p3Script = `
+;globalThis.__P3ERR=null;
+;try{ (function(){
+  const P={};
+  const BAD = "a');alert(1);//<b>&" + '"';
+  const dec = s => String(s).replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+  const els={};
+  const mk = id => (els[id] = els[id] || {id:id,value:'',innerHTML:'',style:{},className:'',dataset:{},focus(){},setAttribute(){},getAttribute(){return null;}});
+  const origGet=document.getElementById;
+  document.getElementById = id => mk(id);
+  const origSave=save, origRender=render, origOutputsAll=outputsAll, origOutTags=allOutTags,
+        origAllEx=allExercises, origAllFoods=allFoods, origPreviewEx=previewEx,
+        origPreviewFood=previewFood, origStats=outputStats;
+  save=()=>{}; render=()=>{};
+  state=defaultState();
+  allOutTags=()=>[BAD];
+  outputsAll=()=>[{id:'p3',src:'news',ds:today(),ts:1,text:'p3-text',tag:BAD}];
+  outputStats=()=>({total:1,week:1,tagged:1});
+  allExercises=()=>[{n:BAD,met:5}];
+  allFoods=()=>[{n:BAD,k:100,u:'份'}];
+  previewEx=()=>{}; previewFood=()=>{};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript, ctx, {filename:'index.html', timeout:15000});
+    P.take = takeawayHtml('reading');
+    renderOutputs(); P.out = els['main'].innerHTML;
+    mk('exText').value='a'; suggestExercise(); P.ex = els['exSug'].innerHTML;
+    mk('food_dinner').value='a'; suggestFood('dinner'); P.food = els['foodSug_dinner'].innerHTML;
+  }catch(e){ P.renderErr=e.name+': '+e.message; }
+  const attr = (h,name) => { const i=String(h).indexOf('data-'+name+'="'); if(i<0) return null; const s=i+name.length+7; const j=String(h).indexOf('"',s); return dec(String(h).slice(s,j)); };
+  try{
+    P.takeT=attr(P.take,'t'); P.takeKind=attr(P.take,'kind');
+    P.outT=attr(P.out,'t'); P.exN=attr(P.ex,'n');
+    P.foodN=attr(P.food,'n'); P.foodMeal=attr(P.food,'meal');
+    takeawayPick(P.takeKind,P.takeT);
+    P.picked=(rec('reading')[today()]||{}).takeTag;
+    setOutTag(P.outT); P.tagState=_outTag;
+    fillExercise(P.exN); P.exVal=els['exText'].value;
+    fillFood(P.foodMeal,P.foodN); P.foodVal=els['food_dinner'].value;
+  }catch(e){ P.clickErr=e.name+': '+e.message; }
+  save=origSave; render=origRender; outputsAll=origOutputsAll; allOutTags=origOutTags;
+  allExercises=origAllEx; allFoods=origAllFoods; previewEx=origPreviewEx;
+  previewFood=origPreviewFood; outputStats=origStats; document.getElementById=origGet;
+  globalThis.__P3=P;
+})(); }catch(e){ globalThis.__P3ERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1186,6 +1231,33 @@ if(htmlJs){
   if(P2.saveErr) bad('T7 记录身体指标执行异常', P2.saveErr);
   else if(P2.savedW===60.5 && P2.savedBf===28) ok('T7/AC4 无导入按钮下 saveBody() 仍可正常写入');
   else bad('T7 记录写入错误', JSON.stringify({w:P2.savedW,bf:P2.savedBf}));
+
+  // ===== P3：4 处用户自由文本注入面（行为级：实跑渲染 + 模拟点击）=====
+  if(ctx.__P3ERR) bad('P3 行为校验脚本异常', ctx.__P3ERR);
+  const P3=ctx.__P3||{};
+  const BAD_EXPECT = "a');alert(1);//<b>&" + '"';
+  if(P3.renderErr) bad('P3 四个容器实跑渲染异常', P3.renderErr);
+  else ok('P3 四个容器（心得标签 / 产出标签 / 运动联想 / 食物联想）实跑渲染无异常');
+  const P3_FORMS=[
+    ['心得标签','take','onclick="takeawayPick(this.dataset.kind,this.dataset.t)"'],
+    ['产出标签','out','onclick="setOutTag(this.dataset.t)"'],
+    ['运动联想','ex','onclick="fillExercise(this.dataset.n)"'],
+    ['食物联想','food','onclick="fillFood(this.dataset.meal,this.dataset.n)"']
+  ];
+  for(const [nm,key,form] of P3_FORMS){
+    const h=P3[key]||'';
+    if(h.includes(form) && !h.includes("');alert(") && h.includes('&#39;') && h.includes('&quot;'))
+      ok('P3 '+nm+'：用户文本不再拼进 onclick，改走 data-* 且引号/尖括号完整转义');
+    else bad('P3 '+nm+' 注入面未收掉', h.slice(0,200));
+  }
+  if(P3.takeT===BAD_EXPECT && P3.takeKind==='reading' && P3.outT===BAD_EXPECT
+     && P3.exN===BAD_EXPECT && P3.foodN===BAD_EXPECT && P3.foodMeal==='dinner')
+    ok('P3 浏览器实体解码后 data-* 值 = 用户原文（4 个参数 + kind/meal 均无损）');
+  else bad('P3 data-* 取值有损', JSON.stringify({t:P3.takeT,k:P3.takeKind,o:P3.outT,e:P3.exN,f:P3.foodN,m:P3.foodMeal}));
+  if(P3.clickErr) bad('P3 模拟点击执行异常', P3.clickErr);
+  else if(P3.picked===BAD_EXPECT && P3.tagState===BAD_EXPECT && P3.exVal===BAD_EXPECT && P3.foodVal===BAD_EXPECT)
+    ok('P3 实跑点击：4 个函数行为与改前一致（标签写入 / 筛选 / 输入框回填）');
+  else bad('P3 点击后行为不一致', JSON.stringify({pick:P3.picked,tag:P3.tagState,ex:P3.exVal,food:P3.foodVal}));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -1362,6 +1434,41 @@ if(htmlJs){
   if(!/localStorage\.setItem\(STORAGE_KEY, JSON\.stringify\(state\)\)/.test(rawHtml))
     ok('P2 主存写入点已全部走 persistSafe（无裸 state 落盘）');
   else bad('P2 仍有裸 state 写入主存');
+})();
+
+// ===== P3 静态锁：4 处新形态 / 旧形态零残留 / CSP 一行 / Q8 未动 =====
+(function p3StaticChecks(){
+  const rawHtml=fs.readFileSync(htmlPath,'utf8');
+  const cspM=rawHtml.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/);
+  const c=cspM?cspM[1]:'';
+  if(/form-action\s+'none'/.test(c)) ok("P3 CSP 已补 form-action 'none'（禁止表单外发）");
+  else bad("P3 CSP 缺 form-action 'none'");
+  if(/script-src[^;]*'unsafe-inline'/.test(c) && /style-src[^;]*'unsafe-inline'/.test(c))
+    ok('P3 CSP script-src / style-src 仍保留 unsafe-inline（本期不收紧，不会白屏）');
+  else bad('P3 CSP 误删 unsafe-inline（内联事件/样式会失效）');
+  const newForms=[
+    'onclick="takeawayPick(this.dataset.kind,this.dataset.t)"',
+    'onclick="setOutTag(this.dataset.t)"',
+    'onclick="fillExercise(this.dataset.n)"',
+    'onclick="fillFood(this.dataset.meal,this.dataset.n)"'
+  ];
+  for(const t of newForms){ if(rawHtml.includes(t)) ok('P3 存在新形态：'+t); else bad('P3 缺失新形态：'+t); }
+  const oldForms=[
+    "takeawayPick('${kind}','${escapeAttr(t)}')",
+    "setOutTag('${escapeAttr(t)}')",
+    "fillExercise('${escapeAttr(e.n)}')",
+    "fillFood('${meal}','${escapeAttr(f.n)}')"
+  ];
+  const stale=oldForms.filter(t=>rawHtml.includes(t));
+  if(!stale.length) ok('P3 四处旧的字符串拼接形态零残留');
+  else bad('P3 仍有旧的 onclick 拼接', stale.join(' | '));
+  if(rawHtml.includes('data-t="') && rawHtml.includes('data-n="') && rawHtml.includes('data-meal="'))
+    ok('P3 data-* 属性齐备（kind / t / n / meal）');
+  else bad('P3 data-* 属性缺失');
+  if(htmlJs.includes('function escapeAttr(s)')) ok('P3 escapeAttr 保留，其余 122 处内联事件不受影响');
+  else bad('P3 escapeAttr 被误删');
+  if(/style="flex:none"/.test(rawHtml)) ok('Q8 取消：内联 style 一字未动，未新增一次性 CSS 类');
+  else bad('Q8 范围被误改：内联 style 被清理');
 })();
 
 console.log('\n冒烟测试结果：' + pass + ' 通过 / ' + fail + ' 失败');
