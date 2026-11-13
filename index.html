@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#89CFF0" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://gist.githubusercontent.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; worker-src 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://gist.githubusercontent.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; worker-src 'self'; form-action 'none'" />
 <title>祈 · 自律工作台</title>
 <script>
 /* 全局错误兜底：主脚本整体挂掉时仍能看到提示并导出本地数据，不依赖主脚本任何函数 */
@@ -1129,7 +1129,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-13b';
+const APP_VERSION = '2026-11-13c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -2476,7 +2476,7 @@ function takeawayHtml(kind){
   const val=(r.take||'').trim(); const cur=r.takeTag||'';
   const chips=allOutTags().map(t=>{
     const on=(t===cur);
-    return `<button class="mini ${on?'accent':'line'}" style="flex:none" onclick="takeawayPick('${kind}','${escapeAttr(t)}')">${on?'✓ ':''}${escapeHtml(t)}</button>`;
+    return `<button class="mini ${on?'accent':'line'}" style="flex:none" data-kind="${escapeAttr(kind)}" data-t="${escapeAttr(t)}" onclick="takeawayPick(this.dataset.kind,this.dataset.t)">${on?'✓ ':''}${escapeHtml(t)}</button>`;
   }).join('')+`<button class="mini line" style="flex:none" onclick="addOutTagPrompt()">＋ 标签</button>`;
   const tip = r.takeBlank
     ? '<p class="hint">🤷 今天记为「没想法」。留白同样被统计——它是在替你判断这个输入源值不值得每天看。</p>'
@@ -2517,7 +2517,7 @@ function renderOutputs(){
   }).join('') : `<div class="empty">${all.length?'没有符合条件的产出':'还没有产出。去新闻 / 阅读页写第一句吧 💡'}</div>`;
   const chips=tags.length
     ? `<div class="inline" style="margin-top:6px"><button class="mini ${!_outTag?'accent':'line'}" style="flex:none" onclick="setOutTag('')">全部 ${all.length}</button>`+
-      tags.map(t=>`<button class="mini ${_outTag===t?'accent':'line'}" style="flex:none" onclick="setOutTag('${escapeAttr(t)}')">${escapeHtml(t)}</button>`).join('')+`</div>`
+      tags.map(t=>`<button class="mini ${_outTag===t?'accent':'line'}" style="flex:none" data-t="${escapeAttr(t)}" onclick="setOutTag(this.dataset.t)">${escapeHtml(t)}</button>`).join('')+`</div>`
     : '';
   document.getElementById('main').innerHTML=`
     <div class="mhead"><button class="back" onclick="setView('home')">‹ 总览</button><h2>💡 我的产出</h2></div>
@@ -4890,7 +4890,7 @@ function suggestExercise(){
   const q=v.toLowerCase();
   const list=allExercises().filter(e=>e.n.toLowerCase().includes(q)).slice(0,12);
   if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML=list.map(e=>`<button onclick="fillExercise('${escapeAttr(e.n)}')">${escapeHtml(e.n)}<span class="k">${e.met!=null?('MET '+e.met):(e.k+' kcal')}</span></button>`).join('');
+  box.innerHTML=list.map(e=>`<button data-n="${escapeAttr(e.n)}" onclick="fillExercise(this.dataset.n)">${escapeHtml(e.n)}<span class="k">${e.met!=null?('MET '+e.met):(e.k+' kcal')}</span></button>`).join('');
 }
 function fillExercise(name){
   const inp=document.getElementById('exText'); if(inp){ inp.value=name; inp.focus(); }
@@ -4943,7 +4943,7 @@ function suggestFood(meal){
   const q=v.toLowerCase();
   const list=allFoods().filter(f=>f.n.toLowerCase().includes(q)||(f.alias&&f.alias.some(a=>a.toLowerCase().includes(q)))).slice(0,12);
   if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML=list.map(f=>`<button onclick="fillFood('${meal}','${escapeAttr(f.n)}')">${escapeHtml(f.n)}<span class="k">${f.k} kcal · ${escapeHtml(f.u||'')}</span></button>`).join('');
+  box.innerHTML=list.map(f=>`<button data-meal="${escapeAttr(meal)}" data-n="${escapeAttr(f.n)}" onclick="fillFood(this.dataset.meal,this.dataset.n)">${escapeHtml(f.n)}<span class="k">${f.k} kcal · ${escapeHtml(f.u||'')}</span></button>`).join('');
 }
 function fillFood(meal,name){
   const inp=document.getElementById('food_'+meal); if(inp){ inp.value=name; inp.focus(); }
