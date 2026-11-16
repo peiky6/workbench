@@ -613,6 +613,7 @@
       <div class="field"><label>加密口令</label><input id="setEncPass" type="password" placeholder="设一个只有你知道的口令" oninput="encWarnUpdate()" /></div>
       <p class="hint">⚠️ 口令丢失将无法解密云端数据，请牢记。加密后云端（GitHub Gist）只存密文，即使链接或仓库泄露也解不开。</p>
       <p id="encWarn" style="display:none;color:#e0533d;font-size:13px;margin:4px 2px 0">🔒 加密已开启，但还没设口令——请在上方「加密口令」填写并保存，否则云端仍是明文。</p>
+      <p id="credStoreStatus" class="hint" style="margin:2px 2px 0"></p>
       <div class="mini-row">
         <button class="mini accent" id="btnPush">⬆️ 上传本机</button>
         <button class="mini line" id="btnPull">⬇️ 下载云端</button>
@@ -785,6 +786,10 @@ function migrateOutputs(s){
    所有落盘与导出出口统一走 persistSafe()，杜绝「云端安全、本地副本裸奔」分叉。 */
 const CREDS_KEY = 'qi_wb_creds';
 const CREDS_MIGRATED_KEY = 'qi_wb_creds_v1';
+const CREDS_STORE = 'creds';          // IndexedDB 密文冗余副本（qi_history 库），仅本机
+const DEVICE_KEY = 'qi_wb_dk';        // 冗余副本加密密钥，与凭证分开存，绝不进入导出/云端
+let _credStatus = '';                 // ok | restored | missing
+let _storagePersist = null;
 function persistSafe(s){
   const c=JSON.parse(JSON.stringify(s));
   return purgeSecrets(c, true);   // full=true 连 Gist ID 一并剔除；正式备份另走默认档保留 Gist ID
@@ -798,10 +803,76 @@ function readCredsInto(settings){
     if(c.encPass!=null) settings.encPass=c.encPass;
   }catch(e){}
 }
+/* P4 / v2026-11-16a：凭证只存一个 localStorage 键时，冷启动瞬时读不到 → 任意一次 save()
+   会把该键写成全空 → 残留凭证被抹掉 → 每次重开都要重填。三层加固：
+   ① 写空保护：已有凭证的独立键，绝不被「内存三项全空」覆盖；
+   ② 密文冗余：写入时把凭证 AES-GCM 加密后写 IndexedDB 独立 store（不进任何导出/云端链路）；
+   ③ 启动自愈：独立键为空时从密文副本解密恢复，用户无需重填。
+   安全基线不变：主存/云端/导出/快照/回滚备份仍零凭证明文，云端数据仍是 ENC2 密文。 */
+function getDeviceKey(){
+  try{
+    let k=localStorage.getItem(DEVICE_KEY);
+    if(!k){
+      if(typeof crypto==='undefined'||!crypto.getRandomValues) return null;
+      k=b64FromBytes(crypto.getRandomValues(new Uint8Array(32)));
+      localStorage.setItem(DEVICE_KEY,k);
+    }
+    return k;
+  }catch(e){ return null; }
+}
+function queueCredsMirror(c){
+  try{
+    if(typeof indexedDB==='undefined'||typeof window==='undefined'||!('indexedDB' in window)) return;
+    const k=getDeviceKey(); if(!k) return;
+    mirrorCreds(c,k).catch(()=>{});   // 异步、失败静默，绝不阻塞 save()/启动
+  }catch(e){}
+}
+async function mirrorCreds(c,k){
+  const blob=await encryptText(JSON.stringify(c),k);   // 复用 ENC2 / AES-GCM，副本不含明文凭证
+  const db=await histOpen();
+  const tx=db.transaction(CREDS_STORE,'readwrite');
+  tx.objectStore(CREDS_STORE).put({k:'main',blob:blob,ts:Date.now()});
+  await new Promise((res,rej)=>{ tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+}
+async function readCredsMirror(){
+  try{
+    if(typeof indexedDB==='undefined'||typeof window==='undefined'||!('indexedDB' in window)) return null;
+    const k=getDeviceKey(); if(!k) return null;
+    const db=await histOpen();
+    const tx=db.transaction(CREDS_STORE,'readonly');
+    const row=await new Promise((res,rej)=>{ const rq=tx.objectStore(CREDS_STORE).get('main'); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); });
+    if(!row||!row.blob) return null;
+    return JSON.parse(await decryptText(row.blob,k));
+  }catch(e){ return null; }
+}
+async function restoreCredsOnBoot(){
+  const s=state.settings||{};
+  if(s.gistToken||s.gistId||s.encPass){
+    _credStatus='ok';
+    queueCredsMirror({gistToken:s.gistToken||'',gistId:s.gistId||'',encPass:s.encPass||''});  // 每次启动刷新冗余
+    return;
+  }
+  const c=await readCredsMirror();
+  if(c&&(c.gistToken||c.gistId||c.encPass)){
+    state.settings.gistToken=c.gistToken||'';
+    state.settings.gistId=c.gistId||'';
+    state.settings.encPass=c.encPass||'';
+    writeCreds();       // 写回独立键；不写主存（主存必须保持脱敏）
+    _credStatus='restored';
+  } else _credStatus='missing';
+}
 function writeCreds(){
   try{
     const s=(state&&state.settings)||{};
-    localStorage.setItem(CREDS_KEY, JSON.stringify({gistToken:s.gistToken||'',gistId:s.gistId||'',encPass:s.encPass||''}));
+    const next={gistToken:s.gistToken||'',gistId:s.gistId||'',encPass:s.encPass||''};
+    const empty=!next.gistToken&&!next.gistId&&!next.encPass;
+    let prev=null; try{ const raw=localStorage.getItem(CREDS_KEY); if(raw) prev=JSON.parse(raw); }catch(e){}
+    if(empty&&prev&&(prev.gistToken||prev.gistId||prev.encPass)){
+      readCredsInto(s);   // 回灌内存，本次会话立即可用，不再要求重填
+      return true;        // 视为成功：save() 继续写主存（主存本就脱敏，不含凭证）
+    }
+    localStorage.setItem(CREDS_KEY, JSON.stringify(next));
+    queueCredsMirror(next);
     return true;
   }catch(e){ return false; }
 }
@@ -914,7 +985,7 @@ const HIST_RETENTION_DAYS = 180;
 function histOpen(){
   return new Promise((resolve,reject)=>{
     if(!('indexedDB' in window)) return reject(new Error('indexedDB not supported'));
-    const req = indexedDB.open(HIST_DB, 1);
+    const req = indexedDB.open(HIST_DB, 2);   // v2：新增 creds 密文冗余副本 store（老库 v1 平滑升级，不动 snapshots）
     req.onupgradeneeded = e=>{
       const db = e.target.result;
       if(!db.objectStoreNames.contains(HIST_STORE)){
@@ -922,6 +993,7 @@ function histOpen(){
         store.createIndex('date','date',{unique:false});
         store.createIndex('ts','ts',{unique:false});
       }
+      if(!db.objectStoreNames.contains(CREDS_STORE)) db.createObjectStore(CREDS_STORE, {keyPath:'k'});
     };
     req.onsuccess = e=> resolve(e.target.result);
     req.onerror = e=> reject(e.target.error);
@@ -1129,7 +1201,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-13c';
+const APP_VERSION = '2026-11-16a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -5101,6 +5173,18 @@ function updateConnBox(){
     st.innerHTML=t;
   }
   renderSyncDiag();
+  renderCredStatus();
+}
+function renderCredStatus(){
+  const el=document.getElementById('credStoreStatus'); if(!el) return;
+  const s=state.settings||{};
+  const configured=!!(s.gistToken||s.gistId||s.encPass);
+  let t;
+  if(_credStatus==='restored') t='⚠️ 已从本机加密副本自动恢复凭证，本次无需重填';
+  else if(configured) t='🔒 凭证已存本机（含加密冗余副本），重开页面不用重填';
+  else t='ℹ️ 未配置云同步（可选）；如需同步，在上方填一次即可长期记住';
+  if(_storagePersist===false) t+=' · 浏览器未授权持久化存储，建议允许保留「网站数据」';
+  el.textContent=t;
 }
 function renderLinkEdits(){
   const box=document.getElementById('linkEdits');
@@ -5920,8 +6004,19 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
 }
 function showUpdateBar(){ const b=document.getElementById('updateBar'); if(b) b.style.display='block'; }
 
-// 自动同步：打开时先静默拉取合并，再上传本地（完成跨端 reconcile）
+// 申请持久化存储：授权后浏览器不会因存储压力/长期不活跃自动清理本站数据（安卓浏览器有效）
+(async function requestPersist(){
+  try{
+    if(typeof navigator!=='undefined' && navigator.storage && typeof navigator.storage.persist==='function'){
+      _storagePersist = await navigator.storage.persist();
+      renderCredStatus();
+    }
+  }catch(e){}
+})();
+// 自动同步：先自愈恢复本机凭证 → 再静默拉取合并 → 再上传本地（完成跨端 reconcile）
 (async function autoSyncOnOpen(){
+  try{ await restoreCredsOnBoot(); }catch(e){ _credStatus='missing'; }
+  renderCredStatus();
   if(!_cfgOK()) return;
   await doAutoPush();   // 内含「先 pull 再 push」的防呆顺序，以及云端过大导致拉取失败时的自愈覆盖
   ensurePageBaseline();

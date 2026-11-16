@@ -976,6 +976,15 @@ if(htmlJs){
   localStorage.setItem(KEY,'{broken-json');
   const s7=load();
   C.brokenV={t:s7.settings.gistToken,g:s7.settings.gistId,p:s7.settings.encPass};
+  // ⑦ P4 写空保护：冷启动内存三项为空时，不得把已有独立键写成全空，且回灌内存
+  localStorage.setItem(KEY, JSON.stringify(old));
+  localStorage.setItem(CK, JSON.stringify({gistToken:'KEEP_PAT',gistId:'KEEP_GIST',encPass:'KEEP_PASS'}));
+  localStorage.setItem(MK,'1');
+  const s8=load(); state=s8;
+  state.settings.gistToken=''; state.settings.gistId=''; state.settings.encPass='';
+  save();
+  C.guard=localStorage.getItem(CK); C.guardBack=state.settings.gistToken;
+  C.guardMain=localStorage.getItem(KEY);
   globalThis.__C=C;
 })(); }catch(e){ globalThis.__CERR=e.name+': '+e.message; }
 `;
@@ -1072,6 +1081,14 @@ if(htmlJs){
   if(C.brokenV&&C.brokenV.t==='OLD_PAT_123'&&C.brokenV.g==='OLD_GIST_456'&&C.brokenV.p==='OLD_PASS_789')
     ok('P2/T8 主存损坏时凭证仍从独立键恢复（不需重填）');
   else bad('P2/T8 主存损坏连带丢凭证', JSON.stringify(C.brokenV));
+
+  // ===== P4 行为级判定：写空保护（不再「每次重开都要重填」的根因止血） =====
+  if(C.guard&&/KEEP_PAT/.test(C.guard)&&C.guardBack==='KEEP_PAT')
+    ok('P4/T9 写空保护：三项清空不抹掉已有凭证，且回灌内存立即可用');
+  else bad('P4/T9 写空保护失效', JSON.stringify({guard:C.guard,back:C.guardBack}));
+  if(C.guardMain&&!/KEEP_PAT|KEEP_GIST|KEEP_PASS/.test(C.guardMain))
+    ok('P4/T9 回灌后主存仍脱敏（凭证未写回 qi_workbench_v2）');
+  else bad('P4/T9 凭证被写回主存，安全基线破坏');
 
   // ===== P0 静态锁（凭证外送 + 关键函数/字段存在性）=====
   const rawFn = htmlJs.match(/async function gistRawWithRetry\([\s\S]*?\n\}/);
@@ -1434,6 +1451,49 @@ if(htmlJs){
   if(!/localStorage\.setItem\(STORAGE_KEY, JSON\.stringify\(state\)\)/.test(rawHtml))
     ok('P2 主存写入点已全部走 persistSafe（无裸 state 落盘）');
   else bad('P2 仍有裸 state 写入主存');
+})();
+
+// ===== P4 静态锁：凭证持久化加固（写空保护 / 密文冗余 / 启动自愈 / 持久化授权 / 安全不回退） =====
+(function p4CredsStatic(){
+  const rawHtml=fs.readFileSync(htmlPath,'utf8');
+  for(const [t,d] of [
+    ["const CREDS_STORE = 'creds'",'IndexedDB 密文冗余 store'],
+    ["const DEVICE_KEY = 'qi_wb_dk'",'独立设备密钥（与凭证分开存）'],
+    ['indexedDB.open(HIST_DB, 2)','历史库平滑升级到 v2，不动 snapshots'],
+    ['function restoreCredsOnBoot','启动自愈恢复链'],
+    ['function getDeviceKey','设备密钥生成/读取'],
+    ['function queueCredsMirror','冗余写入异步、失败静默不阻塞'],
+    ['navigator.storage.persist()','申请持久化存储授权'],
+    ['<p id="credStoreStatus"','设置页凭证状态行'],
+    ['function renderCredStatus','状态文案渲染'],
+    ['const APP_VERSION = \'2026-11-16a\'','版本号已递增']
+  ]){
+    if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
+  }
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v107') ok('P4 SW 缓存名已随部署递增：v107');
+  else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
+  if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
+    ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');
+  else bad('P4 冗余副本未加密，明文落盘');
+  if(/if\(empty&&prev&&\(prev\.gistToken\|\|prev\.gistId\|\|prev\.encPass\)\)/.test(rawHtml))
+    ok('P4 写空保护：已有凭证的独立键不被全空覆盖');
+  else bad('P4 写空保护缺失');
+  if(/writeCreds\(\);\s*\/\/ 写回独立键；不写主存/.test(rawHtml))
+    ok('P4 自愈恢复只写独立键，主存保持脱敏');
+  else bad('P4 自愈恢复可能把凭证写回主存');
+  // 冗余副本绝不进入导出 / 云端载荷
+  const encBody=rawHtml.match(/async function encodeState\([\s\S]*?\n\}/);
+  const bakBody=rawHtml.match(/function serializeBackup\([\s\S]*?\n\}/);
+  if(encBody&&bakBody&&!/CREDS_STORE|readCredsMirror|CREDS_KEY/.test(encBody[0]+bakBody[0]))
+    ok('P4 云端载荷与导出备份均不读取凭证副本');
+  else bad('P4 凭证副本可能进入导出/云端链路');
+  // P2 安全基线不回退
+  for(const [t,d] of [['delete clone.settings;','云端载荷剔除 settings'],
+    ["if(!writeCreds()) throw new Error",'独立键写失败时不写脱敏主存'],
+    ['if(stripSecrets) purgeSecrets(safe);','正式备份脱敏'],
+    ['purgeSecrets(JSON.parse(JSON.stringify(state)), true)','历史快照脱敏']]){
+    if(rawHtml.includes(t)) ok('P4 安全基线不回退：'+d); else bad('P4 安全基线被破坏：'+d);
+  }
 })();
 
 // ===== P3 静态锁：4 处新形态 / 旧形态零残留 / CSP 一行 / Q8 未动 =====
