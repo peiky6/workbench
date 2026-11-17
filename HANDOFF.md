@@ -111,6 +111,7 @@ workbench/
    - 判定：`curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token <PAT>" -H "User-Agent: x" https://api.github.com/rate_limit` 返回 **200** 即可用备用通道（000 说明 api 也不通，只能等）。
    - 做法：`TOK=<PAT> CMSG="<提交说明>" node 3-build/private/deploy-scripts/deploy-api.cjs <文件1> <文件2> ...`
      走 GET ref → POST blob（内容取 `git show HEAD:file`，保住行尾格式）→ POST tree(base_tree) → POST commit(parent=远端HEAD) → PATCH ref，**N 个文件只产生 1 个提交**。
+   - **api 端点自身也会抖动**（实测约半数请求 TLS 被掐，报 `socket disconnected before secure TLS connection`）：脚本已内置最多 10 次指数退避重试，看到 `· 第 N 次失败…后重试` 属正常，**别中断、别误判失败就放弃**。
    - 为什么不用 `deploy.cjs`：它走 Contents API 逐文件提交，N 个文件 = N 个 deploy 提交，正是 11-16 分叉的成因。
    - 推完：远端历史被压缩成 1 个提交，本地仍有多提交。网络恢复后 `git fetch origin && git reset --mixed origin/main` 对齐，**绝不 force push**。
    - 脚本与 token 都在 `3-build/private/`（已 gitignore），不要移进公开目录、不要硬编码 token。
