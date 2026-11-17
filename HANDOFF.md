@@ -106,3 +106,11 @@ workbench/
 5. **token 传递**：本机 SSH 可推；云端沙箱须 HTTPS + 短期 PAT；PAT/口令禁止写进公开仓库、提交历史或主存。
 6. **沙箱内 `raw.githubusercontent.com` 可能不通**，验证走 `api.github.com` 或本地 `node smoke.cjs`。
 7. **云端改码无法真机预览 PWA**，最终效果须手机浏览器打开线上地址强制刷新验证。
+8. **`github.com` 被阻断时用 Git Data API 推送（11-17 实战验证）**：
+   - 症状：`git push` 报 `Connection reset by 20.205.243.160 port 443`；curl `github.com` / `raw.githubusercontent.com` 均 000；SSH 443 重置；换 IP 直连也 TLS 失败（exit 35，TCP 通而 TLS 被掐）。**不是代码或权限问题，别改仓库配置、别强推。**
+   - 判定：`curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token <PAT>" -H "User-Agent: x" https://api.github.com/rate_limit` 返回 **200** 即可用备用通道（000 说明 api 也不通，只能等）。
+   - 做法：`TOK=<PAT> CMSG="<提交说明>" node 3-build/private/deploy-scripts/deploy-api.cjs <文件1> <文件2> ...`
+     走 GET ref → POST blob（内容取 `git show HEAD:file`，保住行尾格式）→ POST tree(base_tree) → POST commit(parent=远端HEAD) → PATCH ref，**N 个文件只产生 1 个提交**。
+   - 为什么不用 `deploy.cjs`：它走 Contents API 逐文件提交，N 个文件 = N 个 deploy 提交，正是 11-16 分叉的成因。
+   - 推完：远端历史被压缩成 1 个提交，本地仍有多提交。网络恢复后 `git fetch origin && git reset --mixed origin/main` 对齐，**绝不 force push**。
+   - 脚本与 token 都在 `3-build/private/`（已 gitignore），不要移进公开目录、不要硬编码 token。
