@@ -2,9 +2,7 @@
 
 > A single, private, mobile-first workspace that unifies IELTS prep, fat-loss tracking, AI knowledge building, study plans, daily reading, and news intake.
 
-[![version](https://img.shields.io/badge/version-1.0.0-blue)]()
-[![license](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)]()
-[![platform](https://img.shields.io/badge/platform-PWA%20%2F%20Mobile-orange)]()
+**`PWA / Mobile`** · **`All Rights Reserved`** · **`Local-first & private data`**
 
 [English](./README-en.md) | [中文](./README.md)
 
@@ -28,7 +26,7 @@ Three pain points:
 
 1. **Scattered data**: weight, check-ins, and study progress sit in different places, impossible to review together.
 2. **No long-term view**: you know what you did today, not whether this week or month moved the needle.
-3. **Poor personal fit**: generic apps don't care about your "AI PM transition path", "Loctek class schedule", or "16+8 intermittent fasting".
+3. **Poor personal fit**: generic apps don't care about your "AI PM transition path" or "Loctek class schedule".
 
 ## 🧭 Design Principles
 
@@ -73,33 +71,28 @@ Three pain points:
 
 1. Morning: homepage "Today's to-do" → weight module applies the training-day diet plan → log weight (BMI / BMR auto-computed).
 2. Commute: IELTS menu picks 1–2 items → AI term cards read 3 times.
-3. 17:00: eat dinner (16+8) → check in training per the Loctek schedule.
+3. Evening: eat dinner → check in training per the Loctek schedule.
 4. Evening: weekly review + news reading + study-plan progress.
 
 ## 📦 Tech Stack
 
-- **Language**: HTML / CSS / JavaScript (all inlined in one file, no framework)
-- **Offline**: PWA (`manifest.webmanifest` + `sw.js`, cache name v8)
-- **Deploy**: GitHub Pages (static hosting, no backend)
+- **Language**: HTML / CSS / JavaScript (no framework, no build step)
+- **Offline**: PWA (`manifest.webmanifest` + `sw.js`)
+- **Deploy**: GitHub Pages (static hosting, no backend) — `git push` to `main` goes live
 - **Test**: Node `smoke.cjs` (extracts script, runs `node --check` + key-function checks)
+
+> Drifting details — current version, assertion count, cache name — are maintained in [`HANDOFF.md`](./HANDOFF.md), not repeated here.
 
 ## 📁 Project Structure
 
-```text
-workbench/
-├── index.html            # App entry (all HTML/CSS/JS, ~250KB)
-├── sw.js                 # Service Worker: offline cache & version update (v8)
-├── manifest.webmanifest  # PWA manifest
-├── smoke.cjs             # Pinned smoke test, run on every change
-├── _p.cjs                # Deploy script (push to GitHub Pages)
-├── supabase_setup.js     # Supabase sync table setup
-├── icon.svg / *.png      # App icons (incl. maskable)
-├── .nojekyll             # Disable GitHub Pages Jekyll processing
-└── README.md             # This document (Chinese)
-```
+The app lives at the root (single-file PWA + external `data-notes.js`), plus a few governance folders (`/1-input` `/2-agent-room` `/3-build` `/4-test`). See [`schema.md`](./schema.md).
 
 > [!WARNING]
 > Staying single-file is a deliberate architectural choice. If you must split, prefer a "no-build multi-file `<script src>`" approach over a bundler, to avoid breaking production.
+
+## 🔧 Maintenance & Release
+
+For contributors / AI: version numbers, release steps, tests, known pitfalls, and change log are all in [`HANDOFF.md`](./HANDOFF.md). This document covers only "what it is and how to use it".
 
 ## 📄 License
 

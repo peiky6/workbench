@@ -4,11 +4,7 @@
 
 
 
-![version](https://img.shields.io/badge/version-1.0.0-blue)
-
-![license](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)
-
-![platform](https://img.shields.io/badge/platform-PWA%20%2F%20Mobile-orange)
+**`版本 PWA / Mobile`** · **`许可 All Rights Reserved`** · **`数据本地私有`**
 
 [English](./README-en.md) | [中文](./README.md)
 
@@ -32,7 +28,7 @@
 
 1. **数据散落**：体重、打卡、学习进度各在各处，无法统一复盘。
 2. **缺乏周期视角**：知道今天做了什么，不知道这周、这月有没有进步。
-3. **内容不贴合**：通用 App 不关心你的「AI PM 转型路径」「乐刻周课表」「16+8 轻断食」。
+3. **内容不贴合**：通用 App 不关心你的「AI PM 转型路径」「乐刻周课表」。
 
 ## 🧭 设计思路与理念
 
@@ -77,44 +73,28 @@
 
 1. 早晨：首页看「今日待办」→ 体重管理套用训练日饮食计划 → 记录体重（自动算 BMI / BMR）。
 2. 通勤：雅思菜单点选 1–2 项打卡 → AI 术语卡刷 3 遍。
-3. 傍晚 17:00：吃完晚餐（16+8）→ 按乐刻课表训练打卡。
+3. 傍晚：吃完晚餐 → 按乐刻课表训练打卡。
 4. 晚间：本周复盘 + 新闻阅读 + 学习计划推进。
 
 ## 📦 技术栈
 
-- **语言**：HTML / CSS / JavaScript（全部内嵌于单文件，无框架）
-- **离线**：PWA（`manifest.webmanifest` + `sw.js`，缓存名 `qi-workbench-v82`）
+- **语言**：HTML / CSS / JavaScript（无框架、无构建）
+- **离线**：PWA（`manifest.webmanifest` + `sw.js`）
 - **部署**：GitHub Pages（静态托管，无后端）—— `git push` 到 `main` 即自动上线
-- **测试**：Node `smoke.cjs`（抽取脚本跑 `node --check` + 关键函数校验，当前 163 项）
+- **测试**：Node `smoke.cjs`（抽取脚本跑 `node --check` + 关键函数校验）
 
-## 🚀 发布流程（每次改动上线）
+> 当前版本号、断言数、缓存名等易漂移信息，统一维护在 [`HANDOFF.md`](./HANDOFF.md)，本文档不再重复。
 
-1. 升 `index.html` 的 `const APP_VERSION` 与 `sw.js` 的 `const CACHE`（**不升缓存名，手机端一直用旧缓存**）
-2. 同步 `smoke.cjs` 里的版本号与缓存名断言
-3. `node smoke.cjs` 全绿
-4. `git add <改动文件，含 smoke.cjs> && git commit -m "..." && git push origin main`
+## 📁 项目结构
 
-> Pages 从 `main` 构建，push 成功即上线，历史不产生 `deploy` 提交、不分叉。
-> 仅当 push 被网络拦住时，才用 Contents API 兜底（`3-build/private/deploy-scripts/deploy.cjs`）——
-> 用过兜底后远端会多出 deploy 提交，下次 push 需要 `--force`。
-
-## 📁 目录结构
-
-```text
-workbench/
-├── index.html            # 应用主文件（全部 HTML/CSS/JS，约 283KB）
-├── data-notes.js         # AI 学习笔记静态数据（BUILTIN_NOTES），在主脚本前引入
-├── sw.js                 # Service Worker：离线缓存与版本更新（qi-workbench-v82）
-├── manifest.webmanifest  # PWA 清单
-├── smoke.cjs             # 固化冒烟测试，每次改动回归
-├── supabase_setup.js     # Supabase 同步建表脚本
-├── icon.svg / *.png      # 应用图标（含 maskable）
-├── .nojekyll             # 禁用 GitHub Pages 的 Jekyll 处理
-└── README.md             # 本文档
-```
+主应用在根目录（单文件 PWA + 外置笔记 `data-notes.js`），另有若干治理目录（`/1-input` `/2-agent-room` `/3-build` `/4-test`）。详见 [`schema.md`](./schema.md)。
 
 > [!WARNING]  
 > 保持单文件是刻意的架构选择。如需拆分，优先采用「无构建多文件 `<script src>`」方案，而非引入打包工具，以免把线上弄挂。
+
+## 🔧 维护与发布
+
+面向协作者 / AI 的版本号、发布步骤、测试、踩坑清单与功能变更记录，统一见 [`HANDOFF.md`](./HANDOFF.md)。本文档只讲"是什么、怎么用"。
 
 ## 📄 开源协议
 
