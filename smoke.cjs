@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 110;
+  const MIN_SW = 111;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1068,6 +1068,22 @@ if(htmlJs){
     state=defaultState(); state.customFoods=s.customFoods; state.customExercises=s.customExercises;
     M.g=matchFood('腰果42g'); M.g84=matchFood('腰果 84g');
     M.e42=matchExercise('椭圆机 42分钟'); M.e84=matchExercise('椭圆机 84分钟'); M.eKc=matchExercise('椭圆机 250大卡');
+    // T21：脏条目残留防御（用户手机上报的 10500 bug）
+    state.customFoods=[{n:'腰果42g',k:250,u:''},{n:'腰果',k:595,u:'100g'}];
+    M.dirtyFood=matchFood('腰果42g');                       // 必须 250，不乘 42
+    state.customExercises=[{n:'椭圆机42分钟',k:250,u:''}];
+    M.dirtyEx=matchExercise('椭圆机42分钟');                // 带空格脏名也要 250
+    M.dirtyExSp=matchExercise('椭圆机 42分钟');
+    // T21：按克/毫升换算展示实际数量（腰果50g → shownAmt=50g，不再 ×0.5）
+    state.customFoods=[{n:'腰果',k:595,u:'100g'}];
+    M.shown=matchFood('腰果50g'); M.shownMl=matchFood('牛奶300ml');
+    // T21：显式热量混写优先 + 名字清洗
+    M.mixKcal=matchFood('腰果42g300kcal');                  // 必须 300
+    // T21：边界——按克食物整数不当份数、负数、中文量词
+    M.intQty=matchFood('腰果 2'); M.neg=matchFood('腰果-5g'); M.cnQty=matchFood('腰果 12个');
+    // T21：迁移非法基准（腰果0g）不得产生 null
+    const badS={customFoods:[{n:'腰果0g',k:250,u:''}]}; migrateCustomEntries(badS);
+    M.badMigrate=badS.customFoods[0];
   }catch(e){ M.err=e.name+': '+e.message; }
   globalThis.__M=M;
 })(); }catch(e){ globalThis.__MERR=e.name+': '+e.message; }
@@ -1373,6 +1389,38 @@ if(htmlJs){
     else bad('T20 椭圆机84分钟 换算错误', JSON.stringify(M.e84));
     if(M.eKc && M.eKc.kcal===250 && M.eKc.custom) ok('T20 「椭圆机 250大卡」显式热量仍优先 = 250 kcal');
     else bad('T20 显式热量优先级被破坏', JSON.stringify(M.eKc));
+
+    // ===== T21：v2026-11-18c 脏条目防御 / 展示数量 / 边界 =====
+    if(M.dirtyFood && M.dirtyFood.kcal===250 && M.dirtyFood.qty===1 && M.dirtyFood.dirtyGuard)
+      ok('T21 脏条目残留防御：库内「腰果42g」+「腰果」共存，输入腰果42g = 250（不再 10500）');
+    else bad('T21 脏食物条目防御失效', JSON.stringify(M.dirtyFood));
+    if(M.dirtyEx && M.dirtyEx.kcal===250 && M.dirtyEx.dirtyGuard)
+      ok('T21 脏运动条目防御：残留「椭圆机42分钟」输入 = 250（不再按分钟放大）');
+    else bad('T21 脏运动条目防御失效', JSON.stringify(M.dirtyEx));
+    if(M.dirtyExSp && M.dirtyExSp.kcal===250 && M.dirtyExSp.dirtyGuard)
+      ok('T21 脏运动条目防御：带空格「椭圆机 42分钟」也能命中脏条目 = 250');
+    else bad('T21 带空格脏运动条目防御失效', JSON.stringify(M.dirtyExSp));
+    if(M.shown && M.shown.shownAmt==='50g' && M.shown.kcal===298)
+      ok('T21 展示数量字段：腰果50g → shownAmt=50g / 298 kcal（预览显示实际克数）');
+    else bad('T21 食物展示数量字段错误', JSON.stringify(M.shown));
+    if(M.shownMl && M.shownMl.shownAmt==='300ml' && M.shownMl.kcal===162)
+      ok('T21 展示数量字段：牛奶300ml → shownAmt=300ml / 162 kcal');
+    else bad('T21 毫升展示数量字段错误', JSON.stringify(M.shownMl));
+    if(M.mixKcal && M.mixKcal.kcal===300 && M.mixKcal.explicitKcal)
+      ok('T21 显式热量优先：腰果42g300kcal → 300（不再被 42g 吞掉）');
+    else bad('T21 显式热量混写优先级错误', JSON.stringify(M.mixKcal));
+    if(M.intQty && M.intQty.kcal===595 && M.intQty.qty===1)
+      ok('T21 按克食物整数份数钳制：腰果 2 → 595（不再 1190）');
+    else bad('T21 整数份数钳制错误', JSON.stringify(M.intQty));
+    if(M.neg && M.neg.kcal===595 && M.neg.qty===1)
+      ok('T21 负数守卫：腰果-5g → 595（不再 30）');
+    else bad('T21 负数守卫错误', JSON.stringify(M.neg));
+    if(M.cnQty && M.cnQty.kcal===595 && M.cnQty.qty===1)
+      ok('T21 中文量词钳制：腰果 12个 → 595（不再 7140）');
+    else bad('T21 中文量词钳制错误', JSON.stringify(M.cnQty));
+    if(M.badMigrate && M.badMigrate.k!=null && Number.isFinite(M.badMigrate.k))
+      ok('T21 迁移非法基准：腰果0g 不产生 null（保留原样待重录）');
+    else bad('T21 迁移非法基准产生了 null', JSON.stringify(M.badMigrate));
   }
 })();
 
@@ -1565,11 +1613,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-18b\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-18c\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v110') ok('P4 SW 缓存名已随部署递增：v110');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v111') ok('P4 SW 缓存名已随部署递增：v111');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');

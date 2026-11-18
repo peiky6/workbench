@@ -804,14 +804,16 @@ function migrateCustomEntries(s){
   (Array.isArray(s.customFoods)?s.customFoods:[]).forEach(f=>{
     if(!f||!f.n||f.u) return;
     const p=parseCustomUnit(f.n), k=Number(f.k)||0;
-    if(!p.name||p.amount==null||(p.unit!=='g'&&p.unit!=='ml')||k<=0) return;
-    f.k=Math.round(k/p.amount*100); f.u='100'+p.unit; f.n=p.name;
+    if(!p.name||p.amount==null||!Number.isFinite(p.amount)||p.amount<=0||(p.unit!=='g'&&p.unit!=='ml')||k<=0) return; // v2026-11-18c：amount<=0/非有限数跳过，避免 k/0*100=Infinity→null
+    const nk=Math.round(k/p.amount*100); if(!Number.isFinite(nk)||nk<=0) return;
+    f.k=nk; f.u='100'+p.unit; f.n=p.name;
   });
   (Array.isArray(s.customExercises)?s.customExercises:[]).forEach(e=>{
     if(!e||!e.n||e.u) return;
     const p=parseCustomUnit(e.n), k=Number(e.k)||0;
-    if(!p.name||p.amount==null||p.unit!=='分钟'||k<=0) return;
-    e.k=Math.round(k/p.amount*100)/100; e.u='分钟'; e.n=p.name;
+    if(!p.name||p.amount==null||!Number.isFinite(p.amount)||p.amount<=0||p.unit!=='分钟'||k<=0) return; // v2026-11-18c：amount 守卫
+    const nk=Math.round(k/p.amount*100)/100; if(!Number.isFinite(nk)||nk<=0) return;
+    e.k=nk; e.u='分钟'; e.n=p.name;
   });
 }
 /* ===================== 本地凭证独立存储（P2 / v2026-11-13a）=====================
@@ -1237,7 +1239,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-18b';
+const APP_VERSION = '2026-11-18c';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4954,11 +4956,21 @@ function matchExercise(text){
   if(m){ min=Number(m[1]); }
   else { const any=text.match(/(\d+(?:\.\d+)?)/); if(any){ const n=Number(any[1]); if(n>=1&&n<=600) min=n; } }
   if(min==null) min=30;
-  const ex=allExercises().find(e=> lower.includes(e.n.toLowerCase()));
+  const flatText=text.replace(/\s+/g,'').toLowerCase(); // v2026-11-18c：去空格比对，兜住「椭圆机 42分钟」这类带空格的脏名输入
+  const exAll=allExercises();
+  // v2026-11-18c：精确（去空格）优先 + 最长名优先，防止内置短名「椭圆机」抢在脏长名「椭圆机42分钟」前命中
+  let ex=exAll.slice().sort((a,b)=>b.n.length-a.n.length).find(e=> flatText===e.n.replace(/\s+/g,'').toLowerCase());
+  if(!ex) ex=exAll.slice().sort((a,b)=>b.n.length-a.n.length).find(e=> lower.includes(e.n.toLowerCase()));
   if(!ex){ return {ex:null, min, kcal:0, unmatched:true, label:text.trim()}; }
   if(ex.met!=null){ // 内置：MET × 体重 × 时长
     const kcal=Math.round(ex.met*effectiveWeight()*min/60);
     return {ex, min, kcal, label:ex.n};
+  }
+  /* v2026-11-18c 防御：整串命中「名字带时长数字」的脏自定义条目（如残留 {n:'椭圆机42分钟',k:250}）。
+     名字里的 42 不该再被当成分钟乘基准。此时按该条记录消耗记 1 次。 */
+  const ep=parseCustomUnit(ex.n);
+  if(ep && ep.amount!=null && ep.unit==='分钟' && flatText===ex.n.replace(/\s+/g,'').toLowerCase()){
+    return {ex, min:Math.round(ep.amount), kcal:Math.round(ex.k||0), custom:true, name:ex.n, label:ex.n, dirtyGuard:true};
   }
   // 自定义运动：u='分钟' 按每分钟基准 × 时长归一化（v2026-11-18b）；旧条目无 u 则按次固定
   const kcal = (ex.u==='分钟') ? Math.round((ex.k||0)*min) : Math.round(ex.k||0);
@@ -5038,12 +5050,30 @@ function matchFood(text){
     return null;
   }
   const rest=text.replace(food.n,'').trim();
+  /* v2026-11-18c 防御A：整串命中「名字带数字+单位」的脏条目（如库里残留 {n:'腰果42g',k:250}）。
+     此时 rest=''，若落 parseQty(text) 会抓出 42 当份数 → 250×42=10500。直接按该条记录热量记 1 份。 */
+  const dp=parseCustomUnit(food.n);
+  if(dp && dp.amount!=null && dp.unit && !rest && (dp.unit==='g'||dp.unit==='ml'||dp.unit==='分钟')){
+    return {food,qty:1,kcal:Math.round(food.k||0),label:food.n,dirtyGuard:true};
+  }
+  /* v2026-11-18c 防御B：显式热量优先。混写「腰果42g300kcal / 椭圆机42分钟250大卡」时热量值优先，
+     并清洗名字里残留的数量+单位，避免脏名字再入库。 */
+  const kcM=text.match(/(\d+(?:\.\d+)?)\s*(?:kcal|千卡|大卡|卡)/i);
+  if(kcM){
+    const k=Math.round(Number(kcM[1]));
+    return {food,qty:1,kcal:k,label:food.n,kcalOverride:true,explicitKcal:true};
+  }
   const numRest=rest.match(/^(\d+(?:\.\d+)?|\.\d+)\s*(?:kcal|大卡|卡)?$/i);
   if(numRest){
     let n=Number(numRest[1]);
     const raw=numRest[1];
     if(raw.indexOf('.')<0 && raw.length>1 && raw[0]==='0') n=Number('0.'+raw.slice(1)); // "05"→0.5：防手机键盘/输入法吞掉小数点
-    if(n>0 && n<10){ const kcal=Math.round(food.k*n); return {food,qty:n,kcal,label:food.n}; } // 小数/个位数=份量（酸奶0.5=半份、鸡蛋2=2个）
+    // v2026-11-18c：按克/毫升计价的食物（u 含 g/ml），整数个位数按 1 份，只有小数（0.5）才是份量——避免「腰果 2」=1190
+    const weightBased=/\d\s*(g|ml|克|毫升)/i.test(food.u||'');
+    if(n>0 && n<10){
+      if(weightBased && Number.isInteger(n)) return {food,qty:1,kcal:Math.round(food.k||0),label:food.n}; // 按克计价+整数：按 1 份，不当份数也不当热量（腰果 2）
+      const kcal=Math.round(food.k*n); return {food,qty:n,kcal,label:food.n}; // 小数/个位数=份量（酸奶0.5=半份、鸡蛋2=2个）
+    }
     const kcal=Math.round(n); return {food,qty:1,kcal,label:food.n,kcalOverride:true}; // ≥10=直接热量（米饭 300=300kcal）
   }
   /* 数字带重量/容积单位（50g / 300ml / 0.4kg）= 克·毫升数，不是「份数」，绝不能当倍数乘。
@@ -5051,19 +5081,25 @@ function matchFood(text){
      能对上食物库单位（u 里的 100g / 250ml / 30g 等）就按克·毫升换算；对不上则按默认 1 份记。 */
   const wv=rest.match(/(\d+(?:\.\d+)?)\s*(千克|kg|毫升|ml|克|g)/i);
   if(wv){
+    // v2026-11-18c 防御C：负号数字（腰果-5g）视为误输入，按 1 份记，不把负数当份量
+    if(rest.charAt(rest.indexOf(wv[1])-1)==='-') return {food,qty:1,kcal:Math.round(food.k||0),label:food.n};
     let n=Number(wv[1]);
+    const shownAmt=wv[0].replace(/\s+/g,''); // 预览展示用的原始数量+单位，如 50g / 300ml / 0.5kg
     if(/^(千克|kg)$/i.test(wv[2])) n*=1000;
     if(/^(毫升|ml)$/i.test(wv[2])){
       const mml=(food.u||'').match(/(\d+(?:\.\d+)?)\s*ml/i);
-      if(mml && n>0){ const qty=Math.round((n/Number(mml[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n}; }
+      if(mml && n>0){ const qty=Math.round((n/Number(mml[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n,shownAmt}; }
     }
     else{
       const mg=(food.u||'').match(/(\d+(?:\.\d+)?)\s*g/i);
-      if(mg && n>0){ const qty=Math.round((n/Number(mg[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n}; }
+      if(mg && n>0){ const qty=Math.round((n/Number(mg[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n,shownAmt}; }
     }
-    return {food,qty:1,kcal:food.k,label:food.n}; // 单位对不上：按默认 1 份记，不乘
+    return {food,qty:1,kcal:food.k,label:food.n,shownAmt}; // 单位对不上：按默认 1 份记，不乘
   }
   let qty=parseQty(text);
+  // v2026-11-18c 防御D：按克/毫升计价的食物（u 含 g/ml）落到份数兜底时，
+  // 中文量词/纯数字被抓成「12个」「2」会把 595 放大成 7140/1190。这类只认小数份量，整数一律按 1 份。
+  if(/\d\s*(g|ml|克|毫升)/i.test(food.u||'') && Number.isInteger(qty) && qty>1) qty=1;
   const kcal=Math.round(food.k*qty);
   return {food,qty,kcal,label:food.n};
 }
@@ -5074,7 +5110,8 @@ function previewFood(meal){
   if(mt && mt.food){
     const remembered=(state.customFoods||[]).some(x=>x.n===mt.food.n);
     const tag=remembered?'（已记住 · '+escapeHtml(mt.food.u||'每份')+'）':'';
-    box.innerHTML= mt.kcalOverride ? `🔥 ${escapeHtml(mt.food.n)} · <b>${mt.kcal} kcal</b>${tag}` : `🔥 ${escapeHtml(mt.food.n)} ×${mt.qty} · 约 <b>${mt.kcal} kcal</b>${tag}`; box.className='prev ok';
+    const amt=mt.shownAmt?' '+escapeHtml(mt.shownAmt):(' ×'+mt.qty); // v2026-11-18c：克/毫升换算显示实际数量（50g），份数仍显示 ×qty
+    box.innerHTML= mt.kcalOverride ? `🔥 ${escapeHtml(mt.food.n)} · <b>${mt.kcal} kcal</b>${tag}` : `🔥 ${escapeHtml(mt.food.n)}${amt} · 约 <b>${mt.kcal} kcal</b>${tag}`; box.className='prev ok';
   }
   else if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>（自定义食物，会自动存入联想库）`; box.className='prev ok'; }
   else if(v.trim()){ box.innerHTML='⚠️ 未识别食物，试试：米饭/鸡蛋/鸡胸肉… 或「食物名 热量」如：蛋白粉 120'; box.className='prev warn'; }
@@ -5515,6 +5552,7 @@ function mergeState(remote){
   { const le=state.customExercises||[], re=remote.customExercises||[], out=le.slice();
     re.forEach(r=>{ if(!r||!r.n) return; const i=out.findIndex(x=>x.n===r.n); if(i<0) out.push({n:r.n,k:Number(r.k)||0}); });
     state.customExercises=out; }
+  migrateCustomEntries(state); // v2026-11-18c：合并后再迁移一次，兜住云端/备份/快照回灌的旧脏名字（拉取/导入/恢复三出口共用此函数，幂等，不动历史流水）
   // 笔记问答：跨端合并——远端笔记按标题补入本地没有的；问答按「问题|答案」去重，nid 经标题映射到本地笔记 id
   { const lf=state.notes||[], rf=remote.notes||[];
     const have=new Set(lf.map(n=>n.title));
