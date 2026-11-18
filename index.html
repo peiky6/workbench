@@ -779,6 +779,41 @@ function migrateOutputs(s){
     });
   });
 }
+/* ---- 自定义条目基准解析（v2026-11-18b）：从「腰果42g / 椭圆机42分钟」剥离数字+单位 ----
+   返回 {name, amount, unit}：unit ∈ 'g'|'ml'|'kg'→g|'分钟'；amount=数值（kg 已归一为 g）；
+   名字无「数字+单位」结尾时 amount=null、unit=''。仅识别结尾单位，避免误伤名字中间的数字。 */
+function parseCustomUnit(text){
+  const s=String(text||'').trim();
+  const m=s.match(/(\d+(?:\.\d+)?)\s*(千克|kg|克|g|毫升|ml|升|L|分钟|min|分)\s*$/i);
+  if(!m) return {name:s, amount:null, unit:''};
+  const raw=m[2].toLowerCase();
+  let unit=(raw==='千克'||raw==='kg')?'g':(raw==='克'||raw==='g')?'g'
+          :(raw==='毫升'||raw==='ml'||raw==='升'||raw==='l')?'ml'
+          :(raw==='分钟'||raw==='min'||raw==='分')?'分钟':'';
+  let amount=Number(m[1]);
+  if(!unit) return {name:s, amount:null, unit:''};
+  if((raw==='升'||raw==='l') && unit==='ml') amount*=1000;   // 1升 → 1000ml
+  if(raw==='千克'||raw==='kg') amount*=1000;                 // 1kg → 1000g
+  return {name:s.slice(0,m.index).trim(), amount:amount, unit:unit};
+}
+/* ---- 自定义食物/运动库迁移（v2026-11-18b）：脏名字「腰果42g」→「腰果」+基准 ----
+   只改联想库，历史流水 modules.mana.records 零改动。按用户当时记的热量归一化：
+   腰果42g+250 → k=595/100g；椭圆机42分钟+250 → k=5.95/分钟。
+   幂等：已有 u 基准或名字无「数字+单位」的条目跳过。 */
+function migrateCustomEntries(s){
+  (Array.isArray(s.customFoods)?s.customFoods:[]).forEach(f=>{
+    if(!f||!f.n||f.u) return;
+    const p=parseCustomUnit(f.n), k=Number(f.k)||0;
+    if(!p.name||p.amount==null||(p.unit!=='g'&&p.unit!=='ml')||k<=0) return;
+    f.k=Math.round(k/p.amount*100); f.u='100'+p.unit; f.n=p.name;
+  });
+  (Array.isArray(s.customExercises)?s.customExercises:[]).forEach(e=>{
+    if(!e||!e.n||e.u) return;
+    const p=parseCustomUnit(e.n), k=Number(e.k)||0;
+    if(!p.name||p.amount==null||p.unit!=='分钟'||k<=0) return;
+    e.k=Math.round(k/p.amount*100)/100; e.u='分钟'; e.n=p.name;
+  });
+}
 /* ===================== 本地凭证独立存储（P2 / v2026-11-13a）=====================
    凭证（PAT / Gist ID / 加密口令）不再写进主存 qi_workbench_v2，改存独立键 qi_wb_creds。
    内存里的 state.settings 仍是完整镜像 → 设置页回填 / _cfgOK / push / pull / mergeState
@@ -951,6 +986,7 @@ function load(){
     s.outputs = Array.isArray(s.outputs)? s.outputs : [];
     s.outTags = Array.isArray(s.outTags)? s.outTags : [];
     migrateOutputs(s);
+    migrateCustomEntries(s);   // v2026-11-18b：脏名字「腰果42g」→「腰果」+基准；幂等，不动历史流水
     s.settings.readGoal = s.settings.readGoal||5;
     // 基线标记立即落盘（不触发 save/自动上传）：否则打开后未操作就关闭，下次启动会重复 +1
     if(_baselineFresh){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(persistSafe(s))); }catch(e){ console.warn('baseline persist fail', e); } }
@@ -1201,7 +1237,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-18a';
+const APP_VERSION = '2026-11-18b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4899,10 +4935,12 @@ function liveBody(){
 /* 蚂蚁阿福数据粘贴流程已移除（v2026-11-12d）：全站唯一入口原在体重页记录卡，用户反馈从未使用且步骤繁琐。
    仅删入口与解析代码，已写入 rec('mana') 的历史体重/体脂记录全部保留；需要批量补历史时可用设置页 JSON 备份导入。 */
 function allExercises(){ return (state.customExercises||[]).concat(EXERCISES); }
-function saveCustomExercise(name,kcal){
+function saveCustomExercise(name,kcal,unit){
   const ce=state.customExercises||(state.customExercises=[]);
   const i=ce.findIndex(x=>x.n===name);
-  if(i>=0){ ce[i].k=Math.round(kcal); } else { ce.push({n:name,k:Math.round(kcal)}); }
+  const k=Math.round(kcal*100)/100;   // 每分钟基准保留 2 位小数
+  const u=unit||'';
+  if(i>=0){ ce[i].k=k; if(u) ce[i].u=u; } else { ce.push({n:name,k:k,u:u}); }
 }
 function matchExercise(text){
   text=(text||'').trim(); if(!text) return null;
@@ -4922,14 +4960,15 @@ function matchExercise(text){
     const kcal=Math.round(ex.met*effectiveWeight()*min/60);
     return {ex, min, kcal, label:ex.n};
   }
-  // 自定义运动：直接用记录的热量（不随时长缩放）
-  return {ex, min, kcal:ex.k||0, custom:true, name:ex.n, label:ex.n};
+  // 自定义运动：u='分钟' 按每分钟基准 × 时长归一化（v2026-11-18b）；旧条目无 u 则按次固定
+  const kcal = (ex.u==='分钟') ? Math.round((ex.k||0)*min) : Math.round(ex.k||0);
+  return {ex, min, kcal, custom:true, name:ex.n, label:ex.n, perMin:(ex.u==='分钟')};
 }
 function previewEx(){
   const v=(document.getElementById('exText')||{}).value||'';
   const box=document.getElementById('exPrev'); if(!box) return;
   const mt=matchExercise(v);
-  if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>（自定义消耗，自动存入联想库）`; box.className='prev ok'; }
+  if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>${mt.perMin?'（已记住 · 按分钟换算）':'（自定义消耗，自动存入联想库）'}`; box.className='prev ok'; }
   else if(mt && mt.ex){ box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>（按体重${effectiveWeight()}kg估算）`; box.className='prev ok'; }
   else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练/核心雕塑/燃脂搏击，或写「运动名 热量」如：椭圆机 250大卡'; box.className='prev warn'; }
   else { box.innerHTML=''; }
@@ -4937,7 +4976,14 @@ function previewEx(){
 function addExTyped(){
   const inp=document.getElementById('exText'); const v=inp.value;
   const mt=matchExercise(v); const t=manaToday();
-  if(mt && mt.custom){ const dn=mt.name||('自定义运动'+mt.kcal+'kcal'); t.exercises.push({n:dn,min:0,kcal:mt.kcal}); if(mt.name) saveCustomExercise(mt.name,mt.kcal); }
+  if(mt && mt.custom){
+    const dn=mt.name||('自定义运动'+mt.kcal+'kcal');
+    const p=parseCustomUnit(mt.name||'');
+    const rec={n:dn,min:(p.unit==='分钟'&&p.amount)?Math.round(p.amount):(mt.min||0),kcal:mt.kcal};
+    t.exercises.push(rec);
+    // v2026-11-18b：名字带「时长」时按每分钟归一化入库，之后输入「椭圆机 42分钟」可自动换算
+    if(mt.name){ if(p.unit==='分钟'&&p.amount) saveCustomExercise(p.name||mt.name, mt.kcal/p.amount, '分钟'); else saveCustomExercise(mt.name, mt.kcal); }
+  }
   else if(mt && mt.ex){ t.exercises.push({n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}); }
   else { if(!v.trim()) return toast('请输入运动内容'); t.exercises.push({n:v.trim(),min:0,kcal:0}); }
   t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已添加运动 🏃');
@@ -4945,14 +4991,19 @@ function addExTyped(){
 /* 自定义运动：名称（可留空）+ 消耗热量，与饮食「自定义食物」样式一致 */
 function addCustomExercise(){
   const ni=document.getElementById('ceName'); const ki=document.getElementById('ceKcal');
-  const name=(ni?ni.value.trim():'');
+  const raw=(ni?ni.value.trim():'');
   const k=Math.round(Number(ki?ki.value.trim():''));
   if(!k||k<=0) return toast('请输入大于 0 的消耗热量');
-  const display=name||('自定义运动'+k+'kcal');
-  const t=manaToday(); t.exercises.push({n:display,min:0,kcal:k}); t.done=true; t.ts=Date.now();
-  if(name) saveCustomExercise(name,k);
+  const p=parseCustomUnit(raw);
+  const display=p.name||('自定义运动'+k+'kcal');
+  const t=manaToday();
+  t.exercises.push({n:display,min:(p.unit==='分钟'&&p.amount)?Math.round(p.amount):0,kcal:k});
+  t.done=true; t.ts=Date.now();
+  // v2026-11-18b：名字带时长 → 纯名字入库 + 按每分钟归一化；之后输入「椭圆机 42分钟」自动换算
+  if(p.name){ if(p.unit==='分钟'&&p.amount) saveCustomExercise(p.name,k/p.amount,'分钟'); else saveCustomExercise(p.name,k); }
   if(ni) ni.value=''; if(ki) ki.value='';
-  save(); renderMana(); toast('已记录 '+display+' 消耗 '+k+' kcal 🏃');
+  save(); renderMana();
+  toast(p.unit==='分钟' ? ('已记住 '+display+' ≈'+(Math.round(k/p.amount*100)/100)+' kcal/分钟 🏃') : ('已记录 '+display+' 消耗 '+k+' kcal 🏃'));
 }
 function suggestExercise(){
   const inp=document.getElementById('exText'); const v=inp?inp.value.trim():'';
@@ -4970,10 +5021,12 @@ function fillExercise(name){
   previewEx();
 }
 function allFoods(){ return FOODS.concat(state.customFoods||[]); }
-function saveCustomFood(name,k){
+function saveCustomFood(name,k,unit){
   const cf=state.customFoods||(state.customFoods=[]);
   const i=cf.findIndex(x=>x.n===name);
-  if(i>=0){ cf[i].k=Math.round(k); cf[i].u=cf[i].u||''; } else { cf.push({n:name,k:Math.round(k),u:''}); }
+  const u=unit||'';
+  if(i>=0){ cf[i].k=Math.round(k); if(u) cf[i].u=u; else cf[i].u=cf[i].u||''; }
+  else { cf.push({n:name,k:Math.round(k),u:u}); }
 }
 function matchFood(text){
   text=(text||'').trim(); if(!text) return null;
@@ -5018,7 +5071,11 @@ function previewFood(meal){
   const inp=document.getElementById('food_'+meal); const v=inp?inp.value:'';
   const box=document.getElementById('foodPrev_'+meal); if(!box) return;
   const mt=matchFood(v);
-  if(mt && mt.food){ box.innerHTML= mt.kcalOverride ? `🔥 ${escapeHtml(mt.food.n)} · <b>${mt.kcal} kcal</b>` : `🔥 ${escapeHtml(mt.food.n)} ×${mt.qty} · 约 <b>${mt.kcal} kcal</b>`; box.className='prev ok'; }
+  if(mt && mt.food){
+    const remembered=(state.customFoods||[]).some(x=>x.n===mt.food.n);
+    const tag=remembered?'（已记住 · '+escapeHtml(mt.food.u||'每份')+'）':'';
+    box.innerHTML= mt.kcalOverride ? `🔥 ${escapeHtml(mt.food.n)} · <b>${mt.kcal} kcal</b>${tag}` : `🔥 ${escapeHtml(mt.food.n)} ×${mt.qty} · 约 <b>${mt.kcal} kcal</b>${tag}`; box.className='prev ok';
+  }
   else if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>（自定义食物，会自动存入联想库）`; box.className='prev ok'; }
   else if(v.trim()){ box.innerHTML='⚠️ 未识别食物，试试：米饭/鸡蛋/鸡胸肉… 或「食物名 热量」如：蛋白粉 120'; box.className='prev warn'; }
   else { box.innerHTML=''; }
@@ -5043,7 +5100,13 @@ function addFoodTyped(meal){
   const inp=document.getElementById('food_'+meal); const v=inp.value;
   const mt=matchFood(v); const t=manaToday();
   if(mt){
-    if(mt.custom){ const dn=mt.name||('自定义'+mt.kcal+'kcal'); t.meals[meal].push({n:dn, k:mt.kcal}); if(mt.name) saveCustomFood(mt.name,mt.kcal); }
+    if(mt.custom){
+      const dn=mt.name||('自定义'+mt.kcal+'kcal');
+      const p=parseCustomUnit(mt.name||'');
+      t.meals[meal].push({n:dn, k:mt.kcal});
+      // 库外自定义（显式热量写法）：名字带克数也归一化入库，之后可自动换算
+      if(mt.name){ if((p.unit==='g'||p.unit==='ml')&&p.amount) saveCustomFood(p.name||mt.name, mt.kcal/p.amount*100, '100'+p.unit); else saveCustomFood(mt.name,mt.kcal); }
+    }
     else { const fe={n:mt.food.n, k:mt.kcal}; if(mt.qty&&mt.qty!==1) fe.qty=mt.qty; t.meals[meal].push(fe); if(mt.kcalOverride && (state.customFoods||[]).some(x=>x.n===mt.food.n)) saveCustomFood(mt.food.n, mt.kcal); }
   }
   else { if(!v.trim()) return toast('请输入食物'); t.meals[meal].push({n:v.trim(),k:0}); }
@@ -5051,14 +5114,19 @@ function addFoodTyped(meal){
 }
 function addCustomFood(meal){
   const ni=document.getElementById('cfName_'+meal); const ki=document.getElementById('kcal_'+meal);
-  const name=(ni?ni.value.trim():'');
+  const raw=(ni?ni.value.trim():'');
   const k=Math.round(Number(ki?ki.value.trim():''));
   if(!k||k<=0) return toast('请输入大于 0 的热量数值');
-  const display=name||('自定义'+k+'kcal');
-  const t=manaToday(); t.meals[meal].push({n:display,k}); t.done=true; t.ts=Date.now();
-  if(name) saveCustomFood(name,k);
+  const p=parseCustomUnit(raw);
+  const display=p.name||('自定义'+k+'kcal');
+  const t=manaToday();
+  const fe={n:display,k}; if(p.unit==='g'||p.unit==='ml') fe.qty=Math.round(p.amount*100)/100;
+  t.meals[meal].push(fe); t.done=true; t.ts=Date.now();
+  // v2026-11-18b：名字带克数/毫升 → 纯名字入库 + 归一化到每100g/ml；之后输入「腰果42g」自动换算
+  if(p.name){ if((p.unit==='g'||p.unit==='ml')&&p.amount) saveCustomFood(p.name, k/p.amount*100, '100'+p.unit); else saveCustomFood(p.name,k); }
   if(ni) ni.value=''; if(ki) ki.value='';
-  save(); renderMana(); toast('已记录 '+display+' '+k+' kcal 🍽️');
+  save(); renderMana();
+  toast((p.unit==='g'||p.unit==='ml') ? ('已记住 '+display+' ≈'+Math.round(k/p.amount*100)+' kcal/100'+p.unit+' 🍽️') : ('已记录 '+display+' '+k+' kcal 🍽️'));
 }
 function addCustomKcal(meal){
   const inp=document.getElementById('kcal_'+meal); const v=inp?inp.value.trim():'';

@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 109;
+  const MIN_SW = 110;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1054,8 +1054,26 @@ if(htmlJs){
   globalThis.__F=F;
 })(); }catch(e){ globalThis.__FERR=e.name+': '+e.message; }
 `;
+  // ===== 自定义基准迁移行为级（v2026-11-18b）：脏名字入库迁移 + 幂等 + 换算 =====
+  const migrateScript = `
+;globalThis.__MERR=null;
+;try{ (function(){
+  const M={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript, ctx, {filename:'index.html', timeout:15000});
+    const s={customFoods:[{n:'腰果42g',k:250,u:''}],customExercises:[{n:'椭圆机42分钟',k:250}]};
+    migrateCustomEntries(s);
+    M.food0=s.customFoods[0]; M.ex0=s.customExercises[0];
+    const snapshot=JSON.stringify(s);
+    migrateCustomEntries(s); M.idempotent=(JSON.stringify(s)===snapshot);
+    state=defaultState(); state.customFoods=s.customFoods; state.customExercises=s.customExercises;
+    M.g=matchFood('腰果42g'); M.g84=matchFood('腰果 84g');
+    M.e42=matchExercise('椭圆机 42分钟'); M.e84=matchExercise('椭圆机 84分钟'); M.eKc=matchExercise('椭圆机 250大卡');
+  }catch(e){ M.err=e.name+': '+e.message; }
+  globalThis.__M=M;
+})(); }catch(e){ globalThis.__MERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1329,6 +1347,33 @@ if(htmlJs){
   if(F.greek && F.greek.food && F.greek.food.n==='希腊酸奶' && F.greek.kcal===50)
     ok('T19 长名食物优先匹配：「希腊酸奶 50g」= 50 kcal');
   else bad('T19 长名匹配被破坏', JSON.stringify(F.greek));
+
+  // ===== 自定义基准迁移与换算行为级判定（v2026-11-18b） =====
+  if(ctx.__MERR) bad('自定义基准迁移校验脚本异常', ctx.__MERR);
+  const M=ctx.__M||{};
+  if(M.err) bad('迁移/换算执行异常', M.err);
+  else{
+    if(M.food0 && M.food0.n==='腰果' && M.food0.k===595 && M.food0.u==='100g')
+      ok('T20 食物脏条目迁移：腰果42g+250 → 腰果 595kcal/100g');
+    else bad('T20 食物迁移错误', JSON.stringify(M.food0));
+    if(M.ex0 && M.ex0.n==='椭圆机' && M.ex0.k===5.95 && M.ex0.u==='分钟')
+      ok('T20 运动脏条目迁移：椭圆机42分钟+250 → 椭圆机 5.95kcal/分钟');
+    else bad('T20 运动迁移错误', JSON.stringify(M.ex0));
+    if(M.idempotent) ok('T20 迁移幂等：二次执行数据不变');
+    else bad('T20 迁移不幂等');
+    if(M.g && M.g.food && M.g.food.n==='腰果' && M.g.kcal===250 && M.g.qty===0.42)
+      ok('T20 「腰果42g」自动换算 = 250 kcal（不再 250×42）');
+    else bad('T20 腰果42g 换算错误', JSON.stringify(M.g));
+    if(M.g84 && M.g84.kcal===500) ok('T20 「腰果 84g」= 500 kcal（线性换算）');
+    else bad('T20 腰果84g 换算错误', JSON.stringify(M.g84));
+    if(M.e42 && M.e42.min===42 && M.e42.kcal===250 && M.e42.ex && M.e42.ex.n==='椭圆机')
+      ok('T20 「椭圆机 42分钟」命中自定义 = 250 kcal（不再掉回内置 MET）');
+    else bad('T20 椭圆机42分钟 命中错误', JSON.stringify(M.e42));
+    if(M.e84 && M.e84.min===84 && M.e84.kcal===500) ok('T20 「椭圆机 84分钟」= 500 kcal（按分钟归一化）');
+    else bad('T20 椭圆机84分钟 换算错误', JSON.stringify(M.e84));
+    if(M.eKc && M.eKc.kcal===250 && M.eKc.custom) ok('T20 「椭圆机 250大卡」显式热量仍优先 = 250 kcal');
+    else bad('T20 显式热量优先级被破坏', JSON.stringify(M.eKc));
+  }
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -1520,11 +1565,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-18a\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-18b\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v109') ok('P4 SW 缓存名已随部署递增：v109');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v110') ok('P4 SW 缓存名已随部署递增：v110');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');
