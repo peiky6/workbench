@@ -1,8 +1,7 @@
 # 祈·自律工作台 — 交接手册
 
 > 供外部工具 / 协作者 / 手机云端任务修改本工作台时参考。
-> 最新线上版本：**APP_VERSION `2026-11-16a` / SW `qi-workbench-v107`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交 `ab57c54`）。
-> 本地工作副本已升至 **`2026-11-17a` / `qi-workbench-v108`**（清理 16+8 文案，待 commit + push；push 后更新上方线上版本）。
+> 最新线上版本：**APP_VERSION `2026-11-18a` / SW `qi-workbench-v109`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交：本次 `fix: 饮食录入带单位数字不再乘份数` 提交）。
 > ⚠️ 本文档于 2026-11-17 按线上 `origin/main` 与本地实测全量重写。行号随版本漂移，检索请优先用函数名。改完请同步更新本手册顶部版本号。
 
 ## 1. 项目定位
@@ -12,7 +11,7 @@
 - 手机云端改码：全程走 GitHub clone → 改 → push，云端沙箱**看不到本地路径**。完整流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 2. 技术栈与架构
-- 核心逻辑在 `index.html`（419,283 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
+- 核心逻辑在 `index.html`（420,374 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
 - PWA：`manifest.webmanifest` + `sw.js`（2,731 字节；离线缓存，导航网络优先、失败回退缓存；预缓存含 `index.html` / `data-notes.js` / 图标 / manifest）。
 - 持久化：主存键 `qi_workbench_v2`；凭证独立键 `qi_wb_creds` + IndexedDB 密文副本 `qi_history/creds`（设备密钥 `qi_wb_dk`）；可选 Gist 云同步（AES ENC2，Gist 1MB 截断自愈）。
 - CSP：`form-action 'none'` 已补；`script-src`/`style-src` 保留 `unsafe-inline`（本期刻意不收紧，避免白屏）。
@@ -25,7 +24,7 @@ workbench/
 ├── data-notes.js         # 内置 AI 笔记（约 249KB），<script src> 注入 BUILTIN_NOTES
 ├── sw.js                 # Service Worker，仅做版本/缓存控制
 ├── manifest.webmanifest  # PWA 清单
-├── smoke.cjs             # 固化冒烟测试（约 98KB，node 跑，改完必跑，当前 522 项断言）
+├── smoke.cjs             # 固化冒烟测试（约 101KB，node 跑，改完必跑，当前 531 项断言）
 ├── icon.svg / *.png      # 图标（含 maskable）
 ├── .nojekyll             # 禁用 Jekyll
 ├── README.md / README-en.md / START.md / Experience.md / Preferences.md / HANDOFF.md / schema.md
@@ -39,14 +38,14 @@ workbench/
 - 本机 remote 是 SSH（`ssh://git@ssh.github.com:443/peiky6/workbench.git`），本机可推送。
 - **手机云端沙箱没有本机 SSH key**：云端改码须用 HTTPS + fine-grained PAT（仅给 `workbench` 仓库 Contents 写权限，短期有效，用完撤销）。PAT 在任务对话里单独提供，禁止写进公开仓库或提交历史。
 - 每次改完 `index.html` / `data-notes.js` / `sw.js` 必须：
-  1. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v107`，否则用户看不到更新）；
-  2. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-16a`，格式 `YYYY-MM-DD[a-z]`）；
-  3. 跑 `node smoke.cjs` 全绿（当前 522 项）再推；
+  1. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v109`，否则用户看不到更新）；
+  2. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-18a`，格式 `YYYY-MM-DD[a-z]`）；
+  3. 跑 `node smoke.cjs` 全绿（当前 531 项）再推；
   4. 更新本手册顶部版本号。
 
 ## 5. 测试
-- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 522 项断言，全绿才准推。**
-- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线 v94」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」）。
+- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 531 项断言，全绿才准推。**
+- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」，当前 `MIN_SW=109`）。
 - 单文件无构建兜底，一个语法错误整页白屏，靠 smoke 兜底。
 
 ## 6. 数据模型与关键约定
@@ -54,7 +53,7 @@ workbench/
 - **内置笔记（`BUILTIN_NOTES`）不上传云端**——云端只存用户数据，避免大文件超 Gist 截断线。
 - **凭证三层加固（v2026-11-16a）**：①写空保护（三项清空不抹已有凭证、回灌内存）；②IndexedDB AES-GCM 密文冗余副本 + 设备密钥；③启动自愈恢复（独立键为空时从副本解密恢复）。主存 / 云端载荷 / 导出备份 / 快照 / 回滚备份均零凭证明文。
 
-## 7. 本周功能变更（2026-11-03 ~ 11-17，按时间）
+## 7. 本周功能变更（2026-11-03 ~ 11-18，按时间）
 | 日期 | 版本 | 变更摘要 |
 |---|---|---|
 | 11-03 | 11-03a | 按饮食指南&训练计划更新体重模块（工作日 1760kcal/101g + 每周课表） |
@@ -67,6 +66,7 @@ workbench/
 | 11-13 | 11-13a/b | 安全 P1 落盘副本脱敏 + 内置笔记数据格式化；P2 凭证拆键 + 老设备静默迁移，全落盘出口零凭证 |
 | 11-16 | 11-16a | P4 凭证持久化三层加固（写空保护 / 密文冗余 / 启动自愈，SW v107） |
 | 11-17 | 11-17a | 清理全部 16+8 饮食文案（代码 4 处 + 三份文档 6 处），SW v108；文档同步规则确立 |
+| 11-18 | 11-18a | 修复饮食录入：食物名带重量/容积单位（如 50g 鸡胸肉）不再被当份数乘（曾 133×50=6650 kcal）；按食物库基准（100g/250ml/30g）换算，对不上按 1 份记；smoke 新增 9 条 T19 回归断言（522→531），SW v109 |
 
 ## 8. 用户偏好与约定（长期记忆）
 - 身份：IT 软件项目经理，转型 **AI PM**。术语库 / 学习计划 / 书单围绕此。
@@ -99,7 +99,7 @@ workbench/
 移动端云端改码流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 10. 踩坑清单（给协作者）
-1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v108 / 522 项），否则用户看不到更新。
+1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v109 / 531 项），否则用户看不到更新。
 2. **本地工作副本可能落后于线上**：动手前先 `git fetch` + 比对 `origin/main`，确认基线再改。11-16 曾因本机与远程分叉（内容一致、历史不同）导致 push 被拒，用 `git reset --mixed origin/main` 对齐解决——**绝不强推覆盖**。
 3. **笔记外置已完成**（data-notes.js），别再重复拆 `BUILTIN_NOTES`。
 4. **Supabase 死代码已清理**，保留 `supabase_setup.js` 仅为兼容，不要基于旧文档恢复 Supabase 同步链路。

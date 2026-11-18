@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 94;
+  const MIN_SW = 109;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1033,8 +1033,29 @@ if(htmlJs){
   globalThis.__P3=P;
 })(); }catch(e){ globalThis.__P3ERR=e.name+': '+e.message; }
 `;
+  // ===== 饮食录入行为级：数字带 g/ml 单位绝不乘份数（v2026-11-18a 回归锁） =====
+  const foodScript = `
+;globalThis.__FERR=null;
+;try{ (function(){
+  const F={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script, ctx, {filename:'index.html', timeout:15000});
+    state=defaultState();
+    F.g=matchFood('50g鸡胸肉');        // 修复点：带 g 单位绝不当份数乘
+    F.gPre=matchFood('鸡胸肉 50g');    // 修复点：单位在食物名后同理
+    F.ml=matchFood('牛奶300ml');       // ml 按 250ml 基准换算
+    F.half=matchFood('酸奶0.5');       // 原行为回归：小数=份数
+    F.kcal=matchFood('米饭 300');      // 原行为回归：≥10 直接热量
+    F.cnt=matchFood('2个鸡蛋');        // 原行为回归：中文量词份数
+    F.noml=matchFood('可乐330ml');     // 单位与库基准一致 → 1 份
+    F.nut=matchFood('坚果60g');        // u=30g → 2 份
+    F.custom=matchFood('蛋白粉 120');  // 自定义食物路径
+    F.greek=matchFood('希腊酸奶 50g'); // 长名食物优先匹配
+  }catch(e){ F.err=e.name+': '+e.message; }
+  globalThis.__F=F;
+})(); }catch(e){ globalThis.__FERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1275,6 +1296,39 @@ if(htmlJs){
   else if(P3.picked===BAD_EXPECT && P3.tagState===BAD_EXPECT && P3.exVal===BAD_EXPECT && P3.foodVal===BAD_EXPECT)
     ok('P3 实跑点击：4 个函数行为与改前一致（标签写入 / 筛选 / 输入框回填）');
   else bad('P3 点击后行为不一致', JSON.stringify({pick:P3.picked,tag:P3.tagState,ex:P3.exVal,food:P3.foodVal}));
+
+  // ===== 饮食录入行为级判定：数字带重量/容积单位绝不乘份数（v2026-11-18a） =====
+  if(ctx.__FERR) bad('饮食录入校验脚本异常', ctx.__FERR);
+  const F=ctx.__F||{};
+  if(F.err) bad('matchFood 执行异常', F.err);
+  else if(F.g && F.g.food && F.g.food.n==='鸡胸肉' && F.g.kcal===67 && F.g.qty===0.5
+     && F.gPre && F.gPre.food && F.gPre.food.n==='鸡胸肉' && F.gPre.kcal===67)
+    ok('T19 「50g鸡胸肉」按 100g 基准换算 = 67 kcal，单位在前后缀均不乘 50');
+  else bad('T19 带单位数字仍被当份数乘', JSON.stringify({g:F.g,pre:F.gPre}));
+  if(F.ml && F.ml.food && F.ml.food.n==='牛奶' && F.ml.kcal===162 && F.ml.qty===1.2)
+    ok('T19 「牛奶300ml」按 250ml 基准换算 = 162 kcal');
+  else bad('T19 ml 换算错误', JSON.stringify(F.ml));
+  if(F.half && F.half.food && F.half.food.n==='酸奶' && F.half.kcal===50 && F.half.qty===0.5)
+    ok('T19 「酸奶0.5」仍= 半份 50 kcal（原口径不变）');
+  else bad('T19 小数份数口径被破坏', JSON.stringify(F.half));
+  if(F.kcal && F.kcal.kcal===300 && F.kcal.kcalOverride)
+    ok('T19 「米饭 300」仍= 直接热量 300 kcal（原口径不变）');
+  else bad('T19 直接热量口径被破坏', JSON.stringify(F.kcal));
+  if(F.cnt && F.cnt.kcal===140 && F.cnt.qty===2)
+    ok('T19 「2个鸡蛋」仍= 2 份 140 kcal（原口径不变）');
+  else bad('T19 量词份数口径被破坏', JSON.stringify(F.cnt));
+  if(F.noml && F.noml.kcal===140 && F.noml.qty===1)
+    ok('T19 「可乐330ml」单位与库基准一致 → 1 瓶 140 kcal');
+  else bad('T19 330ml 可乐口径错误', JSON.stringify(F.noml));
+  if(F.nut && F.nut.kcal===360 && F.nut.qty===2)
+    ok('T19 「坚果60g」按 30g/份换算 = 360 kcal');
+  else bad('T19 30g 基准换算错误', JSON.stringify(F.nut));
+  if(F.custom && F.custom.custom && F.custom.kcal===120 && F.custom.name==='蛋白粉')
+    ok('T19 「蛋白粉 120」自定义热量路径不变');
+  else bad('T19 自定义热量路径被破坏', JSON.stringify(F.custom));
+  if(F.greek && F.greek.food && F.greek.food.n==='希腊酸奶' && F.greek.kcal===50)
+    ok('T19 长名食物优先匹配：「希腊酸奶 50g」= 50 kcal');
+  else bad('T19 长名匹配被破坏', JSON.stringify(F.greek));
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -1466,11 +1520,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-17a\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-18a\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v108') ok('P4 SW 缓存名已随部署递增：v108');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v109') ok('P4 SW 缓存名已随部署递增：v109');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');

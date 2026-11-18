@@ -1201,7 +1201,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-17a';
+const APP_VERSION = '2026-11-18a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4992,6 +4992,23 @@ function matchFood(text){
     if(raw.indexOf('.')<0 && raw.length>1 && raw[0]==='0') n=Number('0.'+raw.slice(1)); // "05"→0.5：防手机键盘/输入法吞掉小数点
     if(n>0 && n<10){ const kcal=Math.round(food.k*n); return {food,qty:n,kcal,label:food.n}; } // 小数/个位数=份量（酸奶0.5=半份、鸡蛋2=2个）
     const kcal=Math.round(n); return {food,qty:1,kcal,label:food.n,kcalOverride:true}; // ≥10=直接热量（米饭 300=300kcal）
+  }
+  /* 数字带重量/容积单位（50g / 300ml / 0.4kg）= 克·毫升数，不是「份数」，绝不能当倍数乘。
+     修复：'50g鸡胸肉' 曾被 parseQty 抓走 50 当份数，算成 133×50=6650 kcal。
+     能对上食物库单位（u 里的 100g / 250ml / 30g 等）就按克·毫升换算；对不上则按默认 1 份记。 */
+  const wv=rest.match(/(\d+(?:\.\d+)?)\s*(千克|kg|毫升|ml|克|g)/i);
+  if(wv){
+    let n=Number(wv[1]);
+    if(/^(千克|kg)$/i.test(wv[2])) n*=1000;
+    if(/^(毫升|ml)$/i.test(wv[2])){
+      const mml=(food.u||'').match(/(\d+(?:\.\d+)?)\s*ml/i);
+      if(mml && n>0){ const qty=Math.round((n/Number(mml[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n}; }
+    }
+    else{
+      const mg=(food.u||'').match(/(\d+(?:\.\d+)?)\s*g/i);
+      if(mg && n>0){ const qty=Math.round((n/Number(mg[1]))*100)/100; const kcal=Math.round(food.k*qty); return {food,qty,kcal,label:food.n}; }
+    }
+    return {food,qty:1,kcal:food.k,label:food.n}; // 单位对不上：按默认 1 份记，不乘
   }
   let qty=parseQty(text);
   const kcal=Math.round(food.k*qty);
