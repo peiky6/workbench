@@ -103,7 +103,11 @@ workbench/
 
 ## 10. 踩坑清单（给协作者）
 1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v111 / 549 项），否则用户看不到更新。
-2. **本地工作副本可能落后于线上**：动手前先 `git fetch` + 比对 `origin/main`，确认基线再改。11-16 曾因本机与远程分叉（内容一致、历史不同）导致 push 被拒，用 `git reset --mixed origin/main` 对齐解决——**绝不强推覆盖**。
+2. **改前必须先拉最新代码（云端改过之后尤其重要）**——本机不是权威副本，云端任务 push 后本地就是旧的。顺序固定 **拉 → 改 → 推**。
+   - 拉取要重试（`git fetch` 本身也会抖）：`for i in 1 2 3 4 5; do git fetch origin && break; sleep 3; done` → `git reset --hard origin/main`。
+   - ⚠️ **`git reset --mixed` 只移动 HEAD，不更新工作区**。本地真落后时（云端有新提交），mixed 之后工作区仍是旧文件、`git status` 会显示若干 `M`。此时若接着改并推送，就等于用旧代码覆盖云端。**11-18 实测**：本地落后 3 个提交（云端 18a/b/c），mixed 后 `index.html` 仍停在 `v2026-11-17a`，与 HEAD 差 169 行、`smoke.cjs` 差 155 行。判定：reset 后立刻 `grep APP_VERSION index.html` 和 `grep CACHE sw.js`，与新 HEAD 不符就再补 `git reset --hard origin/main`（本地确有未提交改动时先 `git stash`）。
+   - 不拉的后果：① 在旧代码上继续改，SW 缓存名可能与云端撞号（同号 → 手机端不刷新缓存）；② `git push` 会被 `non-fast-forward` **拒绝**（安全）；③ **API 脚本会用本地旧文件静默覆盖云端**（脚本现已内置本地/远端 HEAD 比对，不一致直接中止）。
+   - 仅在「内容一致、只是历史不同」的分叉场景（如 11-16 那次）才可用 `git reset --mixed origin/main` 收尾——**绝不 force push**。
 3. **笔记外置已完成**（data-notes.js），别再重复拆 `BUILTIN_NOTES`。
 4. **Supabase 死代码已清理**，保留 `supabase_setup.js` 仅为兼容，不要基于旧文档恢复 Supabase 同步链路。
 5. **token 传递**：本机 SSH 可推；云端沙箱须 HTTPS + 短期 PAT；PAT/口令禁止写进公开仓库、提交历史或主存。
@@ -116,5 +120,6 @@ workbench/
      走 GET ref → POST blob（内容取 `git show HEAD:file`，保住行尾格式）→ POST tree(base_tree) → POST commit(parent=远端HEAD) → PATCH ref，**N 个文件只产生 1 个提交**。
    - **api 端点自身也会抖动**（实测约半数请求 TLS 被掐，报 `socket disconnected before secure TLS connection`）：脚本已内置最多 10 次指数退避重试，看到 `· 第 N 次失败…后重试` 属正常，**别中断、别误判失败就放弃**。
    - 为什么不用 `deploy.cjs`：它走 Contents API 逐文件提交，N 个文件 = N 个 deploy 提交，正是 11-16 分叉的成因。
-   - 推完：远端历史被压缩成 1 个提交，本地仍有多提交。网络恢复后 `git fetch origin && git reset --mixed origin/main` 对齐，**绝不 force push**。
+   - **跑前自检（11-18 新增）**：脚本会比对本地 HEAD 与远端 HEAD，不一致立即中止并打印对齐命令。这是为了防「本地旧文件静默覆盖云端新版本」——**看到中止就先去拉代码，别绕过、别改检查**。
+   - 推完：远端历史被压缩成 1 个提交，本地仍有多提交；此时两边**内容一致、仅历史不同**，`git fetch origin && git reset --hard origin/main` 对齐即可（内容一致，hard 不会丢东西），**绝不 force push**。
    - 脚本与 token 都在 `3-build/private/`（已 gitignore），不要移进公开目录、不要硬编码 token。
