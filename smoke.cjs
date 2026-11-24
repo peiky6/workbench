@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 112;
+  const MIN_SW = 113;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1132,8 +1132,71 @@ if(htmlJs){
   globalThis.__D=D;
 })(); }catch(e){ globalThis.__DERR=e.name+': '+e.message; }
 `;
+  const v2Script = `
+;globalThis.__V2ERR=null;
+;try{ (function(){
+  const V={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript, ctx, {filename:'index.html', timeout:15000});
+    const td=today();
+    // ISO 周号：2026-11-24 属哪一周，格式 YYYY-Www；非法输入返回空
+    V.wId=isoWeekId('2026-11-24');
+    V.wBad=isoWeekId('bad-date');
+    // 菜单设置：3 个写入 settings；少于 3 个不保存；超 12 字截断
+    state=defaultState();
+    nightMenuDraft=['饭①','饭②','饭③']; saveNightMenu();
+    V.menu3=nightMenuList()?nightMenuList().join('|'):null;
+    V.menuTs=state.settings.nightMenuTs>0;
+    nightMenuDraft=['x'.repeat(20),'y'.repeat(20),'z'.repeat(20)]; saveNightMenu();
+    V.menuClip=(nightMenuList()||[]).every(x=>x.length<=12);
+    // 菜单非法值 fallback：非数组按未设置
+    state=defaultState(); state.settings.nightMenu='evil';
+    V.menuBad=nightMenuList();
+    // 每日点选：点②→1，再点②取消→undefined；越界值不崩
+    state=defaultState();
+    setDinnerPlan(1); V.planOn=manaToday().dinnerPlan;
+    setDinnerPlan(1); V.planOff=manaToday().dinnerPlan;
+    manaToday().dinnerPlan=5; V.planBad=nightMenuHtml().indexOf('min')>=0; // 越界不抛异常，渲染正常
+    // 额度：默认 0/1；用掉→used=true + 当天 freeMeal=true + 记日期；本周内撤销→两字段回退
+    state=defaultState();
+    V.useBefore=!!state.settings.freeMealUsed;
+    useFreeMeal();
+    V.useAfter=!!state.settings.freeMealUsed;
+    V.freeDay=manaToday().freeMeal===true;
+    V.freeDate=state.settings.freeMealDate===td;
+    undoFreeMeal();
+    V.undoAfter=!!state.settings.freeMealUsed;
+    V.undoDay=manaToday().freeMeal===undefined;
+    // 跨周重置：把 week 改旧，ensureFreeMealWeek 应重置
+    state=defaultState();
+    state.settings.freeMealWeek='2000-W01'; state.settings.freeMealUsed=true;
+    ensureFreeMealWeek();
+    V.weekReset=!state.settings.freeMealUsed && state.settings.freeMealWeek===isoWeekId(td);
+    // 统计三项：构造近 30 天数据
+    state=defaultState(); const rr=rec('mana');
+    const mk=(d,kcal,free)=>{ rr[d]={meals:{breakfast:[],lunch:[],snack:[],dinner:kcal!=null?[{n:'x',k:kcal}]:[]}}; if(free) rr[d].freeMeal=true; };
+    mk(addDays(td,-1),2200,true); mk(addDays(td,-2),2100,true);   // 2 个放纵日
+    mk(addDays(td,-3),1600,false); mk(addDays(td,-4),1650,false); // 2 个普通日
+    mk(addDays(td,-5),1700,false);
+    const fs=calcFreeMealStats();
+    V.freeAvg=fs.freeAvg; V.freeN=fs.freeN; V.normalAvg=fs.normalAvg; V.normalN=fs.normalN;
+    V.weeks=fs.weeks.length;
+    // 放纵后 3 天：-1 的 D+1~D+3 = 今天/-2/-3；-2 的 = -1/-2/-3 → 去重取有热量的
+    V.afterN=fs.afterN; V.afterAvg=fs.afterAvg;
+    V.statHtml=freeMealStatsHtml();
+    // 空态：全空历史不应崩，显示 —
+    state=defaultState();
+    V.emptyStat=freeMealStatsHtml();
+    // 菜单卡未设置态 + HTML 注入防御
+    V.menuEmpty=nightMenuHtml();
+    state=defaultState();
+    state.settings.nightMenu=['<img src=x onerror=1>','b','c'];
+    V.menuXssSafe=nightMenuHtml().indexOf('&lt;img')>=0 && nightMenuHtml().indexOf('<img src=x')<0;
+  }catch(e){ V.err=e.name+': '+e.message; }
+  globalThis.__V2=V;
+})(); }catch(e){ globalThis.__V2ERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript + v2Script, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1503,6 +1566,54 @@ if(htmlJs){
     if(D.blockHtml && D.blockHtml.includes('防今晚爆食') && D.blockHtml.includes('今晚这顿怎么吃'))
       ok('T22 提示区分组：今晚这顿 / 防今晚爆食·配套2条');
     else bad('T22 提示区分组文案缺失');
+
+    // ===== T23：三选一菜单 + 放纵额度 + 统计（v2026-11-24b） =====
+    if(ctx.__V2ERR) bad('三选一/额度模块校验脚本异常', ctx.__V2ERR);
+    const V=ctx.__V2||{};
+    if(V.err) bad('T23 内部执行异常', V.err);
+    else{
+      if(/^\d{4}-W\d{2}$/.test(V.wId||'')) ok('T23 ISO 周号格式正确：'+V.wId);
+      else bad('T23 ISO 周号格式错误', V.wId);
+      if(V.wBad==='') ok('T23 非法日期的周号返回空（不崩）');
+      else bad('T23 非法日期未返回空', V.wBad);
+      if(V.menu3==='饭①|饭②|饭③' && V.menuTs) ok('T23 菜单 3 项写入 settings 并记时间戳');
+      else bad('T23 菜单保存失败', JSON.stringify({menu:V.menu3,ts:V.menuTs}));
+      if(V.menuClip) ok('T23 菜单单项超 12 字已截断');
+      else bad('T23 菜单单项未截断');
+      if(V.menuBad===null) ok('T23 菜单非法值（非数组）按未设置处理');
+      else bad('T23 菜单非法值未 fallback', V.menuBad);
+      if(V.planOn===1) ok('T23 点选②记录 dinnerPlan=1');
+      else bad('T23 点选未记录', V.planOn);
+      if(V.planOff===undefined) ok('T23 再点②取消 → dinnerPlan 删除');
+      else bad('T23 再点取消未删除', V.planOff);
+      if(V.planBad) ok('T23 越界点选值不崩、渲染正常');
+      else bad('T23 越界点选值导致渲染异常');
+      if(V.useBefore===false && V.useAfter===true && V.freeDay && V.freeDate)
+        ok('T23 用掉额度：used=true + 当天 freeMeal + 记日期');
+      else bad('T23 用掉额度字段不完整', JSON.stringify({before:V.useBefore,after:V.useAfter,day:V.freeDay,date:V.freeDate}));
+      if(V.undoAfter===false && V.undoDay===true)
+        ok('T23 本周内撤销：两字段一起回退（used=false + 删当天标记）');
+      else bad('T23 撤销未一起回退', JSON.stringify({used:V.undoAfter,dayCleared:V.undoDay}));
+      if(V.weekReset) ok('T23 跨周自动重置额度（旧周 → 本周 0/1）');
+      else bad('T23 跨周未重置');
+      if(V.freeAvg===2150 && V.freeN===2) ok('T23 统计：放纵日均 2150（2 天）');
+      else bad('T23 放纵日均错误', JSON.stringify({avg:V.freeAvg,n:V.freeN}));
+      if(V.normalAvg===1650 && V.normalN===3) ok('T23 统计：普通日均 1650（3 天）');
+      else bad('T23 普通日均错误', JSON.stringify({avg:V.normalAvg,n:V.normalN}));
+      if(V.weeks===4) ok('T23 统计：每周使用次数覆盖近 4 周');
+      else bad('T23 周数错误', V.weeks);
+      if(V.afterAvg!=null && V.afterN>0) ok('T23 统计：放纵后 3 天日均有值（'+V.afterAvg+'，'+V.afterN+'天）');
+      else bad('T23 放纵后 3 天统计异常', JSON.stringify({avg:V.afterAvg,n:V.afterN}));
+      if(V.statHtml && V.statHtml.includes('放纵日 vs 普通日热量差') && V.statHtml.includes('放纵后 3 天热量'))
+        ok('T23 统计卡三项标题齐全');
+      else bad('T23 统计卡标题缺失');
+      if(V.emptyStat && V.emptyStat.includes('—')) ok('T23 空态统计卡显示 — 不崩');
+      else bad('T23 空态统计卡异常');
+      if(V.menuEmpty && V.menuEmpty.includes('现在定 3 个')) ok('T23 菜单未设置态显示「现在定 3 个」');
+      else bad('T23 菜单未设置态文案缺失');
+      if(V.menuXssSafe) ok('T23 菜单名 HTML 注入已转义');
+      else bad('T23 菜单名存在 XSS 风险');
+    }
   }
 })();
 
@@ -1695,11 +1806,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-24a\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-24b\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v112') ok('P4 SW 缓存名已随部署递增：v112');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v113') ok('P4 SW 缓存名已随部署递增：v113');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');

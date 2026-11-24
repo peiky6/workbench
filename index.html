@@ -752,7 +752,7 @@ function defaultState(){
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
     outputs:[], outTags:[],
-    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, bodyFat:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, bodyFat:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40, nightMenu:[], nightMenuTs:0, freeMealWeek:'', freeMealUsed:false, freeMealDate:'' }
   };
 }
 let state = load();
@@ -1239,7 +1239,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-24a';
+const APP_VERSION = '2026-11-24b';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4761,6 +4761,88 @@ function setNightNote(v){
   if(v) t.nightNote=v; else delete t.nightNote;
   t.ts=Date.now(); save(); // 不重渲染，保住输入焦点（onchange 离开时触发）
 }
+/* ---- 晚餐正经饭 v2 · 本周三选一 + 放纵额度（v2026-11-24b）----
+   配置存 settings（不同步，单端用），每日标记存 records（跟着 ts 同步）。
+   撤销放宽到「本周内」：两字段一起回退；放纵日记在点「用掉」当天。 */
+let nightMenuEditing=false, nightMenuDraft=['','',''];
+
+function isoWeekId(dateStr){
+  const p=String(dateStr||today()).split('-').map(Number);
+  if(p.length<3||p.some(x=>!Number.isFinite(x))) return '';
+  const dt=new Date(p[0],p[1]-1,p[2]);
+  const dow=(dt.getDay()+6)%7;              // 0=周一
+  dt.setDate(dt.getDate()-dow+3);            // 移到本周四（ISO 周归属日）
+  const iy=dt.getFullYear(), jan4=new Date(iy,0,4);
+  const j4dow=(jan4.getDay()+6)%7, week1Thu=new Date(iy,0,4-j4dow+3);
+  return iy+'-W'+String(Math.round((dt-week1Thu)/604800000)+1).padStart(2,'0');
+}
+function nightMenuList(){
+  const m=state.settings.nightMenu;
+  return (Array.isArray(m)&&m.length===3&&m.every(x=>typeof x==='string'))?m:null;
+}
+function ensureFreeMealWeek(){
+  const s=state.settings, w=isoWeekId(today());
+  if(!s.freeMealWeek||s.freeMealWeek!==w){ s.freeMealWeek=w; s.freeMealUsed=false; s.freeMealDate=''; save(); }
+}
+function menuEdit(on){
+  if(on){ const m=nightMenuList(); nightMenuDraft=m?m.slice():['','','']; }
+  nightMenuEditing=!!on; renderMana();
+}
+function menuDraftInput(i){ nightMenuDraft[i]=String(document.getElementById('nightMenu'+i).value||'').slice(0,12); }
+function saveNightMenu(){
+  const v=nightMenuDraft.map(x=>String(x||'').trim().slice(0,12));
+  if(v.some(x=>!x)){ toast('3 个都写上才保存'); return; }
+  state.settings.nightMenu=v; state.settings.nightMenuTs=Date.now();
+  nightMenuEditing=false; save(); renderMana(); toast('本周菜单已定 🍚');
+}
+function setDinnerPlan(i){
+  const t=manaToday();
+  if(t.dinnerPlan===i) delete t.dinnerPlan; else t.dinnerPlan=i;
+  t.ts=Date.now(); save(); renderMana();
+}
+function nightMenuHtml(){
+  const s=state.settings, menu=nightMenuList(), ts=Number(s.nightMenuTs)||0;
+  const stale=ts>0&&Date.now()-ts>7*86400000, t=manaToday();
+  const box=inner=>`<div style="border:1px dashed #e8b96a;border-radius:10px;padding:9px 10px;margin-bottom:9px;background:#fffaf0">
+    <div style="font-size:13px;font-weight:700;margin-bottom:5px">🍽️ 本周晚餐三选一 <span style="font-size:10px;color:var(--sub);font-weight:400">周日定好，每天点一个</span></div>${inner}</div>`;
+  if(nightMenuEditing){
+    return box(`<div class="mini-row" style="gap:5px">${[0,1,2].map(i=>`<input id="nightMenu${i}" type="text" maxlength="12" placeholder="第${i+1}个" value="${escapeAttr(nightMenuDraft[i]||'')}" oninput="menuDraftInput(${i})" style="width:30%;min-width:74px;font-size:12px" />`).join('')}</div>
+    <div class="mini-row" style="margin-top:6px"><button class="mini accent sm" onclick="saveNightMenu()">保存</button><button class="mini line sm" onclick="menuEdit(false)">取消</button></div>`);
+  }
+  if(!menu){
+    return box(`<p class="hint" style="margin:0 0 6px">还没定 · 周日一次定好本周 3 个，晚上就不用再想吃什么</p><button class="mini accent sm" onclick="menuEdit(true)">现在定 3 个</button>`);
+  }
+  const labels=['①','②','③'];
+  return box(`<div class="mini-row">${menu.map((m,i)=>`<button class="mini ${t.dinnerPlan===i?'accent':'line'} sm" onclick="setDinnerPlan(${i})">${labels[i]} ${escapeHtml(m)}</button>`).join('')}</div>
+    <div class="mini-row" style="margin-top:6px"><button class="mini line sm" onclick="menuEdit(true)">改菜单</button>${stale?'<span style="font-size:10px;color:var(--sub)">· 上周的菜单</span>':''}</div>`);
+}
+function useFreeMeal(){
+  ensureFreeMealWeek();
+  const s=state.settings;
+  if(s.freeMealUsed) return;
+  s.freeMealUsed=true; s.freeMealDate=today();
+  const t=manaToday(); t.freeMeal=true; t.ts=Date.now();
+  save(); renderMana();
+}
+function undoFreeMeal(){
+  const s=state.settings;
+  if(!s.freeMealUsed||!s.freeMealDate) return;
+  const r=rec('mana')[s.freeMealDate];
+  if(r){ delete r.freeMeal; r.ts=Date.now(); }
+  s.freeMealUsed=false; s.freeMealDate='';
+  save(); renderMana();
+}
+function freeMealHtml(){
+  ensureFreeMealWeek();
+  const s=state.settings, used=!!s.freeMealUsed;
+  return `<div style="border:1px dashed #e8b96a;border-radius:10px;padding:9px 10px;margin-bottom:9px;background:#fffaf0">
+    <div style="font-size:13px;font-weight:700;margin-bottom:5px">🎬 本周放纵额度 <span style="font-size:10px;color:var(--sub);font-weight:400">${used?'1 / 1 ✓ 已用':'0 / 1'}</span></div>
+    ${used
+      ? `<button class="mini line sm" onclick="undoFreeMeal()">撤销本次</button><span style="font-size:10px;color:var(--sub);margin-left:6px">本周内可撤 · 下周一重置</span>`
+      : `<button class="mini accent sm" onclick="useFreeMeal()">用掉</button><span style="font-size:10px;color:var(--sub);margin-left:6px">本周一次计划内的放松</span>`}
+  </div>`;
+}
+
 function dinnerBlockHtml(){
   const t=manaToday();
   const st=dinnerState(t);
@@ -4775,6 +4857,8 @@ function dinnerBlockHtml(){
     <div class="rc">· 看剧手边不摆零食袋，换热饮 / 口香糖</div></div>`;
   return `<div class="dcard">
     <div class="ltitle">🍚 晚餐正经饭 <span style="margin-left:auto;font-size:12px;color:var(--sub)">一天只勾一个</span></div>
+    ${nightMenuHtml()}
+    ${freeMealHtml()}
     <div class="mini-row">${opt('na','未填',st===undefined)}${opt('ok','✓ 有正经饭',st===true)}${opt('no','✗ 没做到',st===false)}</div>
     <div class="mini-row" style="margin-top:8px">${DINNER_NIGHT_TYPES.map(chip).join('')}</div>
     ${tips}
@@ -4813,6 +4897,51 @@ function dinnerStatsHtml(){
     <div class="mrow"><span>达标 / 未达标日均热量 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b style="font-size:12px">✓${ok} / ✗${no}</b></div>
     <div class="mrow"><span>最长连续未达标 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b>${s.maxStreak} 天</b></div>
     <p class="hint">分母＝已填天数，没填的日期不计入。历史老记录没有这个字段，一律按「未填」处理。</p>
+  </div>`;
+}
+function calcFreeMealStats(){
+  const recs=rec('mana'), td=today();
+  // ① 每周使用次数：近 4 个自然周（本周往前，按 ISO 周分组）
+  const weeks=[];
+  for(let w=3;w>=0;w--){
+    const end=addDays(td,-w*7);
+    const dow=(new Date(end+'T00:00:00').getDay()+6)%7;
+    const mon=addDays(end,-dow), sun=addDays(mon,6);
+    let n=0;
+    Object.keys(recs).forEach(d=>{ if(d>=mon&&d<=sun&&recs[d]&&recs[d].freeMeal===true) n++; });
+    weeks.push({label:isoWeekId(mon),n});
+  }
+  // 近 30 天放纵 / 普通日
+  const freeDays=[], normalDays=[];
+  for(let i=29;i>=0;i--){
+    const d=addDays(td,-i), r=recs[d];
+    if(!r) continue;
+    if(r.freeMeal===true) freeDays.push(d); else normalDays.push(d);
+  }
+  const avg=days=>{ const ks=days.map(kcalIntakeOf).filter(k=>k!=null); return ks.length? Math.round(ks.reduce((a,b)=>a+b,0)/ks.length):null; };
+  // ③ 放纵后 3 天：每个放纵日 D+1~D+3，去重后取日均
+  const afterSet={};
+  freeDays.forEach(d=>{ for(let k=1;k<=3;k++) afterSet[addDays(d,k)]=1; });
+  const afterDays=Object.keys(afterSet).filter(d=>d<=td).sort();
+  return {
+    weeks, freeAvg:avg(freeDays), freeN:freeDays.length,
+    normalAvg:avg(normalDays), normalN:normalDays.length,
+    afterAvg:avg(afterDays), afterN:afterDays.length
+  };
+}
+function freeMealStatsHtml(){
+  const s=calcFreeMealStats();
+  const wstr=s.weeks.slice().reverse().map(w=>w.n).join(' / ');
+  const diff=(a,b)=> (a==null||b==null)?'—':((a-b>=0?'+':'')+(a-b));
+  const freeV=s.freeAvg==null?'—':s.freeAvg+'('+s.freeN+'天)';
+  const normV=s.normalAvg==null?'—':s.normalAvg+'('+s.normalN+'天)';
+  const afterV=s.afterAvg==null?'—':s.afterAvg+'('+s.afterN+'天)';
+  return `<div class="dcard">
+    <div class="ltitle">🎬 放纵额度 · 统计</div>
+    <div class="mrow"><span>每周使用次数 <span style="font-size:10px;color:var(--sub)">近4周 · 应≤1</span></span><b style="font-size:12px">${wstr}</b></div>
+    <div class="mrow"><span>放纵日 vs 普通日热量差 <span style="font-size:10px;color:var(--sub)">近30天</span></span><b style="font-size:12px">${freeV} / ${normV} · 差 ${diff(s.freeAvg,s.normalAvg)}</b></div>
+    <div class="mrow"><span>放纵后 3 天热量 <span style="font-size:10px;color:var(--sub)">D+1~D+3</span></span><b style="font-size:12px">${afterV} / ${normV} · 差 ${diff(s.afterAvg,s.normalAvg)}</b></div>
+    <p class="hint">放纵日记在「用掉」当天；无热量记录的日期跳过、不按 0 算。历史记录没有这个字段，不计入。</p>
   </div>`;
 }
 function renderMana(){
@@ -4918,6 +5047,7 @@ function renderMana(){
     ${trendHtml}
     ${weightEnergyCardHtml()}
     ${dinnerStatsHtml()}
+    ${freeMealStatsHtml()}
     ${kcalWeeksHtml()}
     <div class="dcard">
       <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
