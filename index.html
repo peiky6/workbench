@@ -1239,7 +1239,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-18c';
+const APP_VERSION = '2026-11-24a';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -4721,6 +4721,100 @@ function setManaTrend(mode){
   if(bw) bw.className=isBf?'mini line':'mini accent';
   if(bb) bb.className=isBf?'mini accent':'mini line';
 }
+/* ---- 晚餐正经饭 · 暴食干预（v2026-11-24a）----
+   归因：5 个高热量日里 4 个没吃正经晚饭。打卡项只有一个动作——晚餐有没有一顿正经的。
+   三态：dinnerOk 缺省=未填（不计入统计分母），true=达标，false=未达标；
+         取消勾选回未填（delete），绝不落到 false；老记录无字段一律按未填。
+   夜型：normal 默认；alone/travel/emotion 各配一句「今晚这顿」提示。
+   常驻两条标为「防今晚爆食·配套 2 条」，与夜型提示分组，避免串味。 */
+const DINNER_NIGHT_TYPES=['normal','alone','travel','emotion'];
+const DINNER_NIGHT_LABEL={normal:'日常',alone:'独处',travel:'赶路',emotion:'情绪'};
+const DINNER_NIGHT_TIP={
+  alone:'外卖点一份定食或面 + 一份蛋白',
+  travel:'到站买关东煮 / 饭团 + 茶叶蛋',
+  emotion:'赴约前先吃一份蛋白打底'
+};
+function dinnerState(t){
+  if(!t || !('dinnerOk' in t)) return undefined;
+  return t.dinnerOk===true ? true : (t.dinnerOk===false ? false : undefined);
+}
+function nightTypeOf(t){
+  const v=t&&t.nightType;
+  return DINNER_NIGHT_TYPES.indexOf(v)>=0 ? v : 'normal';
+}
+function setDinnerOk(mode){
+  const t=manaToday();
+  const target=(mode==='ok')?true:((mode==='no')?false:undefined);
+  // 点已选中的项 = 取消勾选，回未填；false 只能由明确点 ✗ 产生
+  if(target===undefined || dinnerState(t)===target) delete t.dinnerOk;
+  else t.dinnerOk=target;
+  t.ts=Date.now(); save(); renderMana();
+}
+function setNightType(v){
+  const t=manaToday();
+  if(DINNER_NIGHT_TYPES.indexOf(v)<0) v='normal';
+  t.nightType=v; t.ts=Date.now(); save(); renderMana();
+}
+function setNightNote(v){
+  const t=manaToday();
+  v=String(v||'').slice(0,50);
+  if(v) t.nightNote=v; else delete t.nightNote;
+  t.ts=Date.now(); save(); // 不重渲染，保住输入焦点（onchange 离开时触发）
+}
+function dinnerBlockHtml(){
+  const t=manaToday();
+  const st=dinnerState(t);
+  const nt=nightTypeOf(t);
+  const opt=(mode,label,on)=>`<button class="mini ${on?'accent':'line'} sm" onclick="setDinnerOk('${mode}')">${label}</button>`;
+  const chip=k=>`<button class="mini ${nt===k?'accent':'line'} sm" onclick="setNightType('${k}')">${DINNER_NIGHT_LABEL[k]}</button>`;
+  const nightTip=DINNER_NIGHT_TIP[nt]
+    ? `<div class="rc"><b>今晚这顿怎么吃</b> · ${DINNER_NIGHT_TIP[nt]}</div>` : '';
+  const tips=`<div class="plan-ref">${nightTip}
+    <div class="rc"><b>防今晚爆食 · 配套 2 条</b></div>
+    <div class="rc">· 午餐吃到 600–700（白天吃够，夜里不找补）</div>
+    <div class="rc">· 看剧手边不摆零食袋，换热饮 / 口香糖</div></div>`;
+  return `<div class="dcard">
+    <div class="ltitle">🍚 晚餐正经饭 <span style="margin-left:auto;font-size:12px;color:var(--sub)">一天只勾一个</span></div>
+    <div class="mini-row">${opt('na','未填',st===undefined)}${opt('ok','✓ 有正经饭',st===true)}${opt('no','✗ 没做到',st===false)}</div>
+    <div class="mini-row" style="margin-top:8px">${DINNER_NIGHT_TYPES.map(chip).join('')}</div>
+    ${tips}
+    <div class="inline"><input id="nightNote" type="text" maxlength="50" placeholder="今天为什么没做到？（选填，≤50 字）" value="${escapeAttr(t.nightNote||'')}" onchange="setNightNote(this.value)" /></div>
+  </div>`;
+}
+function calcDinnerStats(){
+  const recs=rec('mana'), td=today();
+  const dow=(new Date(td+'T00:00:00').getDay()+6)%7; // 0=周一
+  const mon=addDays(td,-dow);
+  let weekFilled=0, weekOk=0, streak=0, maxStreak=0;
+  const okDays=[], noDays=[];
+  for(let i=29;i>=0;i--){
+    const d=addDays(td,-i), r=recs[d];
+    const v=dinnerState(r);
+    if(d>=mon && v!==undefined){ weekFilled++; if(v===true) weekOk++; }
+    if(v===true) okDays.push(d);
+    else if(v===false) noDays.push(d);
+    if(v===false){ streak++; if(streak>maxStreak) maxStreak=streak; }
+    else streak=0;
+  }
+  const avg=days=>{ const ks=days.map(kcalIntakeOf).filter(k=>k!=null); return ks.length? Math.round(ks.reduce((a,b)=>a+b,0)/ks.length):null; };
+  return { weekFilled, weekOk, weekRate: weekFilled? Math.round(weekOk/weekFilled*100):null,
+    okN:okDays.length, noN:noDays.length, okKcal:avg(okDays), noKcal:avg(noDays), maxStreak };
+}
+function dinnerStatsHtml(){
+  const s=calcDinnerStats();
+  const none=s.weekFilled===0 && s.okN===0 && s.noN===0;
+  if(none) return `<div class="dcard"><div class="ltitle">🍚 晚餐正经饭 · 统计</div><p class="hint">还没有记录，先勾一天试试 🌱</p></div>`;
+  const rate=s.weekRate==null? '—' : (s.weekOk+'/'+s.weekFilled+' · '+s.weekRate+'%');
+  const ok=s.okKcal==null? '—' : (s.okKcal+'('+s.okN+'天)');
+  const no=s.noKcal==null? '—' : (s.noKcal+'('+s.noN+'天)');
+  return `<div class="dcard">
+    <div class="ltitle">🍚 晚餐正经饭 · 统计</div>
+    <div class="mrow"><span>本周达标率 <span style="font-size:10px;color:var(--sub)">本周</span></span><b>${rate}</b></div>
+    <div class="mrow"><span>达标 / 未达标日均热量 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b style="font-size:12px">✓${ok} / ✗${no}</b></div>
+    <div class="mrow"><span>最长连续未达标 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b>${s.maxStreak} 天</b></div>
+    <p class="hint">分母＝已填天数，没填的日期不计入。历史老记录没有这个字段，一律按「未填」处理。</p>
+  </div>`;
+}
 function renderMana(){
   const t=manaToday();
 
@@ -4791,6 +4885,7 @@ function renderMana(){
       <p class="hint" style="margin:4px 2px 8px">🍽️ 按今日饮食指南走：训练日 4 餐（含 16:30 加餐），休息日 3 餐不加餐；周末不训练为「自由吃」，家常菜正常吃、不套指南。点「今日不训练」会自动切换方案。</p>
       <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
     </div>
+    ${dinnerBlockHtml()}
     ${dietGuideHtml()}
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
@@ -4822,6 +4917,7 @@ function renderMana(){
     </div>
     ${trendHtml}
     ${weightEnergyCardHtml()}
+    ${dinnerStatsHtml()}
     ${kcalWeeksHtml()}
     <div class="dcard">
       <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>

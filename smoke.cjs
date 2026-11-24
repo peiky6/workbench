@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 111;
+  const MIN_SW = 112;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1088,8 +1088,52 @@ if(htmlJs){
   globalThis.__M=M;
 })(); }catch(e){ globalThis.__MERR=e.name+': '+e.message; }
 `;
+  // ===== 晚餐正经饭模块行为级（v2026-11-24a）：三态 / 取消勾选 / 晚型 fallback / 备注裁剪 / 统计 =====
+  const dinnerScript = `
+;globalThis.__DERR=null;
+;try{ (function(){
+  const D={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript, ctx, {filename:'index.html', timeout:15000});
+    const td=today();
+    // 三态切换：点✓→达标，再点✓取消→未填；点✗→未达标，再点✗取消→未填
+    state=defaultState();
+    D.blank=dinnerState(manaToday());
+    setDinnerOk('ok');  D.afterOk=dinnerState(manaToday());
+    setDinnerOk('ok');  D.afterCancelOk=dinnerState(manaToday());
+    setDinnerOk('no');  D.afterNo=dinnerState(manaToday());
+    setDinnerOk('no');  D.afterCancelNo=dinnerState(manaToday());
+    D.ts=manaToday().ts;
+    // 晚型四档 + 非法 fallback
+    D.ntTypes=DINNER_NIGHT_TYPES.join(',');
+    const tt=manaToday(); tt.nightType='__evil__'; D.ntBad=nightTypeOf(tt);
+    // 备注裁剪到 50 字
+    setNightNote('x'.repeat(60)); D.noteLen=manaToday().nightNote.length;
+    // 近 30 天统计：达标 2 天(1000/1400) / 未达标 1 天(2000) / 未填 1 天(3000)
+    state=defaultState(); const r=rec('mana');
+    const mk=(d,v,k)=>{ r[d]={meals:{breakfast:[],lunch:[],snack:[],dinner:k!=null?[{n:'x',k}]:[]}}; if(v!==undefined) r[d].dinnerOk=v; };
+    mk(addDays(td,-1),true,1000); mk(addDays(td,-2),true,1400);
+    mk(addDays(td,-3),false,2000); mk(addDays(td,-4),undefined,3000);
+    const st=calcDinnerStats();
+    D.okN=st.okN; D.noN=st.noN; D.okKcal=st.okKcal; D.noKcal=st.noKcal;
+    // 本周分母只算已填：仅今天填✓ → 1/1=100%
+    state=defaultState(); rec('mana')[td]={dinnerOk:true};
+    const w=calcDinnerStats(); D.weekFilled=w.weekFilled; D.weekRate=w.weekRate;
+    // 最长连续未达标：3 天
+    state=defaultState(); const r2=rec('mana');
+    [1,2,3].forEach(i=>{ r2[addDays(td,-i)]={dinnerOk:false}; });
+    D.streak=calcDinnerStats().maxStreak;
+    // 空态与打卡区 HTML
+    state=defaultState();
+    D.emptyHtml=dinnerStatsHtml();
+    // 设成独处晚型，验证「今晚这顿」+「防今晚爆食」两组都出现
+    manaToday().nightType='alone';
+    D.blockHtml=dinnerBlockHtml();
+  }catch(e){ D.err=e.name+': '+e.message; }
+  globalThis.__D=D;
+})(); }catch(e){ globalThis.__DERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1422,6 +1466,44 @@ if(htmlJs){
       ok('T21 迁移非法基准：腰果0g 不产生 null（保留原样待重录）');
     else bad('T21 迁移非法基准产生了 null', JSON.stringify(M.badMigrate));
   }
+
+  // ===== T22：晚餐正经饭模块（v2026-11-24a） =====
+  if(ctx.__DERR) bad('晚餐正经饭模块校验脚本异常', ctx.__DERR);
+  const D=ctx.__D||{};
+  if(D.err) bad('晚餐正经饭模块执行异常', D.err);
+  else{
+    if(D.blank===undefined) ok('T22 三态：无字段记录 = 未填（不等于 false）');
+    else bad('T22 三态判定错误（无字段应为未填）', JSON.stringify(D.blank));
+    if(D.afterOk===true) ok('T22 点✓ → 达标(true)');
+    else bad('T22 点✓未记为达标', JSON.stringify(D.afterOk));
+    if(D.afterCancelOk===undefined) ok('T22 再点✓取消 → 回未填（不落到 false）');
+    else bad('T22 取消✓未回未填', JSON.stringify(D.afterCancelOk));
+    if(D.afterNo===false) ok('T22 点✗ → 未达标(false)');
+    else bad('T22 点✗未记为未达标', JSON.stringify(D.afterNo));
+    if(D.afterCancelNo===undefined) ok('T22 再点✗取消 → 回未填');
+    else bad('T22 取消✗未回未填', JSON.stringify(D.afterCancelNo));
+    if(typeof D.ts==='number' && D.ts>0) ok('T22 勾选后刷新 ts（供 last-write-wins 同步删除）');
+    else bad('T22 勾选后未刷新 ts', JSON.stringify(D.ts));
+    if(D.ntTypes==='normal,alone,travel,emotion') ok('T22 晚型四档齐全：日常/独处/赶路/情绪');
+    else bad('T22 晚型档位异常', D.ntTypes);
+    if(D.ntBad==='normal') ok('T22 非法晚型 fallback 到 normal');
+    else bad('T22 非法晚型未 fallback', D.ntBad);
+    if(D.noteLen===50) ok('T22 备注裁剪到 50 字');
+    else bad('T22 备注未裁剪', JSON.stringify(D.noteLen));
+    if(D.okN===2 && D.noN===1) ok('T22 统计只计已填：2 达标 + 1 未达标，未填的不计');
+    else bad('T22 统计已填天数错误', JSON.stringify({okN:D.okN,noN:D.noN}));
+    if(D.okKcal===1200 && D.noKcal===2000) ok('T22 交叉对比：达标日均 1200 / 未达标日均 2000');
+    else bad('T22 交叉对比热量错误', JSON.stringify({ok:D.okKcal,no:D.noKcal}));
+    if(D.weekFilled===1 && D.weekRate===100) ok('T22 本周达标率分母=已填天数（1/1），非自然天');
+    else bad('T22 本周达标率分母错误', JSON.stringify({filled:D.weekFilled,rate:D.weekRate}));
+    if(D.streak===3) ok('T22 最长连续未达标 = 3 天');
+    else bad('T22 最长连续未达标计算错误', JSON.stringify(D.streak));
+    if(D.emptyHtml && D.emptyHtml.includes('还没有记录')) ok('T22 统计空态文案正确');
+    else bad('T22 统计空态文案缺失');
+    if(D.blockHtml && D.blockHtml.includes('防今晚爆食') && D.blockHtml.includes('今晚这顿怎么吃'))
+      ok('T22 提示区分组：今晚这顿 / 防今晚爆食·配套2条');
+    else bad('T22 提示区分组文案缺失');
+  }
 })();
 
 // ===== P1：CSP / 公共代理 / 错误边界 / bump 清单 =====
@@ -1613,11 +1695,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-18c\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-24a\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v111') ok('P4 SW 缓存名已随部署递增：v111');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v112') ok('P4 SW 缓存名已随部署递增：v112');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');
