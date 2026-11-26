@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 112;
+  const MIN_SW = 116;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1074,13 +1074,6 @@ if(htmlJs){
     state.customExercises=[{n:'椭圆机42分钟',k:250,u:''}];
     M.dirtyEx=matchExercise('椭圆机42分钟');                // 带空格脏名也要 250
     M.dirtyExSp=matchExercise('椭圆机 42分钟');
-    // T22：运动时长默认后置 + 备注标记（v2026-11-18d）
-    state.customExercises=[{n:'热身',k:25,u:''}];
-    M.customNoMin=matchExercise('热身');                     // 按次固定：min=0、无 estMin
-    M.customNoMinKc=matchExercise('热身 25kcal');
-    state.customExercises=[];
-    M.builtinNoMin=matchExercise('跑步');                    // 内置无时长：min=30、estMin=true
-    M.builtinMin=matchExercise('跑步 40分钟');               // 内置显式时长：min=40、无 estMin
     // T21：按克/毫升换算展示实际数量（腰果50g → shownAmt=50g，不再 ×0.5）
     state.customFoods=[{n:'腰果',k:595,u:'100g'}];
     M.shown=matchFood('腰果50g'); M.shownMl=matchFood('牛奶300ml');
@@ -1091,12 +1084,177 @@ if(htmlJs){
     // T21：迁移非法基准（腰果0g）不得产生 null
     const badS={customFoods:[{n:'腰果0g',k:250,u:''}]}; migrateCustomEntries(badS);
     M.badMigrate=badS.customFoods[0];
+    // T26：运动默认时长后置与估算备注（v18d 重放）——按次固定不补 30、内置补 30 打 estMin、真填时长无标记
+    state.customExercises=[{n:'热身',k:25,u:''}];
+    M.ePer=matchExercise('热身'); M.ePerKc=matchExercise('热身 25kcal');
+    state.customExercises=[];
+    M.eBuiltin=matchExercise('跑步'); M.eBuiltinMin=matchExercise('跑步 40分钟');
+    state.customExercises=[{n:'椭圆机',k:5.95,u:'分钟'}];
+    M.ePerMin=matchExercise('椭圆机');
   }catch(e){ M.err=e.name+': '+e.message; }
   globalThis.__M=M;
 })(); }catch(e){ globalThis.__MERR=e.name+': '+e.message; }
 `;
+  // ===== 晚餐正经饭模块行为级（v2026-11-24a）：三态 / 取消勾选 / 晚型 fallback / 备注裁剪 / 统计 =====
+  const dinnerScript = `
+;globalThis.__DERR=null;
+;try{ (function(){
+  const D={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript, ctx, {filename:'index.html', timeout:15000});
+    const td=today();
+    // 三态切换：点✓→达标，再点✓取消→未填；点✗→未达标，再点✗取消→未填
+    state=defaultState();
+    D.blank=dinnerState(manaToday());
+    setDinnerOk('ok');  D.afterOk=dinnerState(manaToday());
+    setDinnerOk('ok');  D.afterCancelOk=dinnerState(manaToday());
+    setDinnerOk('no');  D.afterNo=dinnerState(manaToday());
+    setDinnerOk('no');  D.afterCancelNo=dinnerState(manaToday());
+    D.ts=manaToday().ts;
+    // 晚型四档 + 非法 fallback
+    D.ntTypes=DINNER_NIGHT_TYPES.join(',');
+    const tt=manaToday(); tt.nightType='__evil__'; D.ntBad=nightTypeOf(tt);
+    // 备注裁剪到 50 字
+    setNightNote('x'.repeat(60)); D.noteLen=manaToday().nightNote.length;
+    // 近 30 天统计：达标 2 天(1000/1400) / 未达标 1 天(2000) / 未填 1 天(3000)
+    state=defaultState(); const r=rec('mana');
+    const mk=(d,v,k)=>{ r[d]={meals:{breakfast:[],lunch:[],snack:[],dinner:k!=null?[{n:'x',k}]:[]}}; if(v!==undefined) r[d].dinnerOk=v; };
+    mk(addDays(td,-1),true,1000); mk(addDays(td,-2),true,1400);
+    mk(addDays(td,-3),false,2000); mk(addDays(td,-4),undefined,3000);
+    const st=calcDinnerStats();
+    D.okN=st.okN; D.noN=st.noN; D.okKcal=st.okKcal; D.noKcal=st.noKcal;
+    // 本周分母只算已填：仅今天填✓ → 1/1=100%
+    state=defaultState(); rec('mana')[td]={dinnerOk:true};
+    const w=calcDinnerStats(); D.weekFilled=w.weekFilled; D.weekRate=w.weekRate;
+    // 最长连续未达标：3 天
+    state=defaultState(); const r2=rec('mana');
+    [1,2,3].forEach(i=>{ r2[addDays(td,-i)]={dinnerOk:false}; });
+    D.streak=calcDinnerStats().maxStreak;
+    // 空态与打卡区 HTML
+    state=defaultState();
+    D.emptyHtml=dinnerStatsHtml();
+    // 设成独处晚型，验证「今晚这顿」+「防今晚爆食」两组都出现
+    manaToday().nightType='alone';
+    D.blockHtml=dinnerBlockHtml();
+  }catch(e){ D.err=e.name+': '+e.message; }
+  globalThis.__D=D;
+})(); }catch(e){ globalThis.__DERR=e.name+': '+e.message; }
+`;
+  const v2Script = `
+;globalThis.__V2ERR=null;
+;try{ (function(){
+  const V={};
+  try{
+    const td=today();
+    // ISO 周号：2026-11-24 属哪一周，格式 YYYY-Www；非法输入返回空
+    V.wId=isoWeekId('2026-11-24');
+    V.wBad=isoWeekId('bad-date');
+    // 菜单设置：3 个写入 settings；少于 3 个不保存；超 12 字截断
+    state=defaultState();
+    nightMenuDraft=['饭①','饭②','饭③']; saveNightMenu();
+    V.menu3=nightMenuList()?nightMenuList().join('|'):null;
+    V.menuTs=state.settings.nightMenuTs>0;
+    nightMenuDraft=['x'.repeat(20),'y'.repeat(20),'z'.repeat(20)]; saveNightMenu();
+    V.menuClip=(nightMenuList()||[]).every(x=>x.length<=12);
+    // 菜单非法值 fallback：非数组按未设置
+    state=defaultState(); state.settings.nightMenu='evil';
+    V.menuBad=nightMenuList();
+    // 每日点选：点②→1，再点②取消→undefined；越界值不崩
+    state=defaultState();
+    setDinnerPlan(1); V.planOn=manaToday().dinnerPlan;
+    setDinnerPlan(1); V.planOff=manaToday().dinnerPlan;
+    manaToday().dinnerPlan=5; V.planBad=nightMenuHtml().indexOf('min')>=0; // 越界不抛异常，渲染正常
+    // 额度：默认 0/1；用掉→used=true + 当天 freeMeal=true + 记日期；本周内撤销→两字段回退
+    state=defaultState();
+    V.useBefore=!!state.settings.freeMealUsed;
+    useFreeMeal();
+    V.useAfter=!!state.settings.freeMealUsed;
+    V.freeDay=manaToday().freeMeal===true;
+    V.freeDate=state.settings.freeMealDate===td;
+    undoFreeMeal();
+    V.undoAfter=!!state.settings.freeMealUsed;
+    V.undoDay=manaToday().freeMeal===undefined;
+    // 跨周重置：把 week 改旧，ensureFreeMealWeek 应重置
+    state=defaultState();
+    state.settings.freeMealWeek='2000-W01'; state.settings.freeMealUsed=true;
+    ensureFreeMealWeek();
+    V.weekReset=!state.settings.freeMealUsed && state.settings.freeMealWeek===isoWeekId(td);
+    // 统计三项：构造近 30 天数据
+    state=defaultState(); const rr=rec('mana');
+    const mk=(d,kcal,free)=>{ rr[d]={meals:{breakfast:[],lunch:[],snack:[],dinner:kcal!=null?[{n:'x',k:kcal}]:[]}}; if(free) rr[d].freeMeal=true; };
+    mk(addDays(td,-1),2200,true); mk(addDays(td,-2),2100,true);   // 2 个放纵日
+    mk(addDays(td,-3),1600,false); mk(addDays(td,-4),1650,false); // 2 个普通日
+    mk(addDays(td,-5),1700,false);
+    const fs=calcFreeMealStats();
+    V.freeAvg=fs.freeAvg; V.freeN=fs.freeN; V.normalAvg=fs.normalAvg; V.normalN=fs.normalN;
+    V.weeks=fs.weeks.length;
+    // 放纵后 3 天：-1 的 D+1~D+3 = 今天/-2/-3；-2 的 = -1/-2/-3 → 去重取有热量的
+    V.afterN=fs.afterN; V.afterAvg=fs.afterAvg;
+    V.statHtml=freeMealStatsHtml();
+    // 空态：全空历史不应崩，显示 —
+    state=defaultState();
+    V.emptyStat=freeMealStatsHtml();
+    // 菜单卡未设置态 + HTML 注入防御
+    V.menuEmpty=nightMenuHtml();
+    state=defaultState();
+    state.settings.nightMenu=['<img src=x onerror=1>','b','c'];
+    V.menuXssSafe=nightMenuHtml().indexOf('&lt;img')>=0 && nightMenuHtml().indexOf('<img src=x')<0;
+  }catch(e){ V.err=e.name+': '+e.message; }
+  globalThis.__V2=V;
+})(); }catch(e){ globalThis.__V2ERR=e.name+': '+e.message; }
+`;
+  const trainScript = `
+;globalThis.__TRERR=null;
+;try{ (function(){
+  const R={};
+  try{
+    // 7 天计划标题与关键动作
+    R.titles=[1,2,3,4,5,6,0].map(d=>TRAIN_PLAN[d].title).join('|');
+    R.mon=TRAIN_PLAN[1].items.map(x=>x.n).join('|');
+    R.tue=TRAIN_PLAN[2].items.map(x=>x.n).join('|');
+    R.thu=TRAIN_PLAN[4].items.map(x=>x.n).join('|');
+    R.fri=TRAIN_PLAN[5].items.map(x=>x.n).join('|');
+    R.sat=TRAIN_PLAN[6].items.map(x=>x.n).join('|');
+    R.wed=TRAIN_PLAN[3].items.map(x=>x.n).join('|');
+    // 每天必做：腹压 9 + 盆底 5（周六是四选一含保底，单独看）
+    R.dailyCore=[1,2,3,4,5,0].every(d=>{
+      const s=TRAIN_PLAN[d].items.map(x=>x.n).join('|');
+      return s.includes('腹压友好版 9') && s.includes('盆底肌 5');
+    });
+    // 站立拉伸：除周六外每天都有
+    R.dailyStretch=[1,2,3,4,5,0].every(d=>TRAIN_PLAN[d].items.some(x=>x.n==='站立拉伸 10 分钟'));
+    // met/min 合法：无 undefined / NaN
+    R.metOk=[1,2,3,4,5,6,0].every(d=>TRAIN_PLAN[d].items.every(x=>typeof x.met==='number'&&x.met>0&&Number.isInteger(x.min)&&x.min>0));
+    // 规则三组数量
+    R.ruleCounts=TRAIN_RULES.general.length+'/'+TRAIN_RULES.daily.length+'/'+TRAIN_RULES.weekly.length;
+    // 折叠区 HTML（默认收起，三组标题齐全）
+    R.ruleHtml=trainRulesHtml();
+    // 完整训练计划卡渲染（含打卡按钮 + 折叠区）
+    R.planHtml=trainPlanHtml();
+    // 打卡函数仍可调用（不改变行为契约）
+    state=defaultState();
+    toggleTrainDone(); R.done=rec('mana')[today()].trainDone===true;
+    toggleTrainDone(); R.undo=rec('mana')[today()].trainDone===false;
+    toggleTrainSkip(); R.skip=rec('mana')[today()].trainSkip===true;
+    // T25：运动库新增 5 个单动作
+    const want={'坐姿弯举机':3.5,'髋外展机':3.5,'弹力带肩绕环':3,'招财猫':3,'站立拉伸':2.5};
+    R.newMet=Object.keys(want).map(k=>{
+      const hit=EXERCISES.filter(e=>e.n===k);
+      return hit.length===1 && hit[0].met===want[k] ? k+'✓' : k+'✗'+(hit.length?'('+hit[0].met+')':'(缺)');
+    }).join('|');
+    // 不重名：库内每个新名字只出现一次
+    R.noDup=Object.keys(want).every(k=>EXERCISES.filter(e=>e.n===k).length===1);
+    // 模糊匹配命中（与 suggestExercise 同逻辑：name.includes(q)）
+    R.fuzzy=['坐姿弯','髋外展','招财猫','弹力带','站立拉伸'].every(q=>EXERCISES.some(e=>e.n.includes(q)));
+    // exKcal 用新 met 能算出正整数（体重取默认，时间 10 分钟）
+    R.kcalOk=Object.keys(want).every(k=>{ const e=EXERCISES.find(x=>x.n===k); const v=Math.round((e.met*effectiveWeight()*10)/60); return Number.isInteger(v)&&v>0; });
+    // 未误补「动态热身」组合串
+    R.noCombo=!EXERCISES.some(e=>e.n==='动态热身');
+  }catch(e){ R.err=e.name+': '+e.message; }
+  globalThis.__TR=R;
+})(); }catch(e){ globalThis.__TRERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript + v2Script + trainScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1428,20 +1586,165 @@ if(htmlJs){
     if(M.badMigrate && M.badMigrate.k!=null && Number.isFinite(M.badMigrate.k))
       ok('T21 迁移非法基准：腰果0g 不产生 null（保留原样待重录）');
     else bad('T21 迁移非法基准产生了 null', JSON.stringify(M.badMigrate));
+    // T26：运动默认时长后置与估算备注（v18d 重放）
+    if(M.ePer && M.ePer.min===0 && M.ePer.kcal===25 && !M.ePer.estMin)
+      ok('T26 按次固定自定义「热身」→ min=0 / 25kcal，不假补 30 分钟');
+    else bad('T26 按次固定运动仍被补时长', JSON.stringify(M.ePer));
+    if(M.ePerKc && M.ePerKc.min===0 && M.ePerKc.kcal===25 && !M.ePerKc.estMin)
+      ok('T26 显式热量「热身 25kcal」→ min=0 / 25kcal，无估算标记');
+    else bad('T26 显式热量运动时长异常', JSON.stringify(M.ePerKc));
+    if(M.eBuiltin && M.eBuiltin.min===30 && M.eBuiltin.estMin===true)
+      ok('T26 内置「跑步」无时长 → 默认 30 分钟 + estMin 备注标记');
+    else bad('T26 内置运动默认时长/标记错误', JSON.stringify(M.eBuiltin));
+    if(M.eBuiltinMin && M.eBuiltinMin.min===40 && !M.eBuiltinMin.estMin)
+      ok('T26 真填时长「跑步 40分钟」→ 40 分钟、无估算标记');
+    else bad('T26 真填时长被误标估算', JSON.stringify(M.eBuiltinMin));
+    if(M.ePerMin && M.ePerMin.min===30 && M.ePerMin.estMin===true && M.ePerMin.perMin===true)
+      ok('T26 自定义按分钟「椭圆机」无时长 → 默认 30 + estMin + perMin');
+    else bad('T26 自定义按分钟默认时长错误', JSON.stringify(M.ePerMin));
+  }
 
-    // ===== T22：v2026-11-18d 运动时长默认后置 + 备注标记 =====
-    if(M.customNoMin && M.customNoMin.kcal===25 && M.customNoMin.min===0 && !M.customNoMin.estMin)
-      ok('T22 按次固定自定义「热身」= 25 kcal、min=0、无默认时长备注（不再假补 30 分钟）');
-    else bad('T22 按次固定运动时长处理错误', JSON.stringify(M.customNoMin));
-    if(M.customNoMinKc && M.customNoMinKc.kcal===25 && M.customNoMinKc.min===0 && !M.customNoMinKc.estMin)
-      ok('T22 显式热量「热身 25kcal」= 25 kcal、min=0');
-    else bad('T22 显式热量运动时长处理错误', JSON.stringify(M.customNoMinKc));
-    if(M.builtinNoMin && M.builtinNoMin.min===30 && M.builtinNoMin.estMin && M.builtinNoMin.kcal>0)
-      ok('T22 内置「跑步」无时长 → 默认 30 分钟 + estMin 备注标记');
-    else bad('T22 内置运动默认时长/备注标记错误', JSON.stringify(M.builtinNoMin));
-    if(M.builtinMin && M.builtinMin.min===40 && !M.builtinMin.estMin && M.builtinMin.kcal>0)
-      ok('T22 内置「跑步 40分钟」→ 真填时长 40、无备注标记');
-    else bad('T22 真填时长运动被误标', JSON.stringify(M.builtinMin));
+  // ===== T22：晚餐正经饭模块（v2026-11-24a） =====
+  if(ctx.__DERR) bad('晚餐正经饭模块校验脚本异常', ctx.__DERR);
+  const D=ctx.__D||{};
+  if(D.err) bad('晚餐正经饭模块执行异常', D.err);
+  else{
+    if(D.blank===undefined) ok('T22 三态：无字段记录 = 未填（不等于 false）');
+    else bad('T22 三态判定错误（无字段应为未填）', JSON.stringify(D.blank));
+    if(D.afterOk===true) ok('T22 点✓ → 达标(true)');
+    else bad('T22 点✓未记为达标', JSON.stringify(D.afterOk));
+    if(D.afterCancelOk===undefined) ok('T22 再点✓取消 → 回未填（不落到 false）');
+    else bad('T22 取消✓未回未填', JSON.stringify(D.afterCancelOk));
+    if(D.afterNo===false) ok('T22 点✗ → 未达标(false)');
+    else bad('T22 点✗未记为未达标', JSON.stringify(D.afterNo));
+    if(D.afterCancelNo===undefined) ok('T22 再点✗取消 → 回未填');
+    else bad('T22 取消✗未回未填', JSON.stringify(D.afterCancelNo));
+    if(typeof D.ts==='number' && D.ts>0) ok('T22 勾选后刷新 ts（供 last-write-wins 同步删除）');
+    else bad('T22 勾选后未刷新 ts', JSON.stringify(D.ts));
+    if(D.ntTypes==='normal,alone,travel,emotion') ok('T22 晚型四档齐全：日常/独处/赶路/情绪');
+    else bad('T22 晚型档位异常', D.ntTypes);
+    if(D.ntBad==='normal') ok('T22 非法晚型 fallback 到 normal');
+    else bad('T22 非法晚型未 fallback', D.ntBad);
+    if(D.noteLen===50) ok('T22 备注裁剪到 50 字');
+    else bad('T22 备注未裁剪', JSON.stringify(D.noteLen));
+    if(D.okN===2 && D.noN===1) ok('T22 统计只计已填：2 达标 + 1 未达标，未填的不计');
+    else bad('T22 统计已填天数错误', JSON.stringify({okN:D.okN,noN:D.noN}));
+    if(D.okKcal===1200 && D.noKcal===2000) ok('T22 交叉对比：达标日均 1200 / 未达标日均 2000');
+    else bad('T22 交叉对比热量错误', JSON.stringify({ok:D.okKcal,no:D.noKcal}));
+    if(D.weekFilled===1 && D.weekRate===100) ok('T22 本周达标率分母=已填天数（1/1），非自然天');
+    else bad('T22 本周达标率分母错误', JSON.stringify({filled:D.weekFilled,rate:D.weekRate}));
+    if(D.streak===3) ok('T22 最长连续未达标 = 3 天');
+    else bad('T22 最长连续未达标计算错误', JSON.stringify(D.streak));
+    if(D.emptyHtml && D.emptyHtml.includes('还没有记录')) ok('T22 统计空态文案正确');
+    else bad('T22 统计空态文案缺失');
+    if(D.blockHtml && D.blockHtml.includes('防今晚爆食') && D.blockHtml.includes('今晚这顿怎么吃'))
+      ok('T22 提示区分组：今晚这顿 / 防今晚爆食·配套2条');
+    else bad('T22 提示区分组文案缺失');
+
+    // ===== T23：三选一菜单 + 放纵额度 + 统计（v2026-11-24b） =====
+    if(ctx.__V2ERR) bad('三选一/额度模块校验脚本异常', ctx.__V2ERR);
+    const V=ctx.__V2||{};
+    if(V.err) bad('T23 内部执行异常', V.err);
+    else{
+      if(/^\d{4}-W\d{2}$/.test(V.wId||'')) ok('T23 ISO 周号格式正确：'+V.wId);
+      else bad('T23 ISO 周号格式错误', V.wId);
+      if(V.wBad==='') ok('T23 非法日期的周号返回空（不崩）');
+      else bad('T23 非法日期未返回空', V.wBad);
+      if(V.menu3==='饭①|饭②|饭③' && V.menuTs) ok('T23 菜单 3 项写入 settings 并记时间戳');
+      else bad('T23 菜单保存失败', JSON.stringify({menu:V.menu3,ts:V.menuTs}));
+      if(V.menuClip) ok('T23 菜单单项超 12 字已截断');
+      else bad('T23 菜单单项未截断');
+      if(V.menuBad===null) ok('T23 菜单非法值（非数组）按未设置处理');
+      else bad('T23 菜单非法值未 fallback', V.menuBad);
+      if(V.planOn===1) ok('T23 点选②记录 dinnerPlan=1');
+      else bad('T23 点选未记录', V.planOn);
+      if(V.planOff===undefined) ok('T23 再点②取消 → dinnerPlan 删除');
+      else bad('T23 再点取消未删除', V.planOff);
+      if(V.planBad) ok('T23 越界点选值不崩、渲染正常');
+      else bad('T23 越界点选值导致渲染异常');
+      if(V.useBefore===false && V.useAfter===true && V.freeDay && V.freeDate)
+        ok('T23 用掉额度：used=true + 当天 freeMeal + 记日期');
+      else bad('T23 用掉额度字段不完整', JSON.stringify({before:V.useBefore,after:V.useAfter,day:V.freeDay,date:V.freeDate}));
+      if(V.undoAfter===false && V.undoDay===true)
+        ok('T23 本周内撤销：两字段一起回退（used=false + 删当天标记）');
+      else bad('T23 撤销未一起回退', JSON.stringify({used:V.undoAfter,dayCleared:V.undoDay}));
+      if(V.weekReset) ok('T23 跨周自动重置额度（旧周 → 本周 0/1）');
+      else bad('T23 跨周未重置');
+      if(V.freeAvg===2150 && V.freeN===2) ok('T23 统计：放纵日均 2150（2 天）');
+      else bad('T23 放纵日均错误', JSON.stringify({avg:V.freeAvg,n:V.freeN}));
+      if(V.normalAvg===1650 && V.normalN===3) ok('T23 统计：普通日均 1650（3 天）');
+      else bad('T23 普通日均错误', JSON.stringify({avg:V.normalAvg,n:V.normalN}));
+      if(V.weeks===4) ok('T23 统计：每周使用次数覆盖近 4 周');
+      else bad('T23 周数错误', V.weeks);
+      if(V.afterAvg!=null && V.afterN>0) ok('T23 统计：放纵后 3 天日均有值（'+V.afterAvg+'，'+V.afterN+'天）');
+      else bad('T23 放纵后 3 天统计异常', JSON.stringify({avg:V.afterAvg,n:V.afterN}));
+      if(V.statHtml && V.statHtml.includes('放纵日 vs 普通日热量差') && V.statHtml.includes('放纵后 3 天热量'))
+        ok('T23 统计卡三项标题齐全');
+      else bad('T23 统计卡标题缺失');
+      if(V.emptyStat && V.emptyStat.includes('—')) ok('T23 空态统计卡显示 — 不崩');
+      else bad('T23 空态统计卡异常');
+      if(V.menuEmpty && V.menuEmpty.includes('现在定 3 个')) ok('T23 菜单未设置态显示「现在定 3 个」');
+      else bad('T23 菜单未设置态文案缺失');
+      if(V.menuXssSafe) ok('T23 菜单名 HTML 注入已转义');
+      else bad('T23 菜单名存在 XSS 风险');
+    }
+
+    // ===== T24：训练计划 v2026-11-25 更新 =====
+    if(ctx.__TRERR) bad('训练计划校验脚本异常', ctx.__TRERR);
+    const R=ctx.__TR||{};
+    if(R.err) bad('T24 内部执行异常', R.err);
+    else{
+      if(R.titles==='周一：下肢力量|周二：上肢拉力量|周三：操课（没课就练下肢）|周四：有氧|周五：上肢拉力量|周六：操课 / 休息|周日：操课')
+        ok('T24 七天标题按 11-25 版更新');
+      else bad('T24 七天标题不符', R.titles);
+      if(R.mon&&R.mon.includes('动态热身 5 分钟（下肢）')&&R.mon.includes('史密斯机深蹲')&&R.mon.includes('保加利亚分腿蹲')&&R.mon.includes('坐姿弯举机')&&R.mon.includes('髋外展机')&&R.mon.includes('站立拉伸'))
+        ok('T24 周一：下肢力量含热身/深蹲/分腿蹲/弯举机/外展机/拉伸');
+      else bad('T24 周一动作缺失', R.mon);
+      if(R.tue&&R.tue.includes('动态热身 5 分钟（上肢）')&&R.tue.includes('器械推胸 2×12-15')&&!R.tue.includes('操课'))
+        ok('T24 周二：上肢拉力量（含推胸、去掉操课）');
+      else bad('T24 周二动作不符', R.tue);
+      if(R.thu&&R.thu.includes('坡度走 30-35 分钟')&&!R.thu.includes('操课'))
+        ok('T24 周四：有氧（坡度走 30-35、去掉操课）');
+      else bad('T24 周四动作不符', R.thu);
+      if(R.fri&&R.fri.includes('蝴蝶机最轻重量 15 次')&&R.fri.includes('站立拉伸'))
+        ok('T24 周五：上肢拉力量含蝴蝶机热身 + 站立拉伸');
+      else bad('T24 周五动作缺失', R.fri);
+      if(R.sat&&R.sat.includes('四选一')&&R.sat.includes('尊巴')&&R.sat.includes('只做保底'))
+        ok('T24 周六：四选一说明（含保底）');
+      else bad('T24 周六四选一文案缺失', R.sat);
+      if(R.wed&&R.wed.includes('课表空 → 改做周一那套下肢 4 个动作'))
+        ok('T24 周三：没课改下肢备选');
+      else bad('T24 周三备原文案缺失', R.wed);
+      if(R.dailyCore) ok('T24 每天必做：腹压 9 分 + 盆底 5 分（7 天均含）');
+      else bad('T24 腹压/盆底每日必做缺失');
+      if(R.dailyStretch) ok('T24 站立拉伸 10 分钟每天都有');
+      else bad('T24 站立拉伸非每天都有');
+      if(R.metOk) ok('T24 所有动作 met>0 且 min 为正整数');
+      else bad('T24 存在非法 met/min');
+      if(R.ruleCounts==='8/6/5') ok('T24 规则三组数量：通用8 + 每天6 + 每周5');
+      else bad('T24 规则数量错误', R.ruleCounts);
+      if(R.ruleHtml&&R.ruleHtml.includes('<details')&&R.ruleHtml.includes('训练原则')&&R.ruleHtml.includes('腕带必备')&&R.ruleHtml.includes('漏尿'))
+        ok('T24 折叠区含训练原则/通用规则/每周核对，默认收起');
+      else bad('T24 折叠区内容缺失');
+      if(R.planHtml&&R.planHtml.includes('标记今日训练完成打卡')&&R.planHtml.includes('今日不训练')&&R.planHtml.includes('📋 训练原则'))
+        ok('T24 训练计划卡保留打卡/跳过按钮 + 折叠区');
+      else bad('T24 训练计划卡结构被破坏');
+      if(R.done&&R.undo&&R.skip) ok('T24 打卡/撤销/跳过函数行为不变');
+      else bad('T24 打卡函数行为异常', JSON.stringify({done:R.done,undo:R.undo,skip:R.skip}));
+
+      // ===== T25：运动库补 5 个新动作（v2026-11-26b） =====
+      if(R.newMet && R.newMet.split('|').every(x=>x.endsWith('✓')))
+        ok('T25 五个新动作入库且 MET 正确：'+R.newMet);
+      else bad('T25 新动作缺失或 MET 错误', R.newMet);
+      if(R.noDup) ok('T25 新动作无重名（各出现一次）');
+      else bad('T25 新动作存在重名');
+      if(R.fuzzy) ok('T25 五个动作均可被模糊匹配命中');
+      else bad('T25 模糊匹配未命中全部新动作');
+      if(R.kcalOk) ok('T25 新动作 MET 可用于 exKcal 算出正消耗');
+      else bad('T25 exKcal 计算异常');
+      if(R.noCombo) ok('T25 未误补「动态热身」组合串');
+      else bad('T25 误把组合动作补进运动库');
+    }
   }
 })();
 
@@ -1634,11 +1937,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-18d\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-26c\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v112') ok('P4 SW 缓存名已随部署递增：v112');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v116') ok('P4 SW 缓存名已随部署递增：v116');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');

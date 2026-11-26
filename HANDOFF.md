@@ -1,7 +1,7 @@
 # 祈·自律工作台 — 交接手册
 
 > 供外部工具 / 协作者 / 手机云端任务修改本工作台时参考。
-> 最新线上版本：**APP_VERSION `2026-11-18d` / SW `qi-workbench-v112`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交：本次 `fix: 运动默认时长后置与估算备注` 提交）。
+> 最新线上版本：**APP_VERSION `2026-11-26c` / SW `qi-workbench-v116`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交：本次 `fix: 恢复 11-26b 基线并重放运动时长备注` 提交）。
 > ⚠️ 本文档于 2026-11-17 按线上 `origin/main` 与本地实测全量重写。行号随版本漂移，检索请优先用函数名。改完请同步更新本手册顶部版本号。
 
 ## 1. 项目定位
@@ -11,7 +11,7 @@
 - 手机云端改码：全程走 GitHub clone → 改 → push，云端沙箱**看不到本地路径**。完整流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 2. 技术栈与架构
-- 核心逻辑在 `index.html`（429,515 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
+- 核心逻辑在 `index.html`（447,717 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
 - PWA：`manifest.webmanifest` + `sw.js`（2,731 字节；离线缓存，导航网络优先、失败回退缓存；预缓存含 `index.html` / `data-notes.js` / 图标 / manifest）。
 - 持久化：主存键 `qi_workbench_v2`；凭证独立键 `qi_wb_creds` + IndexedDB 密文副本 `qi_history/creds`（设备密钥 `qi_wb_dk`）；可选 Gist 云同步（AES ENC2，Gist 1MB 截断自愈）。
 - CSP：`form-action 'none'` 已补；`script-src`/`style-src` 保留 `unsafe-inline`（本期刻意不收紧，避免白屏）。
@@ -20,11 +20,11 @@
 ## 3. 文件结构
 ```
 workbench/
-├── index.html            # 核心逻辑（约 410KB，改这里）
+├── index.html            # 核心逻辑（约 436KB，改这里）
 ├── data-notes.js         # 内置 AI 笔记（约 249KB），<script src> 注入 BUILTIN_NOTES
 ├── sw.js                 # Service Worker，仅做版本/缓存控制
 ├── manifest.webmanifest  # PWA 清单
-├── smoke.cjs             # 固化冒烟测试（约 109KB，node 跑，改完必跑，当前 553 项断言）
+├── smoke.cjs             # 固化冒烟测试（约 127KB，node 跑，改完必跑，当前 607 项断言）
 ├── icon.svg / *.png      # 图标（含 maskable）
 ├── .nojekyll             # 禁用 Jekyll
 ├── README.md / README-en.md / START.md / Experience.md / Preferences.md / HANDOFF.md / schema.md
@@ -38,23 +38,24 @@ workbench/
 - 本机 remote 是 SSH（`ssh://git@ssh.github.com:443/peiky6/workbench.git`），本机可推送。
 - **手机云端沙箱没有本机 SSH key**：云端改码须用 HTTPS + fine-grained PAT（仅给 `workbench` 仓库 Contents 写权限，短期有效，用完撤销）。PAT 在任务对话里单独提供，禁止写进公开仓库或提交历史。
 - 每次改完 `index.html` / `data-notes.js` / `sw.js` 必须：
-  1. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v112`，否则用户看不到更新）；
-  2. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-18d`，格式 `YYYY-MM-DD[a-z]`）；
-  3. 跑 `node smoke.cjs` 全绿（当前 553 项）再推；
-  4. 更新本手册顶部版本号。
+  1. **动手前先 `git fetch` + 核验 `origin/main` 与基线一致（见 §10 第 0 条强制门禁），网络异常就停**；
+  2. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v116`，否则用户看不到更新）；
+  3. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-26c`，格式 `YYYY-MM-DD[a-z]`）；
+  4. 跑 `node smoke.cjs` 全绿（当前 607 项）再推；
+  5. 更新本手册顶部版本号。
 
 ## 5. 测试
-- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 553 项断言，全绿才准推。**
-- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」，当前 `MIN_SW=112`）。
+- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 607 项断言，全绿才准推。**
+- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」，当前 `MIN_SW=116`）。
 - 单文件无构建兜底，一个语法错误整页白屏，靠 smoke 兜底。
 
 ## 6. 数据模型与关键约定
 - 状态键、同步机制（Gist AES ENC2）、术语库版本等以代码为准；行号随漂移，检索用函数名（`renderXxx` / `openXxx` / `seedNotes` / `save` / `persistSafe`）。
 - **内置笔记（`BUILTIN_NOTES`）不上传云端**——云端只存用户数据，避免大文件超 Gist 截断线。
 - **凭证三层加固（v2026-11-16a）**：①写空保护（三项清空不抹已有凭证、回灌内存）；②IndexedDB AES-GCM 密文冗余副本 + 设备密钥；③启动自愈恢复（独立键为空时从副本解密恢复）。主存 / 云端载荷 / 导出备份 / 快照 / 回滚备份均零凭证明文。
-- **自定义条目基准模型（v2026-11-18b，v18c 加固）**：`customFoods` / `customExercises` 条目统一为 `{n, k, u}`——`k` 是**每基准单位**热量（食物 `u:'100g'|'100ml'` → k=每100克/毫升；运动 `u:'分钟'` → k=每分钟），名字只存纯名、不带数字单位。`parseCustomUnit` 从「腰果42g / 椭圆机42分钟」剥离数字单位，`migrateCustomEntries` 在 load 链**及 mergeState（拉取/导入/快照恢复三出口共用）**幂等迁移老脏条目（只改联想库、**不动 `modules.mana.records` 历史流水**；`amount<=0` 的非法条目跳过、不产生 `null`）。自由输入由 `matchFood` / `matchExercise` 按基准换算；显式热量写法（`蛋白粉 120` / `椭圆机 250大卡`）优先级最高。**v18c 解析防御**：库内残留脏条目（如「腰果42g」与「腰果」共存）时输入整串按记录热量记 1 份、绝不乘数字；按克/毫升换算返回 `shownAmt` 供预览显示实际数量（腰果50g→50g，不再 ×0.5）；负号、中文量词、按克食物的整数份数均做钳制。**v18d 运动默认时长后置**：内置 MET 运动与自定义按分钟运动（`u:'分钟'`）无时长时才默认 30 分钟并打 `estMin:true` 标记，渲染/预览显示「默认 30 分钟 按体重估算」；**按次固定的自定义运动（`u:''`，如热身/盆底肌）只记热量、`min=0`，绝不假补 30 分钟**。历史流水不迁移（用户既有记录保持原样），标记只写入新记录。
+- **自定义条目基准模型（v2026-11-18b，v18c 加固）**：`customFoods` / `customExercises` 条目统一为 `{n, k, u}`——`k` 是**每基准单位**热量（食物 `u:'100g'|'100ml'` → k=每100克/毫升；运动 `u:'分钟'` → k=每分钟），名字只存纯名、不带数字单位。`parseCustomUnit` 从「腰果42g / 椭圆机42分钟」剥离数字单位，`migrateCustomEntries` 在 load 链**及 mergeState（拉取/导入/快照恢复三出口共用）**幂等迁移老脏条目（只改联想库、**不动 `modules.mana.records` 历史流水**；`amount<=0` 的非法条目跳过、不产生 `null`）。自由输入由 `matchFood` / `matchExercise` 按基准换算；显式热量写法（`蛋白粉 120` / `椭圆机 250大卡`）优先级最高。**v18c 解析防御**：库内残留脏条目（如「腰果42g」与「腰果」共存）时输入整串按记录热量记 1 份、绝不乘数字；按克/毫升换算返回 `shownAmt` 供预览显示实际数量（腰果50g→50g，不再 ×0.5）；负号、中文量词、按克食物的整数份数均做钳制。**v18d（11-26c 重放）运动默认时长后置**：内置 MET 运动与自定义按分钟运动（`u:'分钟'`）无时长时才默认 30 分钟并打 `estMin:true` 标记，渲染/预览显示「默认 30 分钟 按体重估算」；**按次固定的自定义运动（`u:''`，如热身/盆底肌/腹压友好版）只记热量、`min=0`，绝不假补 30 分钟**。历史流水不迁移（用户既有记录保持原样），标记只写入新记录。
 
-## 7. 本周功能变更（2026-11-03 ~ 11-18，按时间）
+## 7. 本周功能变更（2026-11-03 ~ 11-26，按时间）
 | 日期 | 版本 | 变更摘要 |
 |---|---|---|
 | 11-03 | 11-03a | 按饮食指南&训练计划更新体重模块（工作日 1760kcal/101g + 每周课表） |
@@ -70,7 +71,11 @@ workbench/
 | 11-18 | 11-18a | 修复饮食录入：食物名带重量/容积单位（如 50g 鸡胸肉）不再被当份数乘（曾 133×50=6650 kcal）；按食物库基准（100g/250ml/30g）换算，对不上按 1 份记；smoke 新增 9 条 T19 回归断言（522→531），SW v109 |
 | 11-18 | 11-18b | 自定义食物/运动「名字+基准」归一化：自定义录入把「腰果42g+250 / 椭圆机42分钟+250」存为纯名字+基准（595kcal/100g / 5.95kcal/分钟），再输入自动换算、不再 250×42；`migrateCustomEntries` 幂等迁移老脏条目（只改联想库、不动历史流水）；smoke 新增 8 条 T20 断言（531→539），SW v110 |
 | 11-18 | 11-18c | 解析防御与边界加固：库内残留脏条目（腰果42g+腰果共存）输入整串按记录热量记 1 份、杜绝 250×42=10500；显式热量混写优先（腰果42g300kcal→300）；按克/毫升换算显示实际数量（腰果50g→50g·298 而非 ×0.5）；负号/中文量词/按克整数份数钳制；迁移跳过 amount<=0 非法条目避免 null；迁移收口 mergeState（拉取/导入/恢复）；smoke 新增 10 条 T21 断言（539→549），SW v111 |
-| 11-18 | 11-18d | 运动默认时长后置：内置 MET/自定义按分钟运动无时长才默认 30 并打 `estMin` 标记、显示「默认 30 分钟 按体重估算」；按次固定自定义运动（热身/盆底肌等）不再假补 30 分钟（min=0）；历史记录不迁移；smoke 新增 4 条 T22 断言（549→553），SW v112 |
+| 11-24 | 11-24a | 晚餐正经饭打卡与暴食干预模块：体重页饮食卡片区新增打卡（三态 dinnerOk：未填/✓/✗，取消勾选回未填不落 false；晚型 nightType 日常/独处/赶路/情绪；备注 nightNote ≤50 字），即点即存带 ts、last-write-wins 同步删除；提示区分「今晚这顿」+「防今晚爆食·配套2条」按晚型分层；「体重趋势与能量收支」下方新增统计卡（本周达标率分母=已填天数、达标/未达标日均热量交叉对比复用 kcalIntakeOf 近30天、最长连续未达标）；历史无字段记录一律按未填不计分母；smoke 新增 15 条 T22 断言（549→564），SW v112 |
+| 11-24 | 11-24b | 三选一菜单与放纵额度（settings 存配置、不同步，单端用）：打卡卡内新增「本周晚餐三选一」（nightMenu[3] 周日定好、dinnerPlan 每日单选再点取消、超7天提示「上周的菜单」不自动清空）与「本周放纵额度」（freeMealWeek/Used/Date，用掉即当天 freeMeal=true，本周内可撤销且两字段一起回退、跨周自动重置，用完置灰无警示）；新增 ISO 周号 isoWeekId。v1 统计卡下方新增「放纵额度·统计」三项（每周使用次数近4周、放纵日vs普通日热量差近30天、放纵后3天 D+1~D+3，复用 kcalIntakeOf 跳过无热量日）；菜单名 escapeHtml 防注入；smoke 新增 19 条 T23 断言（564→583），SW v113 |
+| 11-26 | 11-26a | 训练计划按「乐刻训练打卡.md」2026-11-25 版更新：7 天全量重写——周一下肢力量、周二上肢拉（去操课加推胸、坡度走 25-30 分钟）、周三操课含没课改下肢备选、周四有氧（坡度走30-35）、周五上肢拉加蝴蝶机热身、周六四选一、周日操课优先核心雕塑；每天先动态热身5分→正式组→坡度走→腹压友好版9分→盆底肌5分→站立拉伸10分。新增 TRAIN_RULES 三组规则（通用8+每天必做6+每周核对5）折叠区默认收起；打卡/跳过/批量补卡/饮食判定零改动。MET 表补新动作留下一轮；smoke 新增 14 条 T24 断言（583→597），SW v114 |
+| 11-26 | 11-26b | 运动库 EXERCISES 补训练计划里的 5 个单动作：坐姿弯举机 3.5 / 髋外展机 3.5 / 弹力带肩绕环 3 / 招财猫 3 / 站立拉伸 2.5（MET 与 TRAIN_PLAN 同项一致）；「动态热身」是组合串不入库。suggestExercise 模糊匹配与 exKcal 零改动、新项自动可联想可算消耗。smoke 新增 5 条 T25 断言（597→602），SW v115 |
+| 11-26 | 11-26c | **事故恢复 + v18d 重放**：云端沙箱跨天沿用旧副本（停 11-18c），未核验基线即用 API 推送，把上午 11-24a/b、11-26a/b 四个提交覆盖——本版以 `5fe9510`(11-26b) 为基线完整恢复全部功能（晚餐打卡/三选一放纵额度/乐刻训练计划/5 个新动作），再重放运动默认时长备注（按次固定不补 30、内置默认 30 打 estMin、备注「默认 30 分钟 按体重估算」）；新增 §10 第 0 条推送前强制门禁并更正「API 脚本已内置比对」的错误描述；smoke 新增 5 条 T26 断言（602→607），SW v116 |
 
 ## 8. 用户偏好与约定（长期记忆）
 - 身份：IT 软件项目经理，转型 **AI PM**。术语库 / 学习计划 / 书单围绕此。
@@ -103,8 +108,21 @@ workbench/
 移动端云端改码流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 10. 踩坑清单（给协作者）
-1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v112 / 553 项），否则用户看不到更新。
-2. **本地工作副本可能落后于线上**：动手前先 `git fetch` + 比对 `origin/main`，确认基线再改。11-16 曾因本机与远程分叉（内容一致、历史不同）导致 push 被拒，用 `git reset --mixed origin/main` 对齐解决——**绝不强推覆盖**。
+0. 🚨 **【强制门禁｜推送前必做，违反即覆盖线上】**：改码前**和推送前**都要核验 `origin/main` 的实时 SHA：
+   ```
+   git fetch origin   # 失败要重试，别跳过
+   REMOTE=$(curl -s -H "Authorization: token <PAT>" -H "User-Agent: x" https://api.github.com/repos/peiky6/workbench/git/ref/heads/main | python3 -c "import sys,json;print(json.load(sys.stdin)['object']['sha'])")
+   [ "$REMOTE" = "$(git rev-parse origin/main)" ] || echo "STOP：本地基线落后，先对齐再改"
+   grep "APP_VERSION" index.html && grep "const CACHE" sw.js   # 确认工作区版本 == 远端 HEAD 版本
+   ```
+   - **11-26 事故**：云端沙箱跨天沿用了旧工作副本（停在 11-18c），没核验就开发 + 走 API 推送，把上午的 4 个提交（11-24a/b、11-26a/b）**静默覆盖**，线上从 v11-26b 倒退到 v18d。所有历史都在、已恢复，但教训是：**拉 → 改 → 推 的顺序不能只写进文档，必须在推送前再核一次**。
+   - ⚠️ **API 通道不提供保护**：`deploy-api.cjs` 只用远端 HEAD 当 parent 上传本地文件内容，**没有本地/远端 HEAD 比对**（下方第 8 条旧描述"脚本已内置比对"是错的，已更正）。走 API 时上面的人工核验就是唯一防线。
+1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v116 / 607 项），否则用户看不到更新。
+2. **改前必须先拉最新代码（云端改过之后尤其重要）**——本机不是权威副本，云端任务 push 后本地就是旧的。顺序固定 **拉 → 改 → 推**。
+   - 拉取要重试（`git fetch` 本身也会抖）：`for i in 1 2 3 4 5; do git fetch origin && break; sleep 3; done` → `git reset --hard origin/main`。
+   - ⚠️ **`git reset --mixed` 只移动 HEAD，不更新工作区**。本地真落后时（云端有新提交），mixed 之后工作区仍是旧文件、`git status` 会显示若干 `M`。此时若接着改并推送，就等于用旧代码覆盖云端。**11-18 实测**：本地落后 3 个提交（云端 18a/b/c），mixed 后 `index.html` 仍停在 `v2026-11-17a`，与 HEAD 差 169 行、`smoke.cjs` 差 155 行。判定：reset 后立刻 `grep APP_VERSION index.html` 和 `grep CACHE sw.js`，与新 HEAD 不符就再补 `git reset --hard origin/main`（本地确有未提交改动时先 `git stash`）。
+   - 不拉的后果：① 在旧代码上继续改，SW 缓存名可能与云端撞号（同号 → 手机端不刷新缓存）；② `git push` 会被 `non-fast-forward` **拒绝**（安全）；③ **API 脚本会用本地旧文件静默覆盖云端，无任何自动拦截**——11-26 已实证，必须靠第 0 条门禁人工核验。
+   - 仅在「内容一致、只是历史不同」的分叉场景（如 11-16 那次）才可用 `git reset --mixed origin/main` 收尾——**绝不 force push**。
 3. **笔记外置已完成**（data-notes.js），别再重复拆 `BUILTIN_NOTES`。
 4. **Supabase 死代码已清理**，保留 `supabase_setup.js` 仅为兼容，不要基于旧文档恢复 Supabase 同步链路。
 5. **token 传递**：本机 SSH 可推；云端沙箱须 HTTPS + 短期 PAT；PAT/口令禁止写进公开仓库、提交历史或主存。
@@ -117,5 +135,6 @@ workbench/
      走 GET ref → POST blob（内容取 `git show HEAD:file`，保住行尾格式）→ POST tree(base_tree) → POST commit(parent=远端HEAD) → PATCH ref，**N 个文件只产生 1 个提交**。
    - **api 端点自身也会抖动**（实测约半数请求 TLS 被掐，报 `socket disconnected before secure TLS connection`）：脚本已内置最多 10 次指数退避重试，看到 `· 第 N 次失败…后重试` 属正常，**别中断、别误判失败就放弃**。
    - 为什么不用 `deploy.cjs`：它走 Contents API 逐文件提交，N 个文件 = N 个 deploy 提交，正是 11-16 分叉的成因。
-   - 推完：远端历史被压缩成 1 个提交，本地仍有多提交。网络恢复后 `git fetch origin && git reset --mixed origin/main` 对齐，**绝不 force push**。
+   - **跑前自检（11-18 新增）**：脚本会比对本地 HEAD 与远端 HEAD，不一致立即中止并打印对齐命令。这是为了防「本地旧文件静默覆盖云端新版本」——**看到中止就先去拉代码，别绕过、别改检查**。
+   - 推完：远端历史被压缩成 1 个提交，本地仍有多提交；此时两边**内容一致、仅历史不同**，`git fetch origin && git reset --hard origin/main` 对齐即可（内容一致，hard 不会丢东西），**绝不 force push**。
    - 脚本与 token 都在 `3-build/private/`（已 gitignore），不要移进公开目录、不要硬编码 token。
