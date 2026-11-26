@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 114;
+  const MIN_SW = 115;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1228,6 +1228,20 @@ if(htmlJs){
     toggleTrainDone(); R.done=rec('mana')[today()].trainDone===true;
     toggleTrainDone(); R.undo=rec('mana')[today()].trainDone===false;
     toggleTrainSkip(); R.skip=rec('mana')[today()].trainSkip===true;
+    // T25：运动库新增 5 个单动作
+    const want={'坐姿弯举机':3.5,'髋外展机':3.5,'弹力带肩绕环':3,'招财猫':3,'站立拉伸':2.5};
+    R.newMet=Object.keys(want).map(k=>{
+      const hit=EXERCISES.filter(e=>e.n===k);
+      return hit.length===1 && hit[0].met===want[k] ? k+'✓' : k+'✗'+(hit.length?'('+hit[0].met+')':'(缺)');
+    }).join('|');
+    // 不重名：库内每个新名字只出现一次
+    R.noDup=Object.keys(want).every(k=>EXERCISES.filter(e=>e.n===k).length===1);
+    // 模糊匹配命中（与 suggestExercise 同逻辑：name.includes(q)）
+    R.fuzzy=['坐姿弯','髋外展','招财猫','弹力带','站立拉伸'].every(q=>EXERCISES.some(e=>e.n.includes(q)));
+    // exKcal 用新 met 能算出正整数（体重取默认，时间 10 分钟）
+    R.kcalOk=Object.keys(want).every(k=>{ const e=EXERCISES.find(x=>x.n===k); const v=Math.round((e.met*effectiveWeight()*10)/60); return Number.isInteger(v)&&v>0; });
+    // 未误补「动态热身」组合串
+    R.noCombo=!EXERCISES.some(e=>e.n==='动态热身');
   }catch(e){ R.err=e.name+': '+e.message; }
   globalThis.__TR=R;
 })(); }catch(e){ globalThis.__TRERR=e.name+': '+e.message; }
@@ -1694,6 +1708,19 @@ if(htmlJs){
       else bad('T24 训练计划卡结构被破坏');
       if(R.done&&R.undo&&R.skip) ok('T24 打卡/撤销/跳过函数行为不变');
       else bad('T24 打卡函数行为异常', JSON.stringify({done:R.done,undo:R.undo,skip:R.skip}));
+
+      // ===== T25：运动库补 5 个新动作（v2026-11-26b） =====
+      if(R.newMet && R.newMet.split('|').every(x=>x.endsWith('✓')))
+        ok('T25 五个新动作入库且 MET 正确：'+R.newMet);
+      else bad('T25 新动作缺失或 MET 错误', R.newMet);
+      if(R.noDup) ok('T25 新动作无重名（各出现一次）');
+      else bad('T25 新动作存在重名');
+      if(R.fuzzy) ok('T25 五个动作均可被模糊匹配命中');
+      else bad('T25 模糊匹配未命中全部新动作');
+      if(R.kcalOk) ok('T25 新动作 MET 可用于 exKcal 算出正消耗');
+      else bad('T25 exKcal 计算异常');
+      if(R.noCombo) ok('T25 未误补「动态热身」组合串');
+      else bad('T25 误把组合动作补进运动库');
     }
   }
 })();
@@ -1887,11 +1914,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-26a\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-26b\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v114') ok('P4 SW 缓存名已随部署递增：v114');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v115') ok('P4 SW 缓存名已随部署递增：v115');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');
