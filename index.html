@@ -288,6 +288,7 @@
   .meal .mk{color:var(--accent);font-weight:800;}
   .mrow{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:3px 0;}
   .mrow .x{color:var(--bad);font-weight:800;cursor:pointer;}
+  .mrow .estnote{font-style:normal;color:var(--sub);opacity:.75;font-size:11px;}
   .inline{display:flex;gap:8px;align-items:center;margin:8px 0;}
   .kcal-row{margin-top:-2px !important;font-size:12px;color:var(--sub);}
   .kcal-label{white-space:nowrap;}
@@ -752,7 +753,7 @@ function defaultState(){
     notes:[], qa:[], qaProg:{}, qaDaily:{}, notesSeed:false,
     interviews:[],
     outputs:[], outTags:[],
-    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, bodyFat:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40, nightMenu:[], nightMenuTs:0, freeMealWeek:'', freeMealUsed:false, freeMealDate:'' }
+    settings:{ gistToken:'', gistId:'', autoEncrypt:true, encPass:'', goal:{weight:null, bodyFat:null, ielts:null}, ieltsExamDate:'', readGoal:5, reminderEnabled:true, reminderHour:21, bmrFormula:'mifflin', actFactor:1.40 }
   };
 }
 let state = load();
@@ -1239,7 +1240,7 @@ function monthReminderBanner(){
 }
 
 /* ===================== 打卡数据层（统一连续天数 / 周视图） ===================== */
-const APP_VERSION = '2026-11-26b';
+const APP_VERSION = '2026-11-18d';
 // 笔记问答「重做 v43」：内置数据直接可用——不再依赖云端注入/手动导入，首次打开自动载入
 let _notesSeeded=false;
 function seedNotes(){
@@ -1713,9 +1714,7 @@ const EXERCISES = [
   {n:'骑车',met:6},{n:'跳绳',met:10},{n:'力量训练',met:5},{n:'瑜伽',met:2.5},{n:'普拉提',met:3},
   {n:'爬楼',met:8},{n:'HIIT',met:8},{n:'羽毛球',met:7},{n:'篮球',met:6.5},{n:'跳舞',met:5},
   {n:'椭圆机',met:5},{n:'太极',met:3},
-  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3},{n:'爬坡走',met:6},{n:'跑步机爬坡',met:7},{n:'深蹲',met:5},{n:'负重深蹲',met:6},{n:'俯卧撑',met:4},{n:'平板支撑',met:3},{n:'波比跳',met:8},{n:'开合跳',met:7},{n:'臀桥',met:3},{n:'箭步蹲',met:5},{n:'卷腹',met:3.5},{n:'仰卧起坐',met:3.5},{n:'引体向上',met:4},{n:'硬拉',met:5},{n:'卧推',met:4},{n:'器械划船',met:4},{n:'高抬腿',met:6},{n:'登山跑',met:8},{n:'划船机',met:7},{n:'动感单车',met:8},{n:'战绳',met:9},{n:'壶铃摆动',met:8},{n:'拉伸',met:2.5},{n:'肌肉塑造',met:5},{n:'燃脂踏板',met:7},{n:'腿举机',met:3.5},{n:'坐姿腿屈伸',met:3.5},{n:'俯卧腿弯举',met:3.5},{n:'自重臀桥',met:3},{n:'绳索面拉',met:3.5},{n:'坐姿绳索划船',met:3.5},{n:'器械高位下拉',met:3.5},{n:'器械推胸',met:3.5},{n:'反向蝴蝶机',met:3.5},{n:'史密斯机深蹲',met:4},{n:'保加利亚分腿蹲',met:5},{n:'死虫式',met:2.5},{n:'鸟狗式',met:2.5},{n:'前臂平板支撑',met:3},{n:'跑步机坡度走',met:6},{n:'全身大拉伸',met:2.5},{n:'门框胸肌拉伸',met:2.5},
-  // v2026-11-26b：补训练计划里的单动作（动态热身是组合串，不入库）
-  {n:'坐姿弯举机',met:3.5},{n:'髋外展机',met:3.5},{n:'弹力带肩绕环',met:3},{n:'招财猫',met:3},{n:'站立拉伸',met:2.5}
+  {n:'核心雕塑',met:5},{n:'杠铃雕塑',met:5.5},{n:'胸背塑形',met:5},{n:'燃脂搏击',met:8},{n:'腰腹塑形',met:4.5},{n:'基础普拉提',met:3},{n:'爬坡走',met:6},{n:'跑步机爬坡',met:7},{n:'深蹲',met:5},{n:'负重深蹲',met:6},{n:'俯卧撑',met:4},{n:'平板支撑',met:3},{n:'波比跳',met:8},{n:'开合跳',met:7},{n:'臀桥',met:3},{n:'箭步蹲',met:5},{n:'卷腹',met:3.5},{n:'仰卧起坐',met:3.5},{n:'引体向上',met:4},{n:'硬拉',met:5},{n:'卧推',met:4},{n:'器械划船',met:4},{n:'高抬腿',met:6},{n:'登山跑',met:8},{n:'划船机',met:7},{n:'动感单车',met:8},{n:'战绳',met:9},{n:'壶铃摆动',met:8},{n:'拉伸',met:2.5},{n:'肌肉塑造',met:5},{n:'燃脂踏板',met:7},{n:'腿举机',met:3.5},{n:'坐姿腿屈伸',met:3.5},{n:'俯卧腿弯举',met:3.5},{n:'自重臀桥',met:3},{n:'绳索面拉',met:3.5},{n:'坐姿绳索划船',met:3.5},{n:'器械高位下拉',met:3.5},{n:'器械推胸',met:3.5},{n:'反向蝴蝶机',met:3.5},{n:'史密斯机深蹲',met:4},{n:'保加利亚分腿蹲',met:5},{n:'死虫式',met:2.5},{n:'鸟狗式',met:2.5},{n:'前臂平板支撑',met:3},{n:'跑步机坡度走',met:6},{n:'全身大拉伸',met:2.5},{n:'门框胸肌拉伸',met:2.5}
 ];
 
 // AI 知识术语卡（来源取自大厂知识库）
@@ -4451,93 +4450,53 @@ function dietTrain(){ return {free:false, tag:'训练日', meals:{
   snack:[{n:'2煮蛋',k:140}],
   dinner:[{n:'鸡胸肉',k:250},{n:'蔬菜',k:100},{n:'豆腐',k:130}]
 }}; }
-/* 训练计划 v2026-11-25：按「乐刻训练打卡.md」更新——先动态热身、后正式组、训练后才静态拉伸；
-   腕带/前臂撑地/腹压友好版+盆底肌每日必做写进 TRAIN_RULES 折叠区。MET 表新动作下轮补。 */
 const TRAIN_PLAN = {
- 1:{title:'周一：下肢力量', items:[
-    {n:'动态热身 5 分钟（下肢）：髋绕环 10 次/侧 + 踝绕环 10 次/侧 → 原地高抬腿 30 秒×2 → 自重深蹲 15 次（慢慢蹲到底）→ 史密斯机空杆 10 次 → 保加利亚半程 5 次/侧找平衡',met:3,min:5},
-    {n:'史密斯机深蹲 3×10-12（杠放斜方肌上，左手轻搭就行）',met:4,min:12},
-    {n:'保加利亚分腿蹲 3×每侧10-12（自重，完全不用手）',met:5,min:12},
-    {n:'坐姿弯举机 3×10-12（膝关节对齐转轴、脚踝勾住滚垫、慢放别砸配重、顶峰停1秒；全程不用手）',met:3.5,min:10},
-    {n:'髋外展机 3×15（顶峰夹紧2秒，抬骨盆用臀不用腰）',met:3.5,min:8},
-    {n:'跑步机坡度走 15-20 分钟（坡度8-10、速度5-5.5、心率135-150）',met:6,min:20},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+ 1:{title:'周一：操课 + 下肢力量', items:[
+    {n:'操课（当天看乐刻课表）',met:6,min:60},
+    {n:'腿举机 3×12-15（慢下3秒，膝盖微屈不锁死）',met:3.5,min:8},
+    {n:'坐姿腿屈伸 3×12-15（脚尖勾起慢抬，顶峰停1秒）',met:3.5,min:8},
+    {n:'坐姿弯举 3×10-12（脚跟滑向臀部、髋抬起）',met:3.5,min:8},
+    {n:'自重臀桥 3×15（顶峰夹紧2秒，抬骨盆用臀不用腰）',met:3,min:8},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]},
- 2:{title:'周二：上肢拉力量', items:[
-    {n:'动态热身 5 分钟（上肢）：弹力带肩绕环 15 次 + 招财猫 15 次 → 面拉最轻重量 15 次 → 划船最轻重量 15 次',met:3,min:5},
-    {n:'绳索面拉 4×15（驼背矫正第一动作，想象肩胛骨夹笔）',met:3.5,min:10},
-    {n:'坐姿绳索划船 3×12-15（拉回挺胸、肘贴身体）',met:3.5,min:12},
-    {n:'器械高位下拉 3×12-15（下拉至锁骨，顶峰停1秒）',met:3.5,min:12},
-    {n:'器械推胸 2×12-15（双手轻扶，不用力）',met:3.5,min:8},
-    {n:'跑步机坡度走 25-30 分钟（坡度8-10、速度5-5.5、心率135-150）',met:6,min:30},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+ 2:{title:'周二：上肢拉力量 + 操课', items:[
+    {n:'绳索面拉 4×15（驼背矫正第一动作，肩胛骨夹笔）',met:3.5,min:10},
+    {n:'坐姿绳索划船 3×12-15（拉回挺胸、肘贴身体）',met:3.5,min:8},
+    {n:'器械高位下拉 3×12-15（下拉至锁骨，顶峰停1秒）',met:3.5,min:6},
+    {n:'操课（当天看乐刻课表）',met:6,min:60},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]},
- 3:{title:'周三：操课（没课就练下肢）', items:[
-    {n:'操课（当天看乐刻课表）；课表空 → 改做周一那套下肢 4 个动作',met:6,min:60},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+ 3:{title:'周三：操课', items:[
+    {n:'操课（当天看乐刻课表）',met:6,min:60},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]},
- 4:{title:'周四：有氧', items:[
-    {n:'热身 5 分钟：踝绕环 10 次/侧 + 慢速走 5 分钟（速度3.5-4，别直接上坡度）',met:3,min:5},
-    {n:'坡度走 30-35 分钟（坡度8-10、速度4.5-5、心率135-150）',met:6,min:35},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+ 4:{title:'周四：操课', items:[
+    {n:'操课（当天看乐刻课表）',met:6,min:60},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]},
  5:{title:'周五：上肢拉力量', items:[
-    {n:'动态热身 5 分钟（上肢）：弹力带肩绕环 15 次 + 招财猫 15 次 → 面拉最轻重量 15 次 → 划船最轻重量 15 次',met:3,min:5},
-    {n:'蝴蝶机最轻重量 15 次（当热身用）',met:3.5,min:5},
-    {n:'绳索面拉 4×15',met:3.5,min:10},
-    {n:'坐姿绳索划船 3×12-15',met:3.5,min:12},
-    {n:'反向蝴蝶机 3×15（双手轻握把手、戴腕带，别用掌根推）',met:3.5,min:15},
-    {n:'跑步机坡度走 20-25 分钟',met:6,min:25},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+    {n:'绳索面拉 4×15（本周第二次）',met:3.5,min:10},
+    {n:'坐姿绳索划船 3×12-15',met:3.5,min:8},
+    {n:'反向蝴蝶机 3×15',met:3.5,min:6},
+    {n:'跑步机坡度走 20-25分钟',met:6,min:25},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5},
+    {n:'全身拉伸 12-15分钟（门框胸肌45秒×2 + 猫牛式10次 + 婴儿式30秒）',met:2.5,min:15}
  ]},
  6:{title:'周六：操课 / 休息', items:[
-    {n:'四选一：① 上操课（尊巴）　② 户外快走 30-40 分钟　③ 纯休息　④ 只做保底（腹压 9 分钟 + 盆底 5 分钟）',met:6,min:40}
+    {n:'操课（当天看乐刻课表）或休息',met:6,min:60},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]},
  0:{title:'周日：操课', items:[
-    {n:'操课（当天看乐刻课表，优先核心雕塑）',met:6,min:60},
-    {n:'腹压友好版 9 分钟（小贾）',met:3,min:9},
-    {n:'盆底肌 5 分钟（小贾，站着练）',met:2,min:5},
-    {n:'站立拉伸 10 分钟',met:2.5,min:10}
+    {n:'操课（当天看乐刻课表）',met:6,min:60},
+    {n:'腹压友好版 9分钟（小贾）',met:3,min:9},
+    {n:'盆底肌 5分钟（小贾，站着练）',met:2,min:5}
  ]}
-};
-/* 训练原则 & 每周核对（v2026-11-25）：通用 8 条 + 每天必做 6 条 + 每周核对 5 条。
-   纯展示，折叠区默认收起；不新增打卡交互，避免越做越大。 */
-const TRAIN_RULES = {
- general:[
-  '腕带必备：所有拉/推动作戴腕带，左手轻握不发力',
-  '力量动作：组间休息 45-60 秒，每动作第 1 组轻重量热身',
-  '训练前先做 5 分钟动态热身（动作见当天小节），再上正式组',
-  '训练后才做静态拉伸（10 分钟站立拉伸），别在训练前长时间压腿——会掉力量',
-  '操课具体上什么课当天看乐刻课表（课表常变，只记「操课」）',
-  '撑地动作全部用前臂（肘撑地）替代手掌',
-  '太累可跳过力量只上操课，甚至全休（计划允许）',
-  '体感异常（漏尿/下坠感/腰痛加重）→ 当天停训，第二天挂盆底康复科'
- ],
- daily:[
-  '腹压友好版（小贾）：【产后悬垂腹】9 分钟升级跟练 —— 7 天每天都做，不挑星期',
-  '盆底肌（小贾）：盆底肌只会躺着练？（站着练）—— 抱娃坐着或睡前 5 分钟',
-  '顺序：先腹压友好版，后盆底肌（核心先练，盆底只收慢放不加量）',
-  '腹压友好版换掉旧的「死虫式+前臂平板+鸟狗」微训练清单——同一位置只跟视频，不另做一套',
-  '盆底肌跟视频但用慢节奏：收 3-5 秒 → 完全放 5-10 秒、≤5 分钟、不憋气；视频里若连做几十下的快手版 → 慢下来或跳过',
-  '挑一天当「最低量版」：这两个视频就是断练期的保底，不动也要做完这 14 分钟'
- ],
- weekly:[
-  '7 天 × 两个视频都做了（腹压 9 分钟 + 盆底 5 分钟，缺的当天补，不攒到周末）',
-  '面拉 2 次（周二 4 组 + 周五 4 组）',
-  '有氧 ≥3 次（周一力量后 15-20 分 + 周二 25-30 分 + 周四 30-35 分 + 周五 20-25 分）',
-  '拉:推 ≥ 3:1（推只有器械推胸 2 组）',
-  '本周有没有漏尿/下坠感（有 → 记录，减量，别硬练）'
- ]
 };
 function dietRest(){ return {free:false, tag:'休息日', meals:{
   breakfast:[{n:'2煮蛋',k:140},{n:'牛奶咖啡',k:120},{n:'全麦面包',k:235}],
@@ -4743,22 +4702,14 @@ function doBatchTrain(){
   toast('✅ 已补训练达成 '+n+' 天（'+sv+' ~ '+ev+'）');
 }
 function addDietMeal(meal){ const dp=dietPlanToday(); const items=(dp.meals&&dp.meals[meal])||[]; if(!items.length) return toast('该餐今日无计划食物，手动记录即可 🍽️'); const t=manaToday(); let added=0; items.forEach(f=>{ if(!t.meals[meal].some(x=>x.n===f.n)){ t.meals[meal].push({n:f.n,k:f.k}); added++; } }); t.done=true; save(); renderMana(); toast('已套用'+mealNameCn(meal)+'计划 🍽️'); }
-function trainRulesHtml(){
-  const grp=(title,arr)=>`<div style="font-weight:700;font-size:12px;margin:8px 0 4px;color:var(--sub)">${title}</div>`+
-    arr.map(x=>`<div style="font-size:12px;line-height:1.6;padding:3px 0;border-bottom:1px dashed var(--line)">· ${escapeHtml(x)}</div>`).join('');
-  return `<details style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px">
-    <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#1b6ca8;list-style:none">📋 训练原则 &amp; 每周核对（点开看）</summary>
-    <div style="margin-top:6px">${grp('🏋️ 乐刻训练打卡（通用）',TRAIN_RULES.general)}${grp('🎯 每天必做（7 天，含休息日）',TRAIN_RULES.daily)}${grp('📌 每周核对',TRAIN_RULES.weekly)}</div>
-  </details>`;
-}
 function trainPlanHtml(){
   const tp=trainPlanToday();
   const tr=rec('mana')[today()]||{}; const tdf=!!(tr.trainDone); const tsk=!!(tr.trainSkip);
-  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div>${trainRulesHtml()}</div>`; }
+  if(!tp.items.length){ return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练 · 今日（${escapeHtml(tp.title)}）— 休息日，好好恢复～</div></div>`; }
   const rows=tp.items.map(it=>`<div class="trow"><span>${escapeHtml(it.n)} · ${it.min}分钟</span></div>`).join('');
   return `<div class="plan-ref"><div class="pr-h">🕖 下班后训练计划（${escapeHtml(tp.title)}）</div>${rows}
     <button class="btn ${tdf?'ghost':'primary'} w100" onclick="toggleTrainDone()">${tdf?'✅ 今日训练已完成（点此撤销）':'🏁 标记今日训练完成打卡'}</button>
-    <button class="btn ${tsk?'ghost':'line'} w100" style="margin-top:8px" onclick="toggleTrainSkip()">${tsk?'🚫 今日不训练（点此撤销）':'🚫 今日不训练（跳过）'}</button>${trainRulesHtml()}</div>`;
+    <button class="btn ${tsk?'ghost':'line'} w100" style="margin-top:8px" onclick="toggleTrainSkip()">${tsk?'🚫 今日不训练（点此撤销）':'🚫 今日不训练（跳过）'}</button></div>`;
 }
 let manaTrendMode='weight';
 function setManaTrend(mode){
@@ -4770,229 +4721,6 @@ function setManaTrend(mode){
   if(b) b.style.display=isBf?'block':'none';
   if(bw) bw.className=isBf?'mini line':'mini accent';
   if(bb) bb.className=isBf?'mini accent':'mini line';
-}
-/* ---- 晚餐正经饭 · 暴食干预（v2026-11-24a）----
-   归因：5 个高热量日里 4 个没吃正经晚饭。打卡项只有一个动作——晚餐有没有一顿正经的。
-   三态：dinnerOk 缺省=未填（不计入统计分母），true=达标，false=未达标；
-         取消勾选回未填（delete），绝不落到 false；老记录无字段一律按未填。
-   夜型：normal 默认；alone/travel/emotion 各配一句「今晚这顿」提示。
-   常驻两条标为「防今晚爆食·配套 2 条」，与夜型提示分组，避免串味。 */
-const DINNER_NIGHT_TYPES=['normal','alone','travel','emotion'];
-const DINNER_NIGHT_LABEL={normal:'日常',alone:'独处',travel:'赶路',emotion:'情绪'};
-const DINNER_NIGHT_TIP={
-  alone:'外卖点一份定食或面 + 一份蛋白',
-  travel:'到站买关东煮 / 饭团 + 茶叶蛋',
-  emotion:'赴约前先吃一份蛋白打底'
-};
-function dinnerState(t){
-  if(!t || !('dinnerOk' in t)) return undefined;
-  return t.dinnerOk===true ? true : (t.dinnerOk===false ? false : undefined);
-}
-function nightTypeOf(t){
-  const v=t&&t.nightType;
-  return DINNER_NIGHT_TYPES.indexOf(v)>=0 ? v : 'normal';
-}
-function setDinnerOk(mode){
-  const t=manaToday();
-  const target=(mode==='ok')?true:((mode==='no')?false:undefined);
-  // 点已选中的项 = 取消勾选，回未填；false 只能由明确点 ✗ 产生
-  if(target===undefined || dinnerState(t)===target) delete t.dinnerOk;
-  else t.dinnerOk=target;
-  t.ts=Date.now(); save(); renderMana();
-}
-function setNightType(v){
-  const t=manaToday();
-  if(DINNER_NIGHT_TYPES.indexOf(v)<0) v='normal';
-  t.nightType=v; t.ts=Date.now(); save(); renderMana();
-}
-function setNightNote(v){
-  const t=manaToday();
-  v=String(v||'').slice(0,50);
-  if(v) t.nightNote=v; else delete t.nightNote;
-  t.ts=Date.now(); save(); // 不重渲染，保住输入焦点（onchange 离开时触发）
-}
-/* ---- 晚餐正经饭 v2 · 本周三选一 + 放纵额度（v2026-11-24b）----
-   配置存 settings（不同步，单端用），每日标记存 records（跟着 ts 同步）。
-   撤销放宽到「本周内」：两字段一起回退；放纵日记在点「用掉」当天。 */
-let nightMenuEditing=false, nightMenuDraft=['','',''];
-
-function isoWeekId(dateStr){
-  const p=String(dateStr||today()).split('-').map(Number);
-  if(p.length<3||p.some(x=>!Number.isFinite(x))) return '';
-  const dt=new Date(p[0],p[1]-1,p[2]);
-  const dow=(dt.getDay()+6)%7;              // 0=周一
-  dt.setDate(dt.getDate()-dow+3);            // 移到本周四（ISO 周归属日）
-  const iy=dt.getFullYear(), jan4=new Date(iy,0,4);
-  const j4dow=(jan4.getDay()+6)%7, week1Thu=new Date(iy,0,4-j4dow+3);
-  return iy+'-W'+String(Math.round((dt-week1Thu)/604800000)+1).padStart(2,'0');
-}
-function nightMenuList(){
-  const m=state.settings.nightMenu;
-  return (Array.isArray(m)&&m.length===3&&m.every(x=>typeof x==='string'))?m:null;
-}
-function ensureFreeMealWeek(){
-  const s=state.settings, w=isoWeekId(today());
-  if(!s.freeMealWeek||s.freeMealWeek!==w){ s.freeMealWeek=w; s.freeMealUsed=false; s.freeMealDate=''; save(); }
-}
-function menuEdit(on){
-  if(on){ const m=nightMenuList(); nightMenuDraft=m?m.slice():['','','']; }
-  nightMenuEditing=!!on; renderMana();
-}
-function menuDraftInput(i){ nightMenuDraft[i]=String(document.getElementById('nightMenu'+i).value||'').slice(0,12); }
-function saveNightMenu(){
-  const v=nightMenuDraft.map(x=>String(x||'').trim().slice(0,12));
-  if(v.some(x=>!x)){ toast('3 个都写上才保存'); return; }
-  state.settings.nightMenu=v; state.settings.nightMenuTs=Date.now();
-  nightMenuEditing=false; save(); renderMana(); toast('本周菜单已定 🍚');
-}
-function setDinnerPlan(i){
-  const t=manaToday();
-  if(t.dinnerPlan===i) delete t.dinnerPlan; else t.dinnerPlan=i;
-  t.ts=Date.now(); save(); renderMana();
-}
-function nightMenuHtml(){
-  const s=state.settings, menu=nightMenuList(), ts=Number(s.nightMenuTs)||0;
-  const stale=ts>0&&Date.now()-ts>7*86400000, t=manaToday();
-  const box=inner=>`<div style="border:1px dashed #e8b96a;border-radius:10px;padding:9px 10px;margin-bottom:9px;background:#fffaf0">
-    <div style="font-size:13px;font-weight:700;margin-bottom:5px">🍽️ 本周晚餐三选一 <span style="font-size:10px;color:var(--sub);font-weight:400">周日定好，每天点一个</span></div>${inner}</div>`;
-  if(nightMenuEditing){
-    return box(`<div class="mini-row" style="gap:5px">${[0,1,2].map(i=>`<input id="nightMenu${i}" type="text" maxlength="12" placeholder="第${i+1}个" value="${escapeAttr(nightMenuDraft[i]||'')}" oninput="menuDraftInput(${i})" style="width:30%;min-width:74px;font-size:12px" />`).join('')}</div>
-    <div class="mini-row" style="margin-top:6px"><button class="mini accent sm" onclick="saveNightMenu()">保存</button><button class="mini line sm" onclick="menuEdit(false)">取消</button></div>`);
-  }
-  if(!menu){
-    return box(`<p class="hint" style="margin:0 0 6px">还没定 · 周日一次定好本周 3 个，晚上就不用再想吃什么</p><button class="mini accent sm" onclick="menuEdit(true)">现在定 3 个</button>`);
-  }
-  const labels=['①','②','③'];
-  return box(`<div class="mini-row">${menu.map((m,i)=>`<button class="mini ${t.dinnerPlan===i?'accent':'line'} sm" onclick="setDinnerPlan(${i})">${labels[i]} ${escapeHtml(m)}</button>`).join('')}</div>
-    <div class="mini-row" style="margin-top:6px"><button class="mini line sm" onclick="menuEdit(true)">改菜单</button>${stale?'<span style="font-size:10px;color:var(--sub)">· 上周的菜单</span>':''}</div>`);
-}
-function useFreeMeal(){
-  ensureFreeMealWeek();
-  const s=state.settings;
-  if(s.freeMealUsed) return;
-  s.freeMealUsed=true; s.freeMealDate=today();
-  const t=manaToday(); t.freeMeal=true; t.ts=Date.now();
-  save(); renderMana();
-}
-function undoFreeMeal(){
-  const s=state.settings;
-  if(!s.freeMealUsed||!s.freeMealDate) return;
-  const r=rec('mana')[s.freeMealDate];
-  if(r){ delete r.freeMeal; r.ts=Date.now(); }
-  s.freeMealUsed=false; s.freeMealDate='';
-  save(); renderMana();
-}
-function freeMealHtml(){
-  ensureFreeMealWeek();
-  const s=state.settings, used=!!s.freeMealUsed;
-  return `<div style="border:1px dashed #e8b96a;border-radius:10px;padding:9px 10px;margin-bottom:9px;background:#fffaf0">
-    <div style="font-size:13px;font-weight:700;margin-bottom:5px">🎬 本周放纵额度 <span style="font-size:10px;color:var(--sub);font-weight:400">${used?'1 / 1 ✓ 已用':'0 / 1'}</span></div>
-    ${used
-      ? `<button class="mini line sm" onclick="undoFreeMeal()">撤销本次</button><span style="font-size:10px;color:var(--sub);margin-left:6px">本周内可撤 · 下周一重置</span>`
-      : `<button class="mini accent sm" onclick="useFreeMeal()">用掉</button><span style="font-size:10px;color:var(--sub);margin-left:6px">本周一次计划内的放松</span>`}
-  </div>`;
-}
-
-function dinnerBlockHtml(){
-  const t=manaToday();
-  const st=dinnerState(t);
-  const nt=nightTypeOf(t);
-  const opt=(mode,label,on)=>`<button class="mini ${on?'accent':'line'} sm" onclick="setDinnerOk('${mode}')">${label}</button>`;
-  const chip=k=>`<button class="mini ${nt===k?'accent':'line'} sm" onclick="setNightType('${k}')">${DINNER_NIGHT_LABEL[k]}</button>`;
-  const nightTip=DINNER_NIGHT_TIP[nt]
-    ? `<div class="rc"><b>今晚这顿怎么吃</b> · ${DINNER_NIGHT_TIP[nt]}</div>` : '';
-  const tips=`<div class="plan-ref">${nightTip}
-    <div class="rc"><b>防今晚爆食 · 配套 2 条</b></div>
-    <div class="rc">· 午餐吃到 600–700（白天吃够，夜里不找补）</div>
-    <div class="rc">· 看剧手边不摆零食袋，换热饮 / 口香糖</div></div>`;
-  return `<div class="dcard">
-    <div class="ltitle">🍚 晚餐正经饭 <span style="margin-left:auto;font-size:12px;color:var(--sub)">一天只勾一个</span></div>
-    ${nightMenuHtml()}
-    ${freeMealHtml()}
-    <div class="mini-row">${opt('na','未填',st===undefined)}${opt('ok','✓ 有正经饭',st===true)}${opt('no','✗ 没做到',st===false)}</div>
-    <div class="mini-row" style="margin-top:8px">${DINNER_NIGHT_TYPES.map(chip).join('')}</div>
-    ${tips}
-    <div class="inline"><input id="nightNote" type="text" maxlength="50" placeholder="今天为什么没做到？（选填，≤50 字）" value="${escapeAttr(t.nightNote||'')}" onchange="setNightNote(this.value)" /></div>
-  </div>`;
-}
-function calcDinnerStats(){
-  const recs=rec('mana'), td=today();
-  const dow=(new Date(td+'T00:00:00').getDay()+6)%7; // 0=周一
-  const mon=addDays(td,-dow);
-  let weekFilled=0, weekOk=0, streak=0, maxStreak=0;
-  const okDays=[], noDays=[];
-  for(let i=29;i>=0;i--){
-    const d=addDays(td,-i), r=recs[d];
-    const v=dinnerState(r);
-    if(d>=mon && v!==undefined){ weekFilled++; if(v===true) weekOk++; }
-    if(v===true) okDays.push(d);
-    else if(v===false) noDays.push(d);
-    if(v===false){ streak++; if(streak>maxStreak) maxStreak=streak; }
-    else streak=0;
-  }
-  const avg=days=>{ const ks=days.map(kcalIntakeOf).filter(k=>k!=null); return ks.length? Math.round(ks.reduce((a,b)=>a+b,0)/ks.length):null; };
-  return { weekFilled, weekOk, weekRate: weekFilled? Math.round(weekOk/weekFilled*100):null,
-    okN:okDays.length, noN:noDays.length, okKcal:avg(okDays), noKcal:avg(noDays), maxStreak };
-}
-function dinnerStatsHtml(){
-  const s=calcDinnerStats();
-  const none=s.weekFilled===0 && s.okN===0 && s.noN===0;
-  if(none) return `<div class="dcard"><div class="ltitle">🍚 晚餐正经饭 · 统计</div><p class="hint">还没有记录，先勾一天试试 🌱</p></div>`;
-  const rate=s.weekRate==null? '—' : (s.weekOk+'/'+s.weekFilled+' · '+s.weekRate+'%');
-  const ok=s.okKcal==null? '—' : (s.okKcal+'('+s.okN+'天)');
-  const no=s.noKcal==null? '—' : (s.noKcal+'('+s.noN+'天)');
-  return `<div class="dcard">
-    <div class="ltitle">🍚 晚餐正经饭 · 统计</div>
-    <div class="mrow"><span>本周达标率 <span style="font-size:10px;color:var(--sub)">本周</span></span><b>${rate}</b></div>
-    <div class="mrow"><span>达标 / 未达标日均热量 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b style="font-size:12px">✓${ok} / ✗${no}</b></div>
-    <div class="mrow"><span>最长连续未达标 <span style="font-size:10px;color:var(--sub)">近 30 天</span></span><b>${s.maxStreak} 天</b></div>
-    <p class="hint">分母＝已填天数，没填的日期不计入。历史老记录没有这个字段，一律按「未填」处理。</p>
-  </div>`;
-}
-function calcFreeMealStats(){
-  const recs=rec('mana'), td=today();
-  // ① 每周使用次数：近 4 个自然周（本周往前，按 ISO 周分组）
-  const weeks=[];
-  for(let w=3;w>=0;w--){
-    const end=addDays(td,-w*7);
-    const dow=(new Date(end+'T00:00:00').getDay()+6)%7;
-    const mon=addDays(end,-dow), sun=addDays(mon,6);
-    let n=0;
-    Object.keys(recs).forEach(d=>{ if(d>=mon&&d<=sun&&recs[d]&&recs[d].freeMeal===true) n++; });
-    weeks.push({label:isoWeekId(mon),n});
-  }
-  // 近 30 天放纵 / 普通日
-  const freeDays=[], normalDays=[];
-  for(let i=29;i>=0;i--){
-    const d=addDays(td,-i), r=recs[d];
-    if(!r) continue;
-    if(r.freeMeal===true) freeDays.push(d); else normalDays.push(d);
-  }
-  const avg=days=>{ const ks=days.map(kcalIntakeOf).filter(k=>k!=null); return ks.length? Math.round(ks.reduce((a,b)=>a+b,0)/ks.length):null; };
-  // ③ 放纵后 3 天：每个放纵日 D+1~D+3，去重后取日均
-  const afterSet={};
-  freeDays.forEach(d=>{ for(let k=1;k<=3;k++) afterSet[addDays(d,k)]=1; });
-  const afterDays=Object.keys(afterSet).filter(d=>d<=td).sort();
-  return {
-    weeks, freeAvg:avg(freeDays), freeN:freeDays.length,
-    normalAvg:avg(normalDays), normalN:normalDays.length,
-    afterAvg:avg(afterDays), afterN:afterDays.length
-  };
-}
-function freeMealStatsHtml(){
-  const s=calcFreeMealStats();
-  const wstr=s.weeks.slice().reverse().map(w=>w.n).join(' / ');
-  const diff=(a,b)=> (a==null||b==null)?'—':((a-b>=0?'+':'')+(a-b));
-  const freeV=s.freeAvg==null?'—':s.freeAvg+'('+s.freeN+'天)';
-  const normV=s.normalAvg==null?'—':s.normalAvg+'('+s.normalN+'天)';
-  const afterV=s.afterAvg==null?'—':s.afterAvg+'('+s.afterN+'天)';
-  return `<div class="dcard">
-    <div class="ltitle">🎬 放纵额度 · 统计</div>
-    <div class="mrow"><span>每周使用次数 <span style="font-size:10px;color:var(--sub)">近4周 · 应≤1</span></span><b style="font-size:12px">${wstr}</b></div>
-    <div class="mrow"><span>放纵日 vs 普通日热量差 <span style="font-size:10px;color:var(--sub)">近30天</span></span><b style="font-size:12px">${freeV} / ${normV} · 差 ${diff(s.freeAvg,s.normalAvg)}</b></div>
-    <div class="mrow"><span>放纵后 3 天热量 <span style="font-size:10px;color:var(--sub)">D+1~D+3</span></span><b style="font-size:12px">${afterV} / ${normV} · 差 ${diff(s.afterAvg,s.normalAvg)}</b></div>
-    <p class="hint">放纵日记在「用掉」当天；无热量记录的日期跳过、不按 0 算。历史记录没有这个字段，不计入。</p>
-  </div>`;
 }
 function renderMana(){
   const t=manaToday();
@@ -5017,7 +4745,7 @@ function renderMana(){
     return `<p class="hint" style="margin-top:6px">🎯 目标体重 <b>${gw}kg</b>，当前 <b>${lw}kg</b>，${diff>0?('还差 '+diff+'kg 要减 💪'):(diff<0?('已低于目标 '+(-diff)+'kg'):'已达成目标 🎉')}。${pstr?(' · '+pstr):''}</p>`; })();
 
   // 运动
-  const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)}${e.min?(' · '+e.min+'分钟'):''} · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
+  const exHtml = (t.exercises.length? t.exercises.map((e,i)=>`<div class="mrow"><span>${escapeHtml(e.n)}${e.min?(' · '+e.min+'分钟'):''}${e.estMin?'<em class="estnote">（默认 30 分钟 按体重估算）</em>':''} · ${e.kcal}kcal</span><span class="x" onclick="delEx(${i})">✕</span></div>`).join('') : '<p class="hint">还没记录运动</p>');
   const exTotal = t.exercises.reduce((s,e)=>s+e.kcal,0);
 
   // 饮食
@@ -5064,7 +4792,6 @@ function renderMana(){
       <p class="hint" style="margin:4px 2px 8px">🍽️ 按今日饮食指南走：训练日 4 餐（含 16:30 加餐），休息日 3 餐不加餐；周末不训练为「自由吃」，家常菜正常吃、不套指南。点「今日不训练」会自动切换方案。</p>
       <div class="mrow" style="font-weight:800"><span>今日摄入合计</span><span>${intake} kcal</span></div>
     </div>
-    ${dinnerBlockHtml()}
     ${dietGuideHtml()}
     <div class="dcard">
       <div class="ltitle">🏃 运动（输入即算卡路里 · 支持模糊搜索）</div>
@@ -5096,8 +4823,6 @@ function renderMana(){
     </div>
     ${trendHtml}
     ${weightEnergyCardHtml()}
-    ${dinnerStatsHtml()}
-    ${freeMealStatsHtml()}
     ${kcalWeeksHtml()}
     <div class="dcard">
       <div class="ltitle">🏋️ 训练打卡周视图（近 4 周）</div>
@@ -5231,16 +4956,18 @@ function matchExercise(text){
   const m=text.match(/(\d+(?:\.\d+)?)\s*(分钟|min|分)/i);
   if(m){ min=Number(m[1]); }
   else { const any=text.match(/(\d+(?:\.\d+)?)/); if(any){ const n=Number(any[1]); if(n>=1&&n<=600) min=n; } }
-  if(min==null) min=30;
+  // v2026-11-18d：不再无脑补 30 分钟。默认时长按运动类型在下方分别处理，并打 estMin 标记供备注显示。
   const flatText=text.replace(/\s+/g,'').toLowerCase(); // v2026-11-18c：去空格比对，兜住「椭圆机 42分钟」这类带空格的脏名输入
   const exAll=allExercises();
   // v2026-11-18c：精确（去空格）优先 + 最长名优先，防止内置短名「椭圆机」抢在脏长名「椭圆机42分钟」前命中
   let ex=exAll.slice().sort((a,b)=>b.n.length-a.n.length).find(e=> flatText===e.n.replace(/\s+/g,'').toLowerCase());
   if(!ex) ex=exAll.slice().sort((a,b)=>b.n.length-a.n.length).find(e=> lower.includes(e.n.toLowerCase()));
   if(!ex){ return {ex:null, min, kcal:0, unmatched:true, label:text.trim()}; }
-  if(ex.met!=null){ // 内置：MET × 体重 × 时长
+  const userMin=min; // 用户是否显式给了时长（null=没给）
+  if(ex.met!=null){ // 内置：MET × 体重 × 时长（估算必须有时长，无时长则默认 30 并标记估算）
+    if(min==null) min=30;
     const kcal=Math.round(ex.met*effectiveWeight()*min/60);
-    return {ex, min, kcal, label:ex.n};
+    return {ex, min, kcal, label:ex.n, estMin:(userMin==null)};
   }
   /* v2026-11-18c 防御：整串命中「名字带时长数字」的脏自定义条目（如残留 {n:'椭圆机42分钟',k:250}）。
      名字里的 42 不该再被当成分钟乘基准。此时按该条记录消耗记 1 次。 */
@@ -5249,15 +4976,19 @@ function matchExercise(text){
     return {ex, min:Math.round(ep.amount), kcal:Math.round(ex.k||0), custom:true, name:ex.n, label:ex.n, dirtyGuard:true};
   }
   // 自定义运动：u='分钟' 按每分钟基准 × 时长归一化（v2026-11-18b）；旧条目无 u 则按次固定
-  const kcal = (ex.u==='分钟') ? Math.round((ex.k||0)*min) : Math.round(ex.k||0);
-  return {ex, min, kcal, custom:true, name:ex.n, label:ex.n, perMin:(ex.u==='分钟')};
+  if(ex.u==='分钟'){ // 按分钟基准：估算需要时长，无时长默认 30 并标记
+    if(min==null) min=30;
+    return {ex, min, kcal:Math.round((ex.k||0)*min), custom:true, name:ex.n, label:ex.n, perMin:true, estMin:(userMin==null)};
+  }
+  // v2026-11-18d 核心：按次固定的自定义运动（u===''）不该有时长，只记热量；不补默认 30
+  return {ex, min:0, kcal:Math.round(ex.k||0), custom:true, name:ex.n, label:ex.n};
 }
 function previewEx(){
   const v=(document.getElementById('exText')||{}).value||'';
   const box=document.getElementById('exPrev'); if(!box) return;
   const mt=matchExercise(v);
-  if(mt && mt.custom){ box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>${mt.perMin?'（已记住 · 按分钟换算）':'（自定义消耗，自动存入联想库）'}`; box.className='prev ok'; }
-  else if(mt && mt.ex){ box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>（按体重${effectiveWeight()}kg估算）`; box.className='prev ok'; }
+  if(mt && mt.custom){ const cn=mt.estMin?'（默认 30 分钟 按体重估算）':(mt.perMin?'（已记住 · 按分钟换算）':'（自定义消耗，自动存入联想库）'); box.innerHTML=`🔥 ${mt.name?escapeHtml(mt.name)+' · ':''}<b>${mt.kcal} kcal</b>${cn}`; box.className='prev ok'; }
+  else if(mt && mt.ex){ const note=mt.estMin?'（默认 30 分钟 按体重估算）':`（按体重${effectiveWeight()}kg估算）`; box.innerHTML=`🔥 ${mt.ex.n} ${mt.min}分钟 · 约 <b>${mt.kcal} kcal</b>${note}`; box.className='prev ok'; }
   else if(mt && mt.unmatched){ box.innerHTML='⚠️ 未识别运动类型，已按文字记录（热量未计入）。可试试：跑步/跳绳/游泳/力量训练/核心雕塑/燃脂搏击，或写「运动名 热量」如：椭圆机 250大卡'; box.className='prev warn'; }
   else { box.innerHTML=''; }
 }
@@ -5268,11 +4999,12 @@ function addExTyped(){
     const dn=mt.name||('自定义运动'+mt.kcal+'kcal');
     const p=parseCustomUnit(mt.name||'');
     const rec={n:dn,min:(p.unit==='分钟'&&p.amount)?Math.round(p.amount):(mt.min||0),kcal:mt.kcal};
+    if(mt.estMin) rec.estMin=true; // v2026-11-18d：标记「默认时长·按体重估算」，供渲染加备注
     t.exercises.push(rec);
     // v2026-11-18b：名字带「时长」时按每分钟归一化入库，之后输入「椭圆机 42分钟」可自动换算
     if(mt.name){ if(p.unit==='分钟'&&p.amount) saveCustomExercise(p.name||mt.name, mt.kcal/p.amount, '分钟'); else saveCustomExercise(mt.name, mt.kcal); }
   }
-  else if(mt && mt.ex){ t.exercises.push({n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}); }
+  else if(mt && mt.ex){ const er={n:mt.ex.n,met:mt.ex.met,min:mt.min,kcal:mt.kcal}; if(mt.estMin) er.estMin=true; t.exercises.push(er); }
   else { if(!v.trim()) return toast('请输入运动内容'); t.exercises.push({n:v.trim(),min:0,kcal:0}); }
   t.done=true; t.ts=Date.now(); inp.value=''; save(); renderMana(); toast('已添加运动 🏃');
 }
