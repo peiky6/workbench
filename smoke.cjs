@@ -356,7 +356,7 @@ if(htmlJs){
   else bad('首页仍存在「我的栏目」');
   // SW 缓存名必须随部署递增；MIN_SW 为历史最低基线，升到更高版本时请同步调高，
   // 否则无法发现「忘了升缓存」。floor 检查可防止误设旧值/笔误，且部署无需再改本断言。
-  const MIN_SW = 113;
+  const MIN_SW = 114;
   if(cacheMatch){
     const m = cacheMatch[1].match(/^qi-workbench-v(\d+)$/);
     if(m && parseInt(m[1],10) >= MIN_SW) ok('SW 缓存名合法且 ≥ v'+MIN_SW+': '+cacheMatch[1]);
@@ -1195,8 +1195,45 @@ if(htmlJs){
   globalThis.__V2=V;
 })(); }catch(e){ globalThis.__V2ERR=e.name+': '+e.message; }
 `;
+  const trainScript = `
+;globalThis.__TRERR=null;
+;try{ (function(){
+  const R={};
   try{
-    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript + v2Script, ctx, {filename:'index.html', timeout:15000});
+    // 7 天计划标题与关键动作
+    R.titles=[1,2,3,4,5,6,0].map(d=>TRAIN_PLAN[d].title).join('|');
+    R.mon=TRAIN_PLAN[1].items.map(x=>x.n).join('|');
+    R.tue=TRAIN_PLAN[2].items.map(x=>x.n).join('|');
+    R.thu=TRAIN_PLAN[4].items.map(x=>x.n).join('|');
+    R.fri=TRAIN_PLAN[5].items.map(x=>x.n).join('|');
+    R.sat=TRAIN_PLAN[6].items.map(x=>x.n).join('|');
+    R.wed=TRAIN_PLAN[3].items.map(x=>x.n).join('|');
+    // 每天必做：腹压 9 + 盆底 5（周六是四选一含保底，单独看）
+    R.dailyCore=[1,2,3,4,5,0].every(d=>{
+      const s=TRAIN_PLAN[d].items.map(x=>x.n).join('|');
+      return s.includes('腹压友好版 9') && s.includes('盆底肌 5');
+    });
+    // 站立拉伸：除周六外每天都有
+    R.dailyStretch=[1,2,3,4,5,0].every(d=>TRAIN_PLAN[d].items.some(x=>x.n==='站立拉伸 10 分钟'));
+    // met/min 合法：无 undefined / NaN
+    R.metOk=[1,2,3,4,5,6,0].every(d=>TRAIN_PLAN[d].items.every(x=>typeof x.met==='number'&&x.met>0&&Number.isInteger(x.min)&&x.min>0));
+    // 规则三组数量
+    R.ruleCounts=TRAIN_RULES.general.length+'/'+TRAIN_RULES.daily.length+'/'+TRAIN_RULES.weekly.length;
+    // 折叠区 HTML（默认收起，三组标题齐全）
+    R.ruleHtml=trainRulesHtml();
+    // 完整训练计划卡渲染（含打卡按钮 + 折叠区）
+    R.planHtml=trainPlanHtml();
+    // 打卡函数仍可调用（不改变行为契约）
+    state=defaultState();
+    toggleTrainDone(); R.done=rec('mana')[today()].trainDone===true;
+    toggleTrainDone(); R.undo=rec('mana')[today()].trainDone===false;
+    toggleTrainSkip(); R.skip=rec('mana')[today()].trainSkip===true;
+  }catch(e){ R.err=e.name+': '+e.message; }
+  globalThis.__TR=R;
+})(); }catch(e){ globalThis.__TRERR=e.name+': '+e.message; }
+`;
+  try{
+    vm.runInContext(appJs + tail + p0Script + v7Script + homeScript + p2Script + p1Script + credsScript + p3Script + foodScript + migrateScript + dinnerScript + v2Script + trainScript, ctx, {filename:'index.html', timeout:15000});
     if(ctx.__E) bad('AI 视图 aiLearn() 运行时异常', ctx.__E);
     else if(typeof ctx.__R !== 'string' || !ctx.__R.length) bad('AI 视图 aiLearn() 未产出 HTML');
     else ok('AI 视图 aiLearn() 运行时无异常（默认态，'+ctx.__R.length+' 字符）');
@@ -1614,6 +1651,50 @@ if(htmlJs){
       if(V.menuXssSafe) ok('T23 菜单名 HTML 注入已转义');
       else bad('T23 菜单名存在 XSS 风险');
     }
+
+    // ===== T24：训练计划 v2026-11-25 更新 =====
+    if(ctx.__TRERR) bad('训练计划校验脚本异常', ctx.__TRERR);
+    const R=ctx.__TR||{};
+    if(R.err) bad('T24 内部执行异常', R.err);
+    else{
+      if(R.titles==='周一：下肢力量|周二：上肢拉力量|周三：操课（没课就练下肢）|周四：有氧|周五：上肢拉力量|周六：操课 / 休息|周日：操课')
+        ok('T24 七天标题按 11-25 版更新');
+      else bad('T24 七天标题不符', R.titles);
+      if(R.mon&&R.mon.includes('动态热身 5 分钟（下肢）')&&R.mon.includes('史密斯机深蹲')&&R.mon.includes('保加利亚分腿蹲')&&R.mon.includes('坐姿弯举机')&&R.mon.includes('髋外展机')&&R.mon.includes('站立拉伸'))
+        ok('T24 周一：下肢力量含热身/深蹲/分腿蹲/弯举机/外展机/拉伸');
+      else bad('T24 周一动作缺失', R.mon);
+      if(R.tue&&R.tue.includes('动态热身 5 分钟（上肢）')&&R.tue.includes('器械推胸 2×12-15')&&!R.tue.includes('操课'))
+        ok('T24 周二：上肢拉力量（含推胸、去掉操课）');
+      else bad('T24 周二动作不符', R.tue);
+      if(R.thu&&R.thu.includes('坡度走 30-35 分钟')&&!R.thu.includes('操课'))
+        ok('T24 周四：有氧（坡度走 30-35、去掉操课）');
+      else bad('T24 周四动作不符', R.thu);
+      if(R.fri&&R.fri.includes('蝴蝶机最轻重量 15 次')&&R.fri.includes('站立拉伸'))
+        ok('T24 周五：上肢拉力量含蝴蝶机热身 + 站立拉伸');
+      else bad('T24 周五动作缺失', R.fri);
+      if(R.sat&&R.sat.includes('四选一')&&R.sat.includes('尊巴')&&R.sat.includes('只做保底'))
+        ok('T24 周六：四选一说明（含保底）');
+      else bad('T24 周六四选一文案缺失', R.sat);
+      if(R.wed&&R.wed.includes('课表空 → 改做周一那套下肢 4 个动作'))
+        ok('T24 周三：没课改下肢备选');
+      else bad('T24 周三备原文案缺失', R.wed);
+      if(R.dailyCore) ok('T24 每天必做：腹压 9 分 + 盆底 5 分（7 天均含）');
+      else bad('T24 腹压/盆底每日必做缺失');
+      if(R.dailyStretch) ok('T24 站立拉伸 10 分钟每天都有');
+      else bad('T24 站立拉伸非每天都有');
+      if(R.metOk) ok('T24 所有动作 met>0 且 min 为正整数');
+      else bad('T24 存在非法 met/min');
+      if(R.ruleCounts==='8/6/5') ok('T24 规则三组数量：通用8 + 每天6 + 每周5');
+      else bad('T24 规则数量错误', R.ruleCounts);
+      if(R.ruleHtml&&R.ruleHtml.includes('<details')&&R.ruleHtml.includes('训练原则')&&R.ruleHtml.includes('腕带必备')&&R.ruleHtml.includes('漏尿'))
+        ok('T24 折叠区含训练原则/通用规则/每周核对，默认收起');
+      else bad('T24 折叠区内容缺失');
+      if(R.planHtml&&R.planHtml.includes('标记今日训练完成打卡')&&R.planHtml.includes('今日不训练')&&R.planHtml.includes('📋 训练原则'))
+        ok('T24 训练计划卡保留打卡/跳过按钮 + 折叠区');
+      else bad('T24 训练计划卡结构被破坏');
+      if(R.done&&R.undo&&R.skip) ok('T24 打卡/撤销/跳过函数行为不变');
+      else bad('T24 打卡函数行为异常', JSON.stringify({done:R.done,undo:R.undo,skip:R.skip}));
+    }
   }
 })();
 
@@ -1806,11 +1887,11 @@ if(htmlJs){
     ['navigator.storage.persist()','申请持久化存储授权'],
     ['<p id="credStoreStatus"','设置页凭证状态行'],
     ['function renderCredStatus','状态文案渲染'],
-    ['const APP_VERSION = \'2026-11-24b\'','版本号已递增']
+    ['const APP_VERSION = \'2026-11-26a\'','版本号已递增']
   ]){
     if(rawHtml.includes(t)) ok('P4 '+d); else bad('P4 缺失：'+d);
   }
-  if(cacheMatch && cacheMatch[1]==='qi-workbench-v113') ok('P4 SW 缓存名已随部署递增：v113');
+  if(cacheMatch && cacheMatch[1]==='qi-workbench-v114') ok('P4 SW 缓存名已随部署递增：v114');
   else bad('P4 SW 缓存名未递增：'+(cacheMatch&&cacheMatch[1]));
   if(/const blob=await encryptText\(JSON\.stringify\(c\),k\)/.test(rawHtml))
     ok('P4 冗余副本走 AES-GCM 密文（ENC2），不含明文凭证');

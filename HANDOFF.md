@@ -1,7 +1,7 @@
 # 祈·自律工作台 — 交接手册
 
 > 供外部工具 / 协作者 / 手机云端任务修改本工作台时参考。
-> 最新线上版本：**APP_VERSION `2026-11-24b` / SW `qi-workbench-v113`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交：本次 `fix: 三选一菜单与放纵额度模块` 提交）。
+> 最新线上版本：**APP_VERSION `2026-11-26a` / SW `qi-workbench-v114`**（GitHub Pages，仓库 `peiky6/workbench`，分支 `main`，最近线上提交：本次 `fix: 训练计划按 11-25 checklist 更新` 提交）。
 > ⚠️ 本文档于 2026-11-17 按线上 `origin/main` 与本地实测全量重写。行号随版本漂移，检索请优先用函数名。改完请同步更新本手册顶部版本号。
 
 ## 1. 项目定位
@@ -11,7 +11,7 @@
 - 手机云端改码：全程走 GitHub clone → 改 → push，云端沙箱**看不到本地路径**。完整流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 2. 技术栈与架构
-- 核心逻辑在 `index.html`（441,902 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
+- 核心逻辑在 `index.html`（446,455 字节）；**内置 AI 笔记外置为 `data-notes.js`（255,119 字节）**，通过 `<script src="data-notes.js"></script>` 注入全局 `BUILTIN_NOTES`——无构建多文件方案，**不是 fetch**。
 - PWA：`manifest.webmanifest` + `sw.js`（2,731 字节；离线缓存，导航网络优先、失败回退缓存；预缓存含 `index.html` / `data-notes.js` / 图标 / manifest）。
 - 持久化：主存键 `qi_workbench_v2`；凭证独立键 `qi_wb_creds` + IndexedDB 密文副本 `qi_history/creds`（设备密钥 `qi_wb_dk`）；可选 Gist 云同步（AES ENC2，Gist 1MB 截断自愈）。
 - CSP：`form-action 'none'` 已补；`script-src`/`style-src` 保留 `unsafe-inline`（本期刻意不收紧，避免白屏）。
@@ -20,11 +20,11 @@
 ## 3. 文件结构
 ```
 workbench/
-├── index.html            # 核心逻辑（约 431KB，改这里）
+├── index.html            # 核心逻辑（约 435KB，改这里）
 ├── data-notes.js         # 内置 AI 笔记（约 249KB），<script src> 注入 BUILTIN_NOTES
 ├── sw.js                 # Service Worker，仅做版本/缓存控制
 ├── manifest.webmanifest  # PWA 清单
-├── smoke.cjs             # 固化冒烟测试（约 118KB，node 跑，改完必跑，当前 583 项断言）
+├── smoke.cjs             # 固化冒烟测试（约 124KB，node 跑，改完必跑，当前 597 项断言）
 ├── icon.svg / *.png      # 图标（含 maskable）
 ├── .nojekyll             # 禁用 Jekyll
 ├── README.md / README-en.md / START.md / Experience.md / Preferences.md / HANDOFF.md / schema.md
@@ -38,14 +38,14 @@ workbench/
 - 本机 remote 是 SSH（`ssh://git@ssh.github.com:443/peiky6/workbench.git`），本机可推送。
 - **手机云端沙箱没有本机 SSH key**：云端改码须用 HTTPS + fine-grained PAT（仅给 `workbench` 仓库 Contents 写权限，短期有效，用完撤销）。PAT 在任务对话里单独提供，禁止写进公开仓库或提交历史。
 - 每次改完 `index.html` / `data-notes.js` / `sw.js` 必须：
-  1. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v113`，否则用户看不到更新）；
-  2. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-24b`，格式 `YYYY-MM-DD[a-z]`）；
-  3. 跑 `node smoke.cjs` 全绿（当前 583 项）再推；
+  1. 递增 `sw.js` 的 `const CACHE`（当前 `qi-workbench-v114`，否则用户看不到更新）；
+  2. 递增 `index.html` 的 `APP_VERSION`（当前 `2026-11-26a`，格式 `YYYY-MM-DD[a-z]`）；
+  3. 跑 `node smoke.cjs` 全绿（当前 597 项）再推；
   4. 更新本手册顶部版本号。
 
 ## 5. 测试
-- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 583 项断言，全绿才准推。**
-- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」，当前 `MIN_SW=113`）。
+- `node smoke.cjs`：抽取 `<script>` + `data-notes.js` 跑 `node --check` + 关键函数/常量/行为级判定 + 静态锁。**当前 597 项断言，全绿才准推。**
+- 版本号断言已解耦：`APP_VERSION` 走格式校验、`SW 缓存名` 走「≥ 历史基线」floor 检查，部署时无需改断言（升缓存时把 `MIN_SW` 同步调高即可继续防「忘了升缓存」，当前 `MIN_SW=114`）。
 - 单文件无构建兜底，一个语法错误整页白屏，靠 smoke 兜底。
 
 ## 6. 数据模型与关键约定
@@ -54,7 +54,7 @@ workbench/
 - **凭证三层加固（v2026-11-16a）**：①写空保护（三项清空不抹已有凭证、回灌内存）；②IndexedDB AES-GCM 密文冗余副本 + 设备密钥；③启动自愈恢复（独立键为空时从副本解密恢复）。主存 / 云端载荷 / 导出备份 / 快照 / 回滚备份均零凭证明文。
 - **自定义条目基准模型（v2026-11-18b，v18c 加固）**：`customFoods` / `customExercises` 条目统一为 `{n, k, u}`——`k` 是**每基准单位**热量（食物 `u:'100g'|'100ml'` → k=每100克/毫升；运动 `u:'分钟'` → k=每分钟），名字只存纯名、不带数字单位。`parseCustomUnit` 从「腰果42g / 椭圆机42分钟」剥离数字单位，`migrateCustomEntries` 在 load 链**及 mergeState（拉取/导入/快照恢复三出口共用）**幂等迁移老脏条目（只改联想库、**不动 `modules.mana.records` 历史流水**；`amount<=0` 的非法条目跳过、不产生 `null`）。自由输入由 `matchFood` / `matchExercise` 按基准换算；显式热量写法（`蛋白粉 120` / `椭圆机 250大卡`）优先级最高。**v18c 解析防御**：库内残留脏条目（如「腰果42g」与「腰果」共存）时输入整串按记录热量记 1 份、绝不乘数字；按克/毫升换算返回 `shownAmt` 供预览显示实际数量（腰果50g→50g，不再 ×0.5）；负号、中文量词、按克食物的整数份数均做钳制。
 
-## 7. 本周功能变更（2026-11-03 ~ 11-24，按时间）
+## 7. 本周功能变更（2026-11-03 ~ 11-26，按时间）
 | 日期 | 版本 | 变更摘要 |
 |---|---|---|
 | 11-03 | 11-03a | 按饮食指南&训练计划更新体重模块（工作日 1760kcal/101g + 每周课表） |
@@ -72,6 +72,7 @@ workbench/
 | 11-18 | 11-18c | 解析防御与边界加固：库内残留脏条目（腰果42g+腰果共存）输入整串按记录热量记 1 份、杜绝 250×42=10500；显式热量混写优先（腰果42g300kcal→300）；按克/毫升换算显示实际数量（腰果50g→50g·298 而非 ×0.5）；负号/中文量词/按克整数份数钳制；迁移跳过 amount<=0 非法条目避免 null；迁移收口 mergeState（拉取/导入/恢复）；smoke 新增 10 条 T21 断言（539→549），SW v111 |
 | 11-24 | 11-24a | 晚餐正经饭打卡与暴食干预模块：体重页饮食卡片区新增打卡（三态 dinnerOk：未填/✓/✗，取消勾选回未填不落 false；晚型 nightType 日常/独处/赶路/情绪；备注 nightNote ≤50 字），即点即存带 ts、last-write-wins 同步删除；提示区分「今晚这顿」+「防今晚爆食·配套2条」按晚型分层；「体重趋势与能量收支」下方新增统计卡（本周达标率分母=已填天数、达标/未达标日均热量交叉对比复用 kcalIntakeOf 近30天、最长连续未达标）；历史无字段记录一律按未填不计分母；smoke 新增 15 条 T22 断言（549→564），SW v112 |
 | 11-24 | 11-24b | 三选一菜单与放纵额度（settings 存配置、不同步，单端用）：打卡卡内新增「本周晚餐三选一」（nightMenu[3] 周日定好、dinnerPlan 每日单选再点取消、超7天提示「上周的菜单」不自动清空）与「本周放纵额度」（freeMealWeek/Used/Date，用掉即当天 freeMeal=true，本周内可撤销且两字段一起回退、跨周自动重置，用完置灰无警示）；新增 ISO 周号 isoWeekId。v1 统计卡下方新增「放纵额度·统计」三项（每周使用次数近4周、放纵日vs普通日热量差近30天、放纵后3天 D+1~D+3，复用 kcalIntakeOf 跳过无热量日）；菜单名 escapeHtml 防注入；smoke 新增 19 条 T23 断言（564→583），SW v113 |
+| 11-26 | 11-26a | 训练计划按「乐刻训练打卡.md」2026-11-25 版更新：7 天全量重写——周一下肢力量、周二上肢拉（去操课加推胸）、周三操课含没课改下肢备选、周四有氧（坡度走30-35）、周五上肢拉加蝴蝶机热身、周六四选一、周日操课优先核心雕塑；每天先动态热身5分→正式组→坡度走→腹压友好版9分→盆底肌5分→站立拉伸10分。新增 TRAIN_RULES 三组规则（通用8+每天必做6+每周核对5）折叠区默认收起；打卡/跳过/批量补卡/饮食判定零改动。MET 表补新动作留下一轮；smoke 新增 14 条 T24 断言（583→597），SW v114 |
 
 ## 8. 用户偏好与约定（长期记忆）
 - 身份：IT 软件项目经理，转型 **AI PM**。术语库 / 学习计划 / 书单围绕此。
@@ -104,7 +105,7 @@ workbench/
 移动端云端改码流程见项目资产 `MOBILE-WORKFLOW.md`。
 
 ## 10. 踩坑清单（给协作者）
-1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v113 / 583 项），否则用户看不到更新。
+1. **改完必须升 SW 缓存名 + 跑 smoke.cjs**（当前 v114 / 597 项），否则用户看不到更新。
 2. **改前必须先拉最新代码（云端改过之后尤其重要）**——本机不是权威副本，云端任务 push 后本地就是旧的。顺序固定 **拉 → 改 → 推**。
    - 拉取要重试（`git fetch` 本身也会抖）：`for i in 1 2 3 4 5; do git fetch origin && break; sleep 3; done` → `git reset --hard origin/main`。
    - ⚠️ **`git reset --mixed` 只移动 HEAD，不更新工作区**。本地真落后时（云端有新提交），mixed 之后工作区仍是旧文件、`git status` 会显示若干 `M`。此时若接着改并推送，就等于用旧代码覆盖云端。**11-18 实测**：本地落后 3 个提交（云端 18a/b/c），mixed 后 `index.html` 仍停在 `v2026-11-17a`，与 HEAD 差 169 行、`smoke.cjs` 差 155 行。判定：reset 后立刻 `grep APP_VERSION index.html` 和 `grep CACHE sw.js`，与新 HEAD 不符就再补 `git reset --hard origin/main`（本地确有未提交改动时先 `git stash`）。
